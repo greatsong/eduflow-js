@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from 'dotenv';
 import modelsRouter from './routes/models.js';
 import projectsRouter from './routes/projects.js';
+import discussionsRouter from './routes/discussions.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 config(); // .env 로드
@@ -24,6 +25,7 @@ app.get('/api/health', (req, res) => {
 // 라우트
 app.use('/api/models', modelsRouter);
 app.use('/api/projects', projectsRouter);
+app.use('/api/projects/:id/discussions', discussionsRouter);
 
 // 에러 핸들링
 app.use(errorHandler);
