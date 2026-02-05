@@ -14,7 +14,7 @@
 | 5 | 챕터 제작 (Step 4) | ✅ 완료 | 2026-02-06 |
 | 6 | 배포 관리 (Step 5) | ✅ 완료 | 2026-02-06 |
 | 7 | 포트폴리오 + 베타 배포 | ✅ 완료 | 2026-02-06 |
-| 8 | 통합 테스트 + 배포 설정 | ⬜ 대기 | - |
+| 8 | 통합 테스트 + 배포 설정 | ✅ 완료 | 2026-02-06 |
 
 ## Phase 1 상세 (✅ 완료)
 
@@ -231,34 +231,53 @@
 - [x] Beta GitHub Status API 정상 (gh 설치/인증/사용자명)
 - [x] Beta Config API 정상 (설정 로드)
 
-## Phase 8 상세 (⬜ 다음 작업)
+## Phase 8 상세 (✅ 완료)
 
 ### 통합 테스트
-- [ ] 전체 워크플로우 E2E 테스트 (Step 0 → Step 5)
-- [ ] 기존 프로젝트 데이터 호환성 검증
-- [ ] 스트리밍(SSE) 전체 점검
+- [x] 전체 워크플로우 E2E API 테스트 (18개 GET 엔드포인트 전부 200 OK)
+  - health, models, projects, discussions, toc, chapters, deploy, portfolio, beta
+- [x] 기존 프로젝트 데이터 호환성 검증
+  - pico-basic (Python 시스템에서 생성) → JS 시스템에서 정상 로드
+  - config.json, progress.json, toc.json, generation_report.json 모두 호환
+  - 18개 챕터 파일 읽기/미리보기 정상
+  - 포트폴리오 통계: 18/18 완료, 121페이지, $10.99 비용 정상 집계
+- [x] DOCX 호환성 수정: output/ + 프로젝트 루트 양쪽에서 탐색
 
 ### 배포 설정
-- [ ] Vercel 프론트엔드 배포 설정
-- [ ] Railway/Render 백엔드 배포 설정
-- [ ] 환경변수 가이드
+- [x] Vercel 프론트엔드: `client/vercel.json` (SPA rewrite)
+- [x] Railway 백엔드: `Dockerfile` + `railway.json` (Node 22, healthcheck)
+- [x] 환경변수 가이드: `.env.example` 업데이트 (로컬/배포 분리)
 
-## 다음 세션에서 이어하기
+## 개발 환경 실행
 
 ```bash
 cd /Users/greatsong/greatsong-project/eduflow
 
-# 1. 이 파일(PROGRESS.md) 읽어 현재 상태 파악
-# 2. CLAUDE.md 읽어 프로젝트 컨벤션 확인
-# 3. ARCHITECTURE.md 읽어 설계 이해
-# 4. Phase 7 체크리스트부터 이어서 작업
+# 전체 의존성 설치
+npm install
 
-# 개발 서버 실행
+# 개발 서버 (프론트 + 백엔드 동시)
 npm run dev
 
 # 또는 개별 실행
 npm run dev:client   # http://localhost:5173
 npm run dev:server   # http://localhost:3001
+```
+
+## 배포 가이드
+
+### 프론트엔드 (Vercel)
+```bash
+cd client
+vercel --prod
+# 환경변수: VITE_API_URL=https://your-backend.railway.app
+```
+
+### 백엔드 (Railway)
+```bash
+railway up
+# 환경변수: ANTHROPIC_API_KEY, CLIENT_URL, PORT (자동)
+# 영속 볼륨: /app/projects 마운트
 ```
 
 ## 주요 참고 파일 (원본 Python 시스템)
@@ -323,3 +342,9 @@ npm run dev:server   # http://localhost:3001
   - beta.js 라우트 8개 엔드포인트 (설정/상태/리포 생성/테스터/푸시/초기화)
   - Portfolio.jsx (통계 대시보드 + 카드 그리드 + 상세 패널 + 미리보기)
   - BetaDeploy.jsx (4탭: 저장소/테스터/메시지/관리)
+- Phase 8 완료: 통합 테스트 + 배포 설정
+  - 18개 GET API 엔드포인트 전체 200 OK
+  - pico-basic 호환성 검증: 18/18 챕터, 121페이지, $10.99 비용 정상
+  - DOCX 호환성 수정 (output/ + 루트 양쪽 탐색)
+  - Vercel 설정 (client/vercel.json), Railway 설정 (Dockerfile + railway.json)
+  - .env.example 업데이트 (로컬/배포 환경변수 가이드)

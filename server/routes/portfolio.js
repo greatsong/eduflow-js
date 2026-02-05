@@ -55,13 +55,16 @@ async function loadProjectData(projectPath, projectName) {
     data.totalChars = 0;
   }
 
-  // output/ DOCX 파일
+  // DOCX 파일 (output/ 또는 프로젝트 루트)
+  data.docxFile = null;
   const outputPath = join(projectPath, 'output');
   if (existsSync(outputPath)) {
     const outputFiles = await readdir(outputPath);
     data.docxFile = outputFiles.find(f => f.endsWith('.docx')) || null;
-  } else {
-    data.docxFile = null;
+  }
+  if (!data.docxFile) {
+    const rootFiles = await readdir(projectPath);
+    data.docxFile = rootFiles.find(f => f.endsWith('.docx')) || null;
   }
 
   // site/index.html 존재 확인
