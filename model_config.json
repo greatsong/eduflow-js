@@ -2,14 +2,21 @@
   "_안내": "=== 모델 설정 파일 === 새 모델이 나오면 이 파일만 수정하세요! 앱 전체에 자동 반영됩니다.",
   "_수정방법": "1) 아래 models에서 id/display_name/pricing 수정  2) defaults에서 기본 모델 변경  3) 앱 새로고침 (60초 캐시)",
   "_가격확인": "https://anthropic.com/pricing",
-  "_최종수정일": "2025-02-05",
+  "_최종수정일": "2026-02-06",
 
   "models": [
     {
+      "id": "claude-opus-4-6-20260206",
+      "display_name": "Claude Opus 4.6",
+      "tier": "최고 품질",
+      "pricing": { "input": 5.0, "output": 25.0 },
+      "recommended_for": ["챕터 생성", "고품질 콘텐츠", "에이전트", "코딩"]
+    },
+    {
       "id": "claude-opus-4-5-20251101",
       "display_name": "Claude Opus 4.5",
-      "tier": "최고 품질",
-      "pricing": { "input": 15.0, "output": 75.0 },
+      "tier": "고품질",
+      "pricing": { "input": 5.0, "output": 25.0 },
       "recommended_for": ["챕터 생성", "고품질 콘텐츠"]
     },
     {
@@ -22,7 +29,7 @@
   ],
 
   "defaults": {
-    "chapter_generation": "claude-opus-4-5-20251101",
+    "chapter_generation": "claude-opus-4-6-20260206",
     "conversation": "claude-sonnet-4-20250514"
   }
 }

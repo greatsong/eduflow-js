@@ -125,4 +125,86 @@ router.post('/outlines', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
+// POST /api/projects/:id/toc/direct - 목차 직접 입력 (Markdown → JSON 변환)
+router.post('/direct', asyncHandler(async (req, res) => {
+  const { toc_md } = req.body;
+  if (!toc_md) {
+    return res.status(400).json({ message: 'toc_md 데이터가 필요합니다' });
+  }
+
+  const projPath = projectPath(req.params.id);
+  const tg = new TOCGenerator(projPath);
+
+  // Markdown 파싱하여 JSON으로 변환
+  const toc = parseTocMarkdown(toc_md);
+
+  // 저장
+  await tg.saveToc(toc);
+
+  // toc.md도 저장
+  const tocMdPath = join(projPath, 'toc.md');
+  await writeFile(tocMdPath, toc_md, 'utf-8');
+
+  // 아웃라인 생성
+  await tg.generateOutlines(toc);
+
+  // progress 업데이트
+  const pm = new ProgressManager(projPath);
+  await pm.completeStep('step2');
+
+  res.json({ success: true, toc });
+}));
+
+// Markdown 목차 → JSON 변환 헬퍼
+function parseTocMarkdown(md) {
+  const lines = md.split('\n');
+  const toc = {
+    title: '',
+    target_audience: '',
+    total_hours: '',
+    parts: [],
+  };
+
+  let currentPart = null;
+  let chapterNum = 0;
+
+  for (const line of lines) {
+    const partMatch = line.match(/^#\s+(?:Part\s*\d*\.?\s*)?(.+)/i);
+    const chapterMatch = line.match(/^##\s+(?:Chapter\s*\d*\.?\s*)?(.+)/i);
+    const metaMatch = line.match(/^-\s*(예상\s*시간|학습\s*목표|목표):\s*(.+)/i);
+
+    if (partMatch) {
+      currentPart = {
+        part_number: toc.parts.length + 1,
+        part_title: partMatch[1].trim(),
+        part_summary: '',
+        chapters: [],
+      };
+      toc.parts.push(currentPart);
+    } else if (chapterMatch && currentPart) {
+      chapterNum++;
+      const chapterId = `chapter${String(chapterNum).padStart(2, '0')}`;
+      currentPart.chapters.push({
+        chapter_id: chapterId,
+        chapter_number: chapterNum,
+        chapter_title: chapterMatch[1].trim(),
+        estimated_time: '',
+        learning_objectives: [],
+        key_topics: [],
+      });
+    } else if (metaMatch && currentPart && currentPart.chapters.length > 0) {
+      const lastChapter = currentPart.chapters[currentPart.chapters.length - 1];
+      const key = metaMatch[1].trim().toLowerCase();
+      const value = metaMatch[2].trim();
+      if (key.includes('시간')) {
+        lastChapter.estimated_time = value;
+      } else if (key.includes('목표')) {
+        lastChapter.learning_objectives.push(value);
+      }
+    }
+  }
+
+  return toc;
+}
+
 export default router;

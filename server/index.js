@@ -29,11 +29,16 @@ app.get('/api/health', (req, res) => {
 
 // 라우트
 app.use('/api/models', modelsRouter);
-app.use('/api/projects', projectsRouter);
+
+// 더 구체적인 프로젝트 서브라우트를 먼저 등록
 app.use('/api/projects/:id/discussions', discussionsRouter);
 app.use('/api/projects/:id/toc', tocRouter);
 app.use('/api/projects/:id/chapters', chaptersRouter);
 app.use('/api/projects/:id/deploy', deployRouter);
+
+// 기본 프로젝트 라우트 (context, template-info, references 등 포함)
+app.use('/api/projects', projectsRouter);
+
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/beta', betaRouter);
 

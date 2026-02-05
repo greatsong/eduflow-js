@@ -64,7 +64,16 @@ function ProjectCard({ project, onDetail, onPreview }) {
         >
           상세 보기
         </button>
-        {project.hasChapters && (
+        {project.siteUrl ? (
+          <a
+            href={project.siteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 text-center text-xs py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            🌐 사이트 ↗
+          </a>
+        ) : project.hasChapters && (
           <button
             onClick={() => onPreview(project)}
             className="flex-1 text-xs py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -152,9 +161,20 @@ function DetailPanel({ project, onClose }) {
         <div>
           <h4 className="font-semibold text-gray-800 mb-2">열람</h4>
           <div className="flex gap-2">
-            <span className={`flex-1 text-center text-xs py-2 rounded-lg ${project.hasSite ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
-              🌐 {project.hasSite ? '사이트 있음' : '사이트 없음'}
-            </span>
+            {project.siteUrl ? (
+              <a
+                href={project.siteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-center text-xs py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+              >
+                🌐 사이트 열기 ↗
+              </a>
+            ) : (
+              <span className={`flex-1 text-center text-xs py-2 rounded-lg ${project.hasSite ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+                🌐 {project.hasSite ? '로컬 사이트 있음' : '사이트 없음'}
+              </span>
+            )}
             <span className={`flex-1 text-center text-xs py-2 rounded-lg ${project.hasDocx ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
               📥 {project.hasDocx ? 'DOCX 있음' : 'DOCX 없음'}
             </span>

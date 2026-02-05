@@ -70,6 +70,22 @@ async function loadProjectData(projectPath, projectName) {
   // site/index.html 존재 확인
   data.hasSite = existsSync(join(projectPath, 'site', 'index.html'));
 
+  // deployment_info.json에서 배포 URL 로드
+  const deployInfoPath = join(projectPath, 'deployment_info.json');
+  if (existsSync(deployInfoPath)) {
+    try {
+      const deployInfo = JSON.parse(await readFile(deployInfoPath, 'utf-8'));
+      data.siteUrl = deployInfo.site_url || null;
+      data.repoUrl = deployInfo.repo_url || null;
+    } catch {
+      data.siteUrl = null;
+      data.repoUrl = null;
+    }
+  } else {
+    data.siteUrl = null;
+    data.repoUrl = null;
+  }
+
   return data;
 }
 
@@ -192,6 +208,8 @@ router.get('/', asyncHandler(async (req, res) => {
       model: data.report?.model || '',
       generatedAt: data.report?.generated_at || '',
       hasSite: data.hasSite,
+      siteUrl: data.siteUrl,
+      repoUrl: data.repoUrl,
       hasDocx: !!data.docxFile,
       hasChapters: data.chapterFiles.length > 0,
       toc: data.toc || null,

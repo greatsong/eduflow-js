@@ -128,6 +128,19 @@ router.post('/github', asyncHandler(async (req, res) => {
   await dep.init();
 
   const result = await dep.deployToGitHub(repoName);
+
+  // 배포 성공 시 deployment_info.json에 저장
+  if (result.success && result.site_url) {
+    const { writeFile } = await import('fs/promises');
+    const infoPath = join(projectPath(req.params.id), 'deployment_info.json');
+    await writeFile(infoPath, JSON.stringify({
+      site_url: result.site_url,
+      repo_url: result.repo_url,
+      username: result.username,
+      deployed_at: new Date().toISOString(),
+    }, null, 2), 'utf-8');
+  }
+
   res.json(result);
 }));
 

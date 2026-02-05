@@ -111,12 +111,19 @@ router.post('/', asyncHandler(async (req, res) => {
     const tm = new TemplateManager();
     const success = await tm.applyTemplate(template_id, projPath, template_vars || {});
 
-    // 커스텀 프롬프트 저장
+    // 커스텀 프롬프트 저장 (목차/챕터 프롬프트 오버라이드)
     if (success && custom_prompt_config) {
       const infoFile = join(projPath, 'template-info.json');
       if (existsSync(infoFile)) {
         const raw = await readFile(infoFile, 'utf-8');
         const info = JSON.parse(raw);
+        // 템플릿 기본값 대신 사용자 커스텀 프롬프트로 오버라이드
+        if (custom_prompt_config.toc_prompt_addition !== undefined) {
+          info.toc_prompt_addition = custom_prompt_config.toc_prompt_addition;
+        }
+        if (custom_prompt_config.chapter_prompt_addition !== undefined) {
+          info.chapter_prompt_addition = custom_prompt_config.chapter_prompt_addition;
+        }
         info.custom_prompt_config = custom_prompt_config;
         await writeFile(infoFile, JSON.stringify(info, null, 2), 'utf-8');
       }
@@ -124,6 +131,17 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 
   res.status(201).json(config);
+}));
+
+// ============================================================
+// 템플릿 (/:id 전에 배치해야 함)
+// ============================================================
+
+// GET /api/projects/templates/list - 템플릿 목록
+router.get('/templates/list', asyncHandler(async (req, res) => {
+  const tm = new TemplateManager();
+  const templates = await tm.listTemplates();
+  res.json(templates);
 }));
 
 // GET /api/projects/:id - 프로젝트 상세
@@ -150,6 +168,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   if (updates.title !== undefined) config.title = updates.title;
   if (updates.author !== undefined) config.author = updates.author;
   if (updates.description !== undefined) config.description = updates.description;
+  if (updates.target_audience !== undefined) config.target_audience = updates.target_audience;
   if (updates.claude_model !== undefined) config.claude_model = updates.claude_model;
   if (updates.settings) config.settings = { ...config.settings, ...updates.settings };
   config.updated_at = new Date().toISOString();
@@ -244,14 +263,80 @@ router.get('/:id/references/search', asyncHandler(async (req, res) => {
 }));
 
 // ============================================================
-// 템플릿
+// 템플릿 정보 (프로젝트별)
 // ============================================================
 
-// GET /api/templates - 템플릿 목록
-router.get('/templates/list', asyncHandler(async (req, res) => {
-  const tm = new TemplateManager();
-  const templates = await tm.listTemplates();
-  res.json(templates);
+// GET /api/projects/:id/template-info - 프로젝트의 템플릿 정보 조회
+router.get('/:id/template-info', asyncHandler(async (req, res) => {
+  const infoFile = join(projectPath(req.params.id), 'template-info.json');
+  if (!existsSync(infoFile)) {
+    return res.json({ exists: false });
+  }
+  try {
+    const raw = await readFile(infoFile, 'utf-8');
+    const info = JSON.parse(raw);
+    res.json({ exists: true, ...info });
+  } catch (e) {
+    res.json({ exists: false, error: e.message });
+  }
+}));
+
+// PUT /api/projects/:id/template-info - 프로젝트의 템플릿 정보 수정
+router.put('/:id/template-info', asyncHandler(async (req, res) => {
+  const projPath = projectPath(req.params.id);
+  if (!existsSync(projPath)) {
+    return res.status(404).json({ message: '프로젝트를 찾을 수 없습니다' });
+  }
+
+  const infoFile = join(projPath, 'template-info.json');
+  let info = {};
+  if (existsSync(infoFile)) {
+    info = JSON.parse(await readFile(infoFile, 'utf-8'));
+  }
+
+  const { toc_prompt_addition, chapter_prompt_addition } = req.body;
+  if (toc_prompt_addition !== undefined) {
+    info.toc_prompt_addition = toc_prompt_addition;
+  }
+  if (chapter_prompt_addition !== undefined) {
+    info.chapter_prompt_addition = chapter_prompt_addition;
+  }
+  info.custom_prompt_config = { toc_prompt_addition, chapter_prompt_addition };
+
+  await writeFile(infoFile, JSON.stringify(info, null, 2), 'utf-8');
+  res.json({ success: true, ...info });
+}));
+
+// ============================================================
+// 직접 입력 API
+// ============================================================
+
+// GET /api/projects/:id/context - master-context.md 조회
+router.get('/:id/context', asyncHandler(async (req, res) => {
+  const contextFile = join(projectPath(req.params.id), 'master-context.md');
+  if (!existsSync(contextFile)) {
+    return res.json({ content: '' });
+  }
+  const content = await readFile(contextFile, 'utf-8');
+  res.json({ content });
+}));
+
+// PUT /api/projects/:id/context - master-context.md 저장
+router.put('/:id/context', asyncHandler(async (req, res) => {
+  const projPath = projectPath(req.params.id);
+  if (!existsSync(projPath)) {
+    return res.status(404).json({ message: '프로젝트를 찾을 수 없습니다' });
+  }
+
+  const { content } = req.body;
+  const contextFile = join(projPath, 'master-context.md');
+  await writeFile(contextFile, content || '', 'utf-8');
+
+  // progress.json 업데이트 (step1 완료 처리)
+  const pm = new ProgressManager(projPath);
+  await pm.completeStep('step1');
+
+  res.json({ success: true, message: '저장 완료' });
 }));
 
 export default router;

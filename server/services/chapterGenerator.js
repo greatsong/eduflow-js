@@ -8,6 +8,63 @@ import { TemplateManager } from './templateManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// ============================================================
+// TPM (Tokens Per Minute) 예산 관리자
+// ============================================================
+class TokenBudgetManager {
+  constructor(tpmLimit = 40000) {
+    this.tpmLimit = tpmLimit;
+    this.tokensUsedThisMinute = 0;
+    this.minuteStart = Date.now();
+    this.requestHistory = []; // {timestamp, tokens} 배열
+  }
+
+  // 1분 윈도우 내의 사용량 계산
+  _cleanupOldRequests() {
+    const oneMinuteAgo = Date.now() - 60000;
+    this.requestHistory = this.requestHistory.filter(r => r.timestamp > oneMinuteAgo);
+    this.tokensUsedThisMinute = this.requestHistory.reduce((sum, r) => sum + r.tokens, 0);
+  }
+
+  // 예상 토큰만큼 예산이 있는지 확인하고, 없으면 대기
+  async waitForBudget(estimatedTokens, progressCallback = null) {
+    this._cleanupOldRequests();
+
+    // 예산 초과 시 대기
+    if (this.tokensUsedThisMinute + estimatedTokens > this.tpmLimit) {
+      const oldestRequest = this.requestHistory[0];
+      if (oldestRequest) {
+        const waitTime = Math.max(0, 60000 - (Date.now() - oldestRequest.timestamp) + 1000);
+        if (waitTime > 0 && progressCallback) {
+          progressCallback(`⏳ TPM 예산 대기 중... (${Math.ceil(waitTime / 1000)}초)`);
+        }
+        await this._sleep(waitTime);
+        return this.waitForBudget(estimatedTokens, progressCallback);
+      }
+    }
+  }
+
+  // 사용한 토큰 기록
+  recordUsage(tokens) {
+    this.requestHistory.push({ timestamp: Date.now(), tokens });
+    this._cleanupOldRequests();
+  }
+
+  // 현재 사용량 조회
+  getCurrentUsage() {
+    this._cleanupOldRequests();
+    return {
+      used: this.tokensUsedThisMinute,
+      limit: this.tpmLimit,
+      remaining: Math.max(0, this.tpmLimit - this.tokensUsedThisMinute),
+    };
+  }
+
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
 // 템플릿별 기본 프롬프트 설정
 const TEMPLATE_PROMPTS = {
   'programming-course': {
@@ -406,9 +463,9 @@ ${templateAddition}
   }
 
   /**
-   * 단일 챕터 생성
+   * 단일 챕터 생성 (rate limit 자동 재시도 포함)
    */
-  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-5-20251101', maxTokens = 16000, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0) {
+  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-5-20251101', maxTokens = 16000, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0, tokenBudget = null) {
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
     const effectiveMaxTokens = this._calcMaxTokensForTime(timeMinutes, maxTokens);
 
@@ -429,49 +486,100 @@ ${templateAddition}
     const references = await this._loadReferences();
     const prompt = await this._buildPrompt(chapterId, chapterTitle, outline, references, partContext, effectiveMaxTokens, estimatedTime, totalChapters, currentNum);
 
-    try {
-      if (progressCallback) progressCallback(`🤖 ${chapterId} Claude API 호출 중...`);
+    // 예상 토큰 계산 (입력 + 출력)
+    const estimatedInputTokens = this._estimateTokens(prompt);
+    const estimatedTotalTokens = estimatedInputTokens + effectiveMaxTokens;
 
-      const client = new Anthropic({ apiKey: this.apiKey });
-      const response = await client.messages.create({
-        model,
-        max_tokens: effectiveMaxTokens,
-        messages: [{ role: 'user', content: prompt }],
-      });
-
-      const content = response.content[0].text;
-      const chapterFile = join(this.docsPath, `${chapterId}.md`);
-      await writeFile(chapterFile, content, 'utf-8');
-
-      const inputTokens = response.usage.input_tokens;
-      const outputTokens = response.usage.output_tokens;
-
-      this._log(`✅ ${chapterId} 생성 완료 - 입력: ${inputTokens}, 출력: ${outputTokens}, 문자 수: ${content.length}`);
-      if (progressCallback) progressCallback(`✅ ${chapterId} 생성 완료!`);
-
-      return {
-        success: true,
-        chapter_id: chapterId,
-        file_path: chapterFile,
-        content,
-        tokens_used: inputTokens + outputTokens,
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-      };
-    } catch (e) {
-      this._log(`❌ ${chapterId} 생성 실패: ${e.message}`);
-      if (progressCallback) progressCallback(`❌ ${chapterId} 생성 실패: ${e.message}`);
-      return { success: false, chapter_id: chapterId, error: e.message };
+    // TPM 예산 대기 (TokenBudgetManager가 있는 경우)
+    if (tokenBudget) {
+      await tokenBudget.waitForBudget(estimatedTotalTokens, progressCallback);
     }
+
+    const MAX_RETRIES = 3;
+    let lastError = null;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        if (progressCallback) progressCallback(`🤖 ${chapterId} Claude API 호출 중...${attempt > 0 ? ` (재시도 ${attempt}/${MAX_RETRIES - 1})` : ''}`);
+
+        const client = new Anthropic({ apiKey: this.apiKey });
+        const response = await client.messages.create({
+          model,
+          max_tokens: effectiveMaxTokens,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const content = response.content[0].text;
+        const chapterFile = join(this.docsPath, `${chapterId}.md`);
+        await writeFile(chapterFile, content, 'utf-8');
+
+        const inputTokens = response.usage.input_tokens;
+        const outputTokens = response.usage.output_tokens;
+
+        // TPM 예산에 실제 사용량 기록
+        if (tokenBudget) {
+          tokenBudget.recordUsage(inputTokens + outputTokens);
+        }
+
+        this._log(`✅ ${chapterId} 생성 완료 - 입력: ${inputTokens}, 출력: ${outputTokens}, 문자 수: ${content.length}`);
+        if (progressCallback) progressCallback(`✅ ${chapterId} 생성 완료!`);
+
+        return {
+          success: true,
+          chapter_id: chapterId,
+          file_path: chapterFile,
+          content,
+          tokens_used: inputTokens + outputTokens,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+        };
+      } catch (e) {
+        lastError = e;
+
+        // Rate limit (429) 또는 overloaded (529) 에러 감지
+        const isRateLimit = e.status === 429 || e.status === 529 ||
+          (e.message && (e.message.includes('rate') || e.message.includes('overloaded')));
+
+        if (isRateLimit && attempt < MAX_RETRIES - 1) {
+          // 지수 백오프: 30초, 60초, 120초
+          const waitTime = Math.pow(2, attempt) * 30000;
+          this._log(`⏳ ${chapterId} Rate limit - ${waitTime / 1000}초 대기 후 재시도 (${attempt + 1}/${MAX_RETRIES})`);
+          if (progressCallback) progressCallback(`⏳ Rate limit 감지 - ${waitTime / 1000}초 대기 후 재시도...`);
+          await new Promise(r => setTimeout(r, waitTime));
+          continue;
+        }
+
+        // 재시도 불가능한 에러거나 최대 재시도 초과
+        break;
+      }
+    }
+
+    this._log(`❌ ${chapterId} 생성 실패: ${lastError?.message || 'Unknown error'}`);
+    if (progressCallback) progressCallback(`❌ ${chapterId} 생성 실패: ${lastError?.message || 'Unknown error'}`);
+    return { success: false, chapter_id: chapterId, error: lastError?.message || 'Unknown error' };
   }
 
   /**
    * 전체 챕터 배치 생성
+   * @param {Object} tocData - 목차 데이터
+   * @param {string} model - Claude 모델 ID
+   * @param {number} maxTokens - 최대 출력 토큰
+   * @param {number} concurrent - 동시 실행 수
+   * @param {Function} progressCallback - 진행 상황 콜백
+   * @param {boolean} skipCompleted - 완료된 챕터 건너뛰기
+   * @param {number} tpmLimit - 분당 토큰 제한 (0이면 비활성화)
    */
-  async generateAllChapters(tocData, model = 'claude-opus-4-5-20251101', maxTokens = 16000, concurrent = 1, progressCallback = null, skipCompleted = true) {
+  async generateAllChapters(tocData, model = 'claude-opus-4-5-20251101', maxTokens = 16000, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0) {
     const startTime = Date.now();
-    this._log(`🚀 챕터 배치 생성 시작 - 모델: ${model}, 동시 실행: ${concurrent}`);
-    if (progressCallback) progressCallback('🚀 챕터 배치 생성 시작!');
+
+    // TPM 예산 관리자 생성 (tpmLimit > 0인 경우에만)
+    const tokenBudget = tpmLimit > 0 ? new TokenBudgetManager(tpmLimit) : null;
+
+    this._log(`🚀 챕터 배치 생성 시작 - 모델: ${model}, 동시 실행: ${concurrent}, TPM 제한: ${tpmLimit || '없음'}`);
+    if (progressCallback) {
+      progressCallback('🚀 챕터 배치 생성 시작!');
+      if (tpmLimit > 0) progressCallback(`📊 TPM 제한: ${tpmLimit.toLocaleString()} 토큰/분`);
+    }
 
     const totalChaptersCount = (tocData.parts || []).reduce((sum, p) => sum + (p.chapters || []).length, 0);
 
@@ -513,7 +621,7 @@ ${templateAddition}
     const limit = pLimit(concurrent);
     let completedCount = 0;
 
-    const promises = tasks.map((task, i) =>
+    const promises = tasks.map((task) =>
       limit(async () => {
         if (progressCallback) progressCallback(`\n[${completedCount + 1}/${totalTasks}] ${task.chapter_id}`);
 
@@ -526,7 +634,8 @@ ${templateAddition}
           progressCallback,
           task.estimated_time,
           task.total_chapters,
-          task.current_chapter_num
+          task.current_chapter_num,
+          tokenBudget  // TPM 예산 관리자 전달
         );
 
         completedCount++;

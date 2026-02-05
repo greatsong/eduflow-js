@@ -334,7 +334,8 @@ function BatchTab({ project, onComplete }) {
   const [model, setModel] = useState('claude-opus-4-5-20251101');
   const [models, setModels] = useState([]);
   const [maxTokens, setMaxTokens] = useState(16000);
-  const [concurrent, setConcurrent] = useState(5);
+  const [concurrent, setConcurrent] = useState(3);
+  const [tpmLimit, setTpmLimit] = useState(40000); // TPM 제한 (Tier 2 기본값)
   const [status, setStatus] = useState('idle'); // idle, running, completed
   const [logs, setLogs] = useState([]);
   const logEndRef = useRef(null);
@@ -373,7 +374,7 @@ function BatchTab({ project, onComplete }) {
     try {
       await apiStreamPost(
         `/api/projects/${project.name}/chapters/generate-all`,
-        { model, maxTokens, concurrent, skipCompleted },
+        { model, maxTokens, concurrent, skipCompleted, tpmLimit },
         {
           onProgress: (data) => {
             setLogs((prev) => [...prev, data.message]);
@@ -443,7 +444,28 @@ function BatchTab({ project, onComplete }) {
               disabled={status === 'running'}
               className="w-full"
             />
-            <p className="text-xs text-gray-400 mt-1">권장: 5개 (6+ 시 분당 토큰 한도 초과 가능)</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              TPM 제한: {tpmLimit > 0 ? `${(tpmLimit / 1000).toFixed(0)}K/분` : '없음'}
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={200000}
+              step={10000}
+              value={tpmLimit}
+              onChange={(e) => setTpmLimit(Number(e.target.value))}
+              disabled={status === 'running'}
+              className="w-full"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              {tpmLimit === 0 ? '제한 없음 (rate limit 시 자동 재시도)' :
+               tpmLimit <= 20000 ? 'Tier 1 (Free)' :
+               tpmLimit <= 40000 ? 'Tier 2' :
+               tpmLimit <= 80000 ? 'Tier 3' : 'Tier 4+'}
+            </p>
           </div>
 
           {/* 생성 버튼 */}
@@ -533,6 +555,10 @@ function BatchTab({ project, onComplete }) {
 // =============================================
 function ReportPanel({ report }) {
   const cost = report.estimated_cost || {};
+  // 이번 실행에서 시도한 개수 (전체 - 건너뜀)
+  const attempted = (report.total || 0) - (report.skipped || 0);
+  // 전체 완료 개수 (성공 + 건너뜀)
+  const totalCompleted = (report.success || 0) + (report.skipped || 0);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -540,12 +566,12 @@ function ReportPanel({ report }) {
 
       <div className="grid grid-cols-5 gap-4 mb-4">
         <div className="text-center">
-          <div className="text-xl font-bold text-green-600">{report.success}/{report.total}</div>
-          <div className="text-xs text-gray-500">✅ 성공</div>
+          <div className="text-xl font-bold text-green-600">{report.success}/{attempted}</div>
+          <div className="text-xs text-gray-500">✅ 신규 성공</div>
         </div>
         <div className="text-center">
-          <div className="text-xl font-bold text-red-600">{report.failed}</div>
-          <div className="text-xs text-gray-500">❌ 실패</div>
+          <div className="text-xl font-bold text-blue-600">{totalCompleted}/{report.total}</div>
+          <div className="text-xs text-gray-500">📊 전체 완료</div>
         </div>
         <div className="text-center">
           <div className="text-xl font-bold text-gray-700">{report.elapsed_time?.toFixed(1)}초</div>

@@ -64,7 +64,7 @@ router.put('/:chapterId', asyncHandler(async (req, res) => {
 
 // POST /api/projects/:id/chapters/generate-all - 배치 생성 (SSE)
 router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
-  const { model, maxTokens, concurrent, skipCompleted } = req.body;
+  const { model, maxTokens, concurrent, skipCompleted, tpmLimit } = req.body;
   const projPath = projectPath(req.params.id);
 
   sseHeaders(res);
@@ -91,7 +91,8 @@ router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
       maxTokens || 16000,
       concurrent || 1,
       progressCallback,
-      skipCompleted !== false
+      skipCompleted !== false,
+      tpmLimit || 0  // TPM 제한 (0이면 비활성화)
     );
 
     // 성공한 챕터 진행 상태 업데이트
