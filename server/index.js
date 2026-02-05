@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
 import modelsRouter from './routes/models.js';
+import projectsRouter from './routes/projects.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 config(); // .env 로드
@@ -22,11 +23,7 @@ app.get('/api/health', (req, res) => {
 
 // 라우트
 app.use('/api/models', modelsRouter);
-
-// Phase 2+에서 추가될 라우트
-// app.use('/api/projects', projectsRouter);
-// app.use('/api/portfolio', portfolioRouter);
-// app.use('/api/beta', betaRouter);
+app.use('/api/projects', projectsRouter);
 
 // 에러 핸들링
 app.use(errorHandler);
