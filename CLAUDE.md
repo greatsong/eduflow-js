@@ -10,15 +10,15 @@ Python/Streamlit 기반 교육자료 생성 시스템 "에듀플로"를 JavaScri
 - **아키텍처 문서**: `ARCHITECTURE.md`
 - **진행 상태**: `PROGRESS.md` ← **새 세션에서 반드시 이것부터 읽기**
 
-## 현재 구현 상태 (Phase 4/8 완료)
+## 현재 구현 상태 (Phase 5/8 완료)
 
 | 구분 | 구현 완료 | 미구현 |
 |------|----------|--------|
-| **서비스** | progressManager, templateManager, referenceManager, conversationManager, tocGenerator | chapterGenerator, deployment, utils |
-| **라우트** | models, projects, discussions, toc | chapters, deploy, portfolio, beta |
-| **페이지** | Home, ProjectManager, Discussion, TableOfContents, Feedback | ChapterCreation, Deployment, Portfolio, BetaDeploy (스텁만 존재) |
+| **서비스** | progressManager, templateManager, referenceManager, conversationManager, tocGenerator, **chapterGenerator** | deployment, utils |
+| **라우트** | models, projects, discussions, toc, **chapters** | deploy, portfolio, beta |
+| **페이지** | Home, ProjectManager, Discussion, TableOfContents, Feedback, **ChapterCreation** | Deployment, Portfolio, BetaDeploy (스텁만 존재) |
 | **컴포넌트** | Layout, ProgressBar, ChatInterface | MarkdownPreview, ModelSelector (필요시 추가) |
-| **스토어** | projectStore, chatStore | generationStore |
+| **스토어** | projectStore, chatStore | generationStore (불필요 - ChapterCreation 내부 state로 처리) |
 
 ## 기술 스택
 
@@ -122,7 +122,7 @@ eduflow/
 | `template_manager.py` | `server/services/templateManager.js` | ✅ |
 | `reference_manager.py` | `server/services/referenceManager.js` | ✅ |
 | `toc_generator.py` | `server/services/tocGenerator.js` | ✅ |
-| `chapter_generator.py` (799줄) | `server/services/chapterGenerator.js` | ⬜ Phase 5 |
+| `chapter_generator.py` (899줄) | `server/services/chapterGenerator.js` | ✅ Phase 5 |
 | `deployment.py` | `server/services/deployment.js` | ⬜ Phase 6 |
 | `utils.py` | `server/config/modelConfig.js` (부분) | 부분 ✅ |
 | `navigation.py` | `client/components/ProgressBar.jsx` 등 | ✅ |

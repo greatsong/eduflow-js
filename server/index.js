@@ -5,6 +5,7 @@ import modelsRouter from './routes/models.js';
 import projectsRouter from './routes/projects.js';
 import discussionsRouter from './routes/discussions.js';
 import tocRouter from './routes/toc.js';
+import chaptersRouter from './routes/chapters.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 config(); // .env 로드
@@ -28,6 +29,7 @@ app.use('/api/models', modelsRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/projects/:id/discussions', discussionsRouter);
 app.use('/api/projects/:id/toc', tocRouter);
+app.use('/api/projects/:id/chapters', chaptersRouter);
 
 // 에러 핸들링
 app.use(errorHandler);

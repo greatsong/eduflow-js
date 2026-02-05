@@ -11,7 +11,7 @@
 | 2 | 프로젝트 관리 (Step 0) | ✅ 완료 | 2026-02-05 |
 | 3 | 방향성 논의 (Step 1) | ✅ 완료 | 2026-02-05 |
 | 4 | 목차 + 피드백 (Step 2, 3) | ✅ 완료 | 2026-02-05 |
-| 5 | 챕터 제작 (Step 4) | ⬜ 대기 | - |
+| 5 | 챕터 제작 (Step 4) | ✅ 완료 | 2026-02-06 |
 | 6 | 배포 관리 (Step 5) | ⬜ 대기 | - |
 | 7 | 포트폴리오 + 베타 배포 | ⬜ 대기 | - |
 | 8 | 통합 테스트 + 배포 설정 | ⬜ 대기 | - |
@@ -128,23 +128,53 @@
 - [x] 진행 상태 업데이트 확인 (step3_confirmed)
 - [x] Claude SSE 스트리밍 생성은 API 키 있는 환경에서 테스트 필요
 
-## Phase 5 상세 (⬜ 다음 작업)
+## Phase 5 상세 (✅ 완료)
 
 ### 서버 서비스
-- [ ] `server/services/chapterGenerator.js` ← `workflows/chapter_generator.py` (핵심 모듈, ~800줄)
-  - 비동기 병렬 생성 (p-limit), 토큰 추정, 레퍼런스 관련성 정렬
-  - 템플릿별 프롬프트 생성, 비용 추적, generation_report.json
+- [x] `server/services/chapterGenerator.js` ← `workflows/chapter_generator.py` (핵심 모듈, ~660줄)
+  - 6종 템플릿별 프롬프트 설정 (TEMPLATE_PROMPTS)
+  - 비동기 병렬 생성 (p-limit), 토큰 추정 (한국어/영어 구분)
+  - 레퍼런스 관련성 정렬 + 동적 잘라내기 (150K 토큰 한도)
+  - 시간 제약 기반 max_tokens 자동 조정
+  - 비용 추적 + generation_report.json
+  - BUG-001 수정: 모델 가격을 init()에서 한 번만 로드 (캐싱)
 
 ### API 라우트
-- [ ] `server/routes/chapters.js` - 배치 생성(SSE 진행률) + 단일 생성 + CRUD + 인터랙티브 채팅
+- [x] `server/routes/chapters.js` - 6개 엔드포인트
+  - GET / - 챕터 목록 + 상태 + 리포트
+  - GET /:chapterId - 챕터 내용 읽기
+  - PUT /:chapterId - 챕터 내용 수정
+  - POST /generate-all (SSE) - 배치 생성 (진행률 스트리밍)
+  - POST /:chapterId/generate - 단일 챕터 생성
+  - POST /:chapterId/chat (SSE) - 인터랙티브 채팅
 
 ### 프론트엔드
-- [ ] `client/pages/ChapterCreation.jsx` - 3탭 UI (인터랙티브, 배치, 에디터)
+- [x] `client/pages/ChapterCreation.jsx` - 3탭 UI (~450줄)
+  - 대화형 모드: 챕터 선택 → Claude 채팅 + 실시간 미리보기 + 내용 적용/저장
+  - 배치 자동화: 모델/토큰/동시실행 설정 → SSE 진행률 + 로그 → 비용 리포트
+  - 챕터 편집: 사이드바 목록 + 마크다운 편집기 + 미리보기 전환 + 통계
 
 ### 검증
-- [ ] 배치 생성 SSE 진행률 스트리밍 테스트
-- [ ] 단일 챕터 생성/수정 확인
-- [ ] 비용 리포트 생성 확인
+- [x] 클라이언트 빌드 성공 (`vite build`)
+- [x] 챕터 CRUD API 테스트 통과 (목록/읽기/저장/404)
+- [x] 서버 시작 정상 확인
+- [x] Claude SSE 스트리밍 (배치/인터랙티브)는 API 키 있는 환경에서 테스트 필요
+
+## Phase 6 상세 (⬜ 다음 작업)
+
+### 서버 서비스
+- [ ] `server/services/deployment.js` ← `workflows/deployment.py` (~293줄)
+  - MkDocs 빌드 (execa), Pandoc DOCX 변환, Git/GitHub CLI 연동
+
+### API 라우트
+- [ ] `server/routes/deploy.js` - MkDocs 빌드/DOCX 생성/GitHub 배포
+
+### 프론트엔드
+- [ ] `client/pages/Deployment.jsx` - 3탭 UI (MkDocs, DOCX, 프리뷰)
+
+### 검증
+- [ ] MkDocs 빌드/프리뷰 테스트
+- [ ] DOCX 생성 및 다운로드 테스트
 
 ## 다음 세션에서 이어하기
 
@@ -154,7 +184,7 @@ cd /Users/greatsong/greatsong-project/eduflow
 # 1. 이 파일(PROGRESS.md) 읽어 현재 상태 파악
 # 2. CLAUDE.md 읽어 프로젝트 컨벤션 확인
 # 3. ARCHITECTURE.md 읽어 설계 이해
-# 4. Phase 5 체크리스트부터 이어서 작업
+# 4. Phase 6 체크리스트부터 이어서 작업
 
 # 개발 서버 실행
 npm run dev
@@ -201,3 +231,15 @@ npm run dev:server   # http://localhost:3001
   - TableOfContents.jsx (2탭: 생성+편집, Part/Chapter 트리 뷰)
   - Feedback.jsx (채팅+목차 패널+확정, ChatInterface 재사용)
   - discussions.js Step 3 전용 시스템 프롬프트 추가
+
+### 2026-02-06 - 세션 2
+- Phase 5 완료: 챕터 제작 (Step 4) - 가장 복잡한 모듈
+  - chapterGenerator.js (~660줄, Python 899줄 → JS 변환)
+    - 6종 템플릿 프롬프트, p-limit 병렬 생성, 토큰 추정, 비용 추적
+    - 레퍼런스 관련성 정렬, 시간 제약 기반 토큰 자동 조정
+  - chapters.js 라우트 6개 엔드포인트 (배치 SSE, 단일 생성, CRUD, 인터랙티브 채팅)
+  - ChapterCreation.jsx 3탭 UI (~450줄)
+    - 대화형 모드 (채팅 + 미리보기 + 내용 적용/저장)
+    - 배치 자동화 (설정 + SSE 로그 + 비용 리포트)
+    - 챕터 편집 (사이드바 + 에디터 + 미리보기)
+  - ISSUES-FROM-ORIGINAL.md 작성 (원본 시스템 버그 7개 + 개선 3개 + 리팩토링 3개)
