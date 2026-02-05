@@ -13,7 +13,7 @@
 | 4 | 목차 + 피드백 (Step 2, 3) | ✅ 완료 | 2026-02-05 |
 | 5 | 챕터 제작 (Step 4) | ✅ 완료 | 2026-02-06 |
 | 6 | 배포 관리 (Step 5) | ✅ 완료 | 2026-02-06 |
-| 7 | 포트폴리오 + 베타 배포 | ⬜ 대기 | - |
+| 7 | 포트폴리오 + 베타 배포 | ✅ 완료 | 2026-02-06 |
 | 8 | 통합 테스트 + 배포 설정 | ⬜ 대기 | - |
 
 ## Phase 1 상세 (✅ 완료)
@@ -192,15 +192,56 @@
 - [x] MkDocs 설정 생성 API 정상
 - [x] 실제 MkDocs/Pandoc/GitHub 배포는 챕터 데이터가 있는 프로젝트에서 테스트 필요
 
-## Phase 7 상세 (⬜ 다음 작업)
+## Phase 7 상세 (✅ 완료)
 
 ### 서버 라우트
-- [ ] `server/routes/portfolio.js` - 통계 집계 API
-- [ ] `server/routes/beta.js` - GitHub CLI 연동 (리포/테스터/푸시)
+- [x] `server/routes/portfolio.js` - 통계 집계 API (~180줄)
+  - GET / - 전체 프로젝트 스캔 + 통계 집계 (파트/챕터/비용/페이지)
+  - GET /:id/report - 프로젝트 상세 리포트
+  - GET /:id/chapter/:chapterId - 챕터 미리보기
+  - 진행 상태 판단 (progress.json + 실제 파일 교차 확인)
+  - 비용 추정 (estimated_cost > total_tokens 폴백)
+- [x] `server/routes/beta.js` - GitHub CLI 연동 (~200줄)
+  - GET /config - 베타 설정 로드
+  - GET /github-status - gh CLI/인증/사용자명 확인
+  - POST /repo - 저장소 생성 (git init + commit + gh repo create)
+  - POST /testers - 테스터 초대 (collaborator 추가)
+  - DELETE /testers/:username - 테스터 제거
+  - POST /push - 커밋 & 푸시
+  - PUT /config - 설정 업데이트 (초대 메시지 등)
+  - DELETE /config - 설정 초기화
 
 ### 프론트엔드
-- [ ] `client/pages/Portfolio.jsx` - 대시보드 + 카드 그리드
-- [ ] `client/pages/BetaDeploy.jsx` - 4탭 UI (리포/테스터/메시지/관리)
+- [x] `client/pages/Portfolio.jsx` - 대시보드 (~290줄)
+  - 5개 통계 카드 (프로젝트/완료/챕터/분량/비용)
+  - 필터(전체/완료/진행중/미시작) + 정렬(최신/오래된/이름)
+  - 2열 프로젝트 카드 그리드 (상태 배지, 메타 정보, 배지)
+  - 상세 보기 슬라이드 패널 (목차 트리, 생성 리포트)
+  - 챕터 미리보기 패널 (ReactMarkdown, 10K자 제한)
+- [x] `client/pages/BetaDeploy.jsx` - 4탭 UI (~330줄)
+  - 상태바 (gh CLI/인증/저장소/테스터)
+  - 1️⃣ 저장소 생성: gh 설치/인증 확인 + 저장소 생성 + 푸시
+  - 2️⃣ 테스터 초대: 사용자명 입력 + 초대/제거 + 목록
+  - 3️⃣ 초대 메시지: 템플릿 편집 + 저장/복사
+  - 4️⃣ 관리: 커밋&푸시 + 설정 초기화 + 현재 설정 JSON 표시
+
+### 검증
+- [x] 클라이언트 빌드 성공 (`vite build`)
+- [x] Portfolio API 정상 (프로젝트 목록 + 통계 집계)
+- [x] Beta GitHub Status API 정상 (gh 설치/인증/사용자명)
+- [x] Beta Config API 정상 (설정 로드)
+
+## Phase 8 상세 (⬜ 다음 작업)
+
+### 통합 테스트
+- [ ] 전체 워크플로우 E2E 테스트 (Step 0 → Step 5)
+- [ ] 기존 프로젝트 데이터 호환성 검증
+- [ ] 스트리밍(SSE) 전체 점검
+
+### 배포 설정
+- [ ] Vercel 프론트엔드 배포 설정
+- [ ] Railway/Render 백엔드 배포 설정
+- [ ] 환경변수 가이드
 
 ## 다음 세션에서 이어하기
 
@@ -277,3 +318,8 @@ npm run dev:server   # http://localhost:3001
     - MkDocs 웹사이트 (설정+빌드+프리뷰+GitHub Pages)
     - DOCX 문서 (생성+다운로드)
     - 미리보기 (챕터 선택+렌더링)
+- Phase 7 완료: 포트폴리오 + 베타 배포
+  - portfolio.js 라우트 3개 엔드포인트 (전체 스캔+통계, 상세 리포트, 챕터 미리보기)
+  - beta.js 라우트 8개 엔드포인트 (설정/상태/리포 생성/테스터/푸시/초기화)
+  - Portfolio.jsx (통계 대시보드 + 카드 그리드 + 상세 패널 + 미리보기)
+  - BetaDeploy.jsx (4탭: 저장소/테스터/메시지/관리)

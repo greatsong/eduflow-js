@@ -7,6 +7,8 @@ import discussionsRouter from './routes/discussions.js';
 import tocRouter from './routes/toc.js';
 import chaptersRouter from './routes/chapters.js';
 import deployRouter from './routes/deploy.js';
+import portfolioRouter from './routes/portfolio.js';
+import betaRouter from './routes/beta.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 config(); // .env 로드
@@ -32,6 +34,8 @@ app.use('/api/projects/:id/discussions', discussionsRouter);
 app.use('/api/projects/:id/toc', tocRouter);
 app.use('/api/projects/:id/chapters', chaptersRouter);
 app.use('/api/projects/:id/deploy', deployRouter);
+app.use('/api/portfolio', portfolioRouter);
+app.use('/api/beta', betaRouter);
 
 // 에러 핸들링
 app.use(errorHandler);

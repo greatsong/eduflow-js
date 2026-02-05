@@ -10,20 +10,20 @@ Python/Streamlit 기반 교육자료 생성 시스템 "에듀플로"를 JavaScri
 - **아키텍처 문서**: `ARCHITECTURE.md`
 - **진행 상태**: `PROGRESS.md` ← **새 세션에서 반드시 이것부터 읽기**
 
-## 현재 구현 상태 (Phase 6/8 완료)
+## 현재 구현 상태 (Phase 7/8 완료)
 
 | 구분 | 구현 완료 | 미구현 |
 |------|----------|--------|
-| **서비스** | progressManager, templateManager, referenceManager, conversationManager, tocGenerator, chapterGenerator, **deployment** | utils (부분 완료: modelConfig.js) |
-| **라우트** | models, projects, discussions, toc, chapters, **deploy** | portfolio, beta |
-| **페이지** | Home, ProjectManager, Discussion, TableOfContents, Feedback, ChapterCreation, **Deployment** | Portfolio, BetaDeploy (스텁만 존재) |
+| **서비스** | progressManager, templateManager, referenceManager, conversationManager, tocGenerator, chapterGenerator, deployment | utils (부분 완료: modelConfig.js) |
+| **라우트** | models, projects, discussions, toc, chapters, deploy, **portfolio, beta** | - (전체 완료) |
+| **페이지** | Home, ProjectManager, Discussion, TableOfContents, Feedback, ChapterCreation, Deployment, **Portfolio, BetaDeploy** | - (전체 완료) |
 | **컴포넌트** | Layout, ProgressBar, ChatInterface | MarkdownPreview, ModelSelector (필요시 추가) |
 | **스토어** | projectStore, chatStore | generationStore (불필요 - ChapterCreation 내부 state로 처리) |
 
 ## 기술 스택
 
 - **프론트엔드**: React 19, Vite 6, React Router 7, Zustand, Tailwind CSS 4, react-markdown
-- **백엔드**: Express 5, @anthropic-ai/sdk, multer, p-limit(예정), execa(예정)
+- **백엔드**: Express 5, @anthropic-ai/sdk, multer, p-limit, execa
 - **모노레포**: npm workspaces (`client/`, `server/`, `shared/`)
 
 ## 주요 명령어
@@ -71,10 +71,10 @@ eduflow/
 │       │   ├── Discussion.jsx        # /discussion (Step 1) - 채팅+요약
 │       │   ├── TableOfContents.jsx   # /toc (Step 2) - 생성+편집 2탭
 │       │   ├── Feedback.jsx          # /feedback (Step 3) - 채팅+목차+확정
-│       │   ├── ChapterCreation.jsx   # /chapters (Step 4) - ⬜ 스텁
-│       │   ├── Deployment.jsx        # /deploy (Step 5) - ⬜ 스텁
-│       │   ├── Portfolio.jsx         # /portfolio - ⬜ 스텁
-│       │   └── BetaDeploy.jsx        # /beta - ⬜ 스텁
+│       │   ├── ChapterCreation.jsx   # /chapters (Step 4) - 3탭
+│       │   ├── Deployment.jsx        # /deploy (Step 5) - 3탭
+│       │   ├── Portfolio.jsx         # /portfolio - 대시보드+카드
+│       │   └── BetaDeploy.jsx        # /beta - 4탭
 │       └── styles/
 │           └── globals.css           # Tailwind CSS
 │
@@ -85,13 +85,19 @@ eduflow/
 │   │   ├── models.js                 # GET /api/models
 │   │   ├── projects.js               # CRUD + references + templates
 │   │   ├── discussions.js            # 대화 CRUD + SSE 채팅 (Step 1, 3)
-│   │   └── toc.js                    # TOC 생성(SSE)/CRUD/확정/아웃라인
+│   │   ├── toc.js                    # TOC 생성(SSE)/CRUD/확정/아웃라인
+│   │   ├── chapters.js              # 챕터 CRUD + SSE 배치 생성/채팅
+│   │   ├── deploy.js                # MkDocs/DOCX/GitHub Pages 배포
+│   │   ├── portfolio.js             # 프로젝트 통계/리포트/미리보기
+│   │   └── beta.js                  # GitHub 리포/테스터/푸시 관리
 │   ├── services/
 │   │   ├── progressManager.js        # ✅ progress.json 관리
 │   │   ├── templateManager.js        # ✅ 템플릿 로드/적용
 │   │   ├── referenceManager.js       # ✅ 파일 업로드/읽기/삭제
 │   │   ├── conversationManager.js    # ✅ 대화 저장/로드/요약
-│   │   └── tocGenerator.js           # ✅ 목차 생성/저장/아웃라인
+│   │   ├── tocGenerator.js           # ✅ 목차 생성/저장/아웃라인
+│   │   ├── chapterGenerator.js      # ✅ 챕터 생성 (병렬/비용추적)
+│   │   └── deployment.js            # ✅ MkDocs/DOCX/GitHub 배포
 │   ├── middleware/
 │   │   ├── apiKey.js                 # API 키 검증 미들웨어
 │   │   └── errorHandler.js           # asyncHandler + errorHandler
