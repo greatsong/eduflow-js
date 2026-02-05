@@ -10,7 +10,7 @@
 | 1 | 모노레포 초기화 + 기반 구조 | ✅ 완료 | 2026-02-05 |
 | 2 | 프로젝트 관리 (Step 0) | ✅ 완료 | 2026-02-05 |
 | 3 | 방향성 논의 (Step 1) | ✅ 완료 | 2026-02-05 |
-| 4 | 목차 + 피드백 (Step 2, 3) | ⬜ 대기 | - |
+| 4 | 목차 + 피드백 (Step 2, 3) | ✅ 완료 | 2026-02-05 |
 | 5 | 챕터 제작 (Step 4) | ⬜ 대기 | - |
 | 6 | 배포 관리 (Step 5) | ⬜ 대기 | - |
 | 7 | 포트폴리오 + 베타 배포 | ⬜ 대기 | - |
@@ -92,22 +92,59 @@
 - [x] 서버 API 테스트 통과 (대화 로드/저장/삭제, 요약 조회)
 - [x] Claude SSE 스트리밍은 API 키 있는 환경에서 테스트 필요
 
-## Phase 4 상세 (⬜ 다음 작업)
+## Phase 4 상세 (✅ 완료)
 
 ### 서버 서비스
-- [ ] `server/services/tocGenerator.js` ← `workflows/toc_generator.py`
+- [x] `server/services/tocGenerator.js` ← `workflows/toc_generator.py`
+  - generate(): SSE 스트리밍 목차 생성 (참고자료 + 방향성 요약 기반)
+  - saveToc(): JSON + MD + master-toc.md 저장
+  - loadToc(): 저장된 목차 로드
+  - generateOutlines(): 챕터별 아웃라인 파일 생성
+  - 토큰 제한 감지, JSON 추출/파싱, 에러 파일 저장
 
 ### API 라우트
-- [ ] `server/routes/toc.js` - TOC 생성(SSE) + CRUD + 확정 + 아웃라인 생성
+- [x] `server/routes/toc.js` - 5개 엔드포인트
+  - GET / - 목차 로드
+  - PUT / - 목차 저장 (JSON 편집)
+  - POST /generate - SSE 목차 자동 생성 (참고자료 + 요약 자동 로드)
+  - POST /confirm - 목차 확정 (progress 업데이트)
+  - POST /outlines - 아웃라인 파일 생성
 
 ### 프론트엔드
-- [ ] `client/pages/TableOfContents.jsx` - TOC 자동 생성 + JSON 편집
-- [ ] `client/pages/Feedback.jsx` - TOC 리뷰 채팅 + 확정
+- [x] `client/pages/TableOfContents.jsx` - Step 2 목차 작성
+  - 2탭 UI: 목차 생성 + 목차 편집 (JSON textarea)
+  - SSE 스트리밍으로 생성 과정 실시간 표시
+  - Part/Chapter 트리 뷰 (접기/펼치기)
+- [x] `client/pages/Feedback.jsx` - Step 3 피드백 & 컨펌
+  - 1/2 채팅 + 1/2 목차 패널 레이아웃
+  - ChatInterface 재사용 (Step 3 전용 시스템 프롬프트)
+  - 목차 확정 버튼 + 상태 표시
+- [x] `server/routes/discussions.js` - Step 3 전용 시스템 프롬프트 추가
+  - Step별 프롬프트 분기 (Step 1: 방향성 논의, Step 3: TOC 검토)
 
 ### 검증
-- [ ] TOC 스트리밍 생성 테스트
-- [ ] TOC JSON 편집/저장 확인
-- [ ] 아웃라인 파일 자동 생성 확인
+- [x] 클라이언트 빌드 성공 (`vite build`)
+- [x] TOC CRUD API 테스트 통과 (로드/저장/확정/아웃라인)
+- [x] 진행 상태 업데이트 확인 (step3_confirmed)
+- [x] Claude SSE 스트리밍 생성은 API 키 있는 환경에서 테스트 필요
+
+## Phase 5 상세 (⬜ 다음 작업)
+
+### 서버 서비스
+- [ ] `server/services/chapterGenerator.js` ← `workflows/chapter_generator.py` (핵심 모듈, ~800줄)
+  - 비동기 병렬 생성 (p-limit), 토큰 추정, 레퍼런스 관련성 정렬
+  - 템플릿별 프롬프트 생성, 비용 추적, generation_report.json
+
+### API 라우트
+- [ ] `server/routes/chapters.js` - 배치 생성(SSE 진행률) + 단일 생성 + CRUD + 인터랙티브 채팅
+
+### 프론트엔드
+- [ ] `client/pages/ChapterCreation.jsx` - 3탭 UI (인터랙티브, 배치, 에디터)
+
+### 검증
+- [ ] 배치 생성 SSE 진행률 스트리밍 테스트
+- [ ] 단일 챕터 생성/수정 확인
+- [ ] 비용 리포트 생성 확인
 
 ## 다음 세션에서 이어하기
 
@@ -117,7 +154,7 @@ cd /Users/greatsong/greatsong-project/eduflow
 # 1. 이 파일(PROGRESS.md) 읽어 현재 상태 파악
 # 2. CLAUDE.md 읽어 프로젝트 컨벤션 확인
 # 3. ARCHITECTURE.md 읽어 설계 이해
-# 4. Phase 4 체크리스트부터 이어서 작업
+# 4. Phase 5 체크리스트부터 이어서 작업
 
 # 개발 서버 실행
 npm run dev
@@ -158,3 +195,9 @@ npm run dev:server   # http://localhost:3001
   - ChatInterface.jsx 범용 채팅 컴포넌트 (재사용 가능)
   - Discussion.jsx (채팅 + 요약 패널 + 모델 선택)
   - chatStore.js (Zustand 채팅 상태 관리)
+- Phase 4 완료: 목차 작성 + 피드백 (Step 2, 3)
+  - tocGenerator.js (Python → JS 변환, SSE 스트리밍 생성)
+  - toc.js 라우트 5개 엔드포인트 (생성/CRUD/확정/아웃라인)
+  - TableOfContents.jsx (2탭: 생성+편집, Part/Chapter 트리 뷰)
+  - Feedback.jsx (채팅+목차 패널+확정, ChatInterface 재사용)
+  - discussions.js Step 3 전용 시스템 프롬프트 추가

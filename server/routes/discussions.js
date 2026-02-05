@@ -9,6 +9,7 @@ import { requireApiKey } from '../middleware/apiKey.js';
 import { ConversationManager } from '../services/conversationManager.js';
 import { ReferenceManager } from '../services/referenceManager.js';
 import { ProgressManager } from '../services/progressManager.js';
+import { TOCGenerator } from '../services/tocGenerator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -136,8 +137,45 @@ router.post('/:step/chat', requireApiKey, asyncHandler(async (req, res) => {
       }
     }
 
-    // 시스템 프롬프트
-    const systemPrompt = `당신은 교육 커리큘럼 설계 전문가입니다.
+    // 시스템 프롬프트 (단계별 분기)
+    let systemPrompt;
+
+    if (step === '3') {
+      // Step 3: 피드백 & 컨펌 - TOC 검토 전용 프롬프트
+      let tocJsonText = '';
+      const tg = new TOCGenerator(projPath);
+      const tocData = await tg.loadToc();
+      if (tocData) {
+        tocJsonText = JSON.stringify(tocData, null, 2);
+      }
+
+      systemPrompt = `당신은 교육 커리큘럼 검토 전문가입니다.
+
+사용자가 생성한 교육자료 목차를 함께 검토하고 개선하고 있습니다.
+
+# 현재 목차
+
+\`\`\`json
+${tocJsonText}
+\`\`\`
+
+# 역할
+
+1. 목차의 장단점을 분석하고 피드백 제공
+2. 사용자의 수정 요청을 구체적인 JSON 수정안으로 제시
+3. 전체 흐름, 난이도 순서, 학습 경험 관점에서 조언
+
+# 피드백 원칙
+
+- 구체적이고 실행 가능한 조언
+- 긍정적인 부분도 함께 언급
+- 수정이 필요하면 구체적인 JSON 수정안 제시
+- 사용자의 의도를 존중하며 제안
+
+친근하고 격려하는 톤으로 대화하세요.`;
+    } else {
+      // Step 1: 방향성 논의 프롬프트 (기본)
+      systemPrompt = `당신은 교육 커리큘럼 설계 전문가입니다.
 
 ## 현재 단계: 방향성 논의 (Step ${step})
 이 단계의 목표는 사용자가 만들고자 하는 교육자료의 **방향성**을 함께 논의하는 것입니다.
@@ -162,6 +200,7 @@ ${referencesText}
 - 친근하고 격려하는 톤으로 대화하세요
 - 사용자의 아이디어를 정리해서 확인해주세요
 - 충분히 논의되면 "논의 내용 요약하기" 버튼을 누르도록 안내해주세요`;
+    }
 
     // 대화 히스토리 구성
     const allMessages = clientMessages || await cm.loadConversation(step);
