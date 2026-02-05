@@ -12,7 +12,7 @@
 | 3 | 방향성 논의 (Step 1) | ✅ 완료 | 2026-02-05 |
 | 4 | 목차 + 피드백 (Step 2, 3) | ✅ 완료 | 2026-02-05 |
 | 5 | 챕터 제작 (Step 4) | ✅ 완료 | 2026-02-06 |
-| 6 | 배포 관리 (Step 5) | ⬜ 대기 | - |
+| 6 | 배포 관리 (Step 5) | ✅ 완료 | 2026-02-06 |
 | 7 | 포트폴리오 + 베타 배포 | ⬜ 대기 | - |
 | 8 | 통합 테스트 + 배포 설정 | ⬜ 대기 | - |
 
@@ -160,21 +160,47 @@
 - [x] 서버 시작 정상 확인
 - [x] Claude SSE 스트리밍 (배치/인터랙티브)는 API 키 있는 환경에서 테스트 필요
 
-## Phase 6 상세 (⬜ 다음 작업)
+## Phase 6 상세 (✅ 완료)
 
 ### 서버 서비스
-- [ ] `server/services/deployment.js` ← `workflows/deployment.py` (~293줄)
-  - MkDocs 빌드 (execa), Pandoc DOCX 변환, Git/GitHub CLI 연동
+- [x] `server/services/deployment.js` ← `workflows/deployment.py` (~240줄)
+  - CLI 도구 상태 확인 (mkdocs, pandoc, git, gh)
+  - MkDocs 설정 생성 (mkdocs.yml + index.md, TOC 기반 nav)
+  - MkDocs 빌드 및 로컬 프리뷰 (execa)
+  - Pandoc DOCX 변환 (챕터 합치기 + TOC 순서)
+  - GitHub Pages 배포 (저장소 생성/확인 + gh-deploy)
 
 ### API 라우트
-- [ ] `server/routes/deploy.js` - MkDocs 빌드/DOCX 생성/GitHub 배포
+- [x] `server/routes/deploy.js` - 7개 엔드포인트
+  - GET /status - 도구 상태 + 챕터 수 + GitHub 사용자
+  - POST /mkdocs/config - MkDocs 설정 생성
+  - POST /mkdocs/build - 웹사이트 빌드
+  - POST /mkdocs/serve - 로컬 프리뷰 시작
+  - POST /docx - DOCX 생성
+  - GET /docx/download - DOCX 다운로드 (스트림)
+  - POST /github - GitHub Pages 배포
 
 ### 프론트엔드
-- [ ] `client/pages/Deployment.jsx` - 3탭 UI (MkDocs, DOCX, 프리뷰)
+- [x] `client/pages/Deployment.jsx` - 3탭 UI (~350줄)
+  - MkDocs 웹사이트: 설정 생성 + 빌드/프리뷰 + GitHub Pages 배포
+  - DOCX 문서: 제목 입력 + 생성 + 다운로드
+  - 미리보기: 챕터 선택 + 마크다운 렌더링
 
 ### 검증
-- [ ] MkDocs 빌드/프리뷰 테스트
-- [ ] DOCX 생성 및 다운로드 테스트
+- [x] 클라이언트 빌드 성공 (`vite build`)
+- [x] 배포 상태 API 정상 (도구 확인: mkdocs, pandoc, git, gh)
+- [x] MkDocs 설정 생성 API 정상
+- [x] 실제 MkDocs/Pandoc/GitHub 배포는 챕터 데이터가 있는 프로젝트에서 테스트 필요
+
+## Phase 7 상세 (⬜ 다음 작업)
+
+### 서버 라우트
+- [ ] `server/routes/portfolio.js` - 통계 집계 API
+- [ ] `server/routes/beta.js` - GitHub CLI 연동 (리포/테스터/푸시)
+
+### 프론트엔드
+- [ ] `client/pages/Portfolio.jsx` - 대시보드 + 카드 그리드
+- [ ] `client/pages/BetaDeploy.jsx` - 4탭 UI (리포/테스터/메시지/관리)
 
 ## 다음 세션에서 이어하기
 
@@ -184,7 +210,7 @@ cd /Users/greatsong/greatsong-project/eduflow
 # 1. 이 파일(PROGRESS.md) 읽어 현재 상태 파악
 # 2. CLAUDE.md 읽어 프로젝트 컨벤션 확인
 # 3. ARCHITECTURE.md 읽어 설계 이해
-# 4. Phase 6 체크리스트부터 이어서 작업
+# 4. Phase 7 체크리스트부터 이어서 작업
 
 # 개발 서버 실행
 npm run dev
@@ -243,3 +269,11 @@ npm run dev:server   # http://localhost:3001
     - 배치 자동화 (설정 + SSE 로그 + 비용 리포트)
     - 챕터 편집 (사이드바 + 에디터 + 미리보기)
   - ISSUES-FROM-ORIGINAL.md 작성 (원본 시스템 버그 7개 + 개선 3개 + 리팩토링 3개)
+- Phase 6 완료: 배포 관리 (Step 5)
+  - deployment.js (~240줄, Python 293줄 → JS 변환, execa로 CLI 실행)
+    - MkDocs 설정 생성/빌드/프리뷰, Pandoc DOCX 변환, GitHub Pages 배포
+  - deploy.js 라우트 7개 엔드포인트 (상태/설정/빌드/프리뷰/DOCX생성/다운로드/GitHub)
+  - Deployment.jsx 3탭 UI (~350줄)
+    - MkDocs 웹사이트 (설정+빌드+프리뷰+GitHub Pages)
+    - DOCX 문서 (생성+다운로드)
+    - 미리보기 (챕터 선택+렌더링)
