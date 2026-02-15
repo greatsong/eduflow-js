@@ -1,15 +1,41 @@
 export const API_BASE = import.meta.env.VITE_API_URL || '';
 
+const API_KEY_STORAGE = 'eduflow_api_key';
+
+/** localStorage에서 API 키 가져오기 */
+export function getApiKey() {
+  return localStorage.getItem(API_KEY_STORAGE) || '';
+}
+
+/** localStorage에 API 키 저장 */
+export function setApiKey(key) {
+  if (key) {
+    localStorage.setItem(API_KEY_STORAGE, key);
+  } else {
+    localStorage.removeItem(API_KEY_STORAGE);
+  }
+}
+
+/** API 키가 설정되어 있는지 확인 */
+export function hasApiKey() {
+  return !!getApiKey();
+}
+
+/** 공통 헤더 생성 */
+function authHeaders(extra = {}) {
+  const key = getApiKey();
+  const headers = { 'Content-Type': 'application/json', ...extra };
+  if (key) headers['x-api-key'] = key;
+  return headers;
+}
+
 /**
  * 기본 fetch 래퍼
  */
 export async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
     ...options,
+    headers: authHeaders(options.headers),
   });
 
   if (!res.ok) {
@@ -22,13 +48,6 @@ export async function apiFetch(path, options = {}) {
 
 /**
  * SSE(Server-Sent Events) 스트리밍 연결
- * @param {string} path - API 경로
- * @param {object} options
- * @param {function} options.onText - 텍스트 청크 수신 콜백
- * @param {function} options.onProgress - 진행률 수신 콜백
- * @param {function} options.onError - 에러 콜백
- * @param {function} options.onDone - 완료 콜백
- * @returns {function} close - 연결 종료 함수
  */
 export function apiSSE(path, { onText, onProgress, onError, onDone } = {}) {
   const es = new EventSource(`${API_BASE}${path}`);
@@ -72,7 +91,7 @@ export function apiSSE(path, { onText, onProgress, onError, onDone } = {}) {
 export async function apiStreamPost(path, body, { onText, onProgress, onError, onDone } = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(body),
   });
 

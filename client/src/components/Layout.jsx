@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import ProgressBar from './ProgressBar';
 import Logo from './Logo';
+import ApiKeyModal from './ApiKeyModal';
+import { hasApiKey, apiFetch } from '../api/client';
 import { STEPS, EXTRA_NAV } from '../../../shared/constants.js';
 
 export default function Layout() {
@@ -10,10 +12,24 @@ export default function Layout() {
   const progress = useProjectStore((s) => s.progress);
   const restoreProject = useProjectStore((s) => s.restoreProject);
 
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyReady, setApiKeyReady] = useState(false);
+
   // 앱 시작 시 이전 프로젝트 선택 복원
   useEffect(() => {
     if (!currentProject) restoreProject();
   }, []);
+
+  // API 키 상태 확인 (브라우저 localStorage 또는 서버 .env)
+  useEffect(() => {
+    if (hasApiKey()) {
+      setApiKeyReady(true);
+    } else {
+      apiFetch('/api/auth/status')
+        .then((d) => setApiKeyReady(d.hasEnvKey))
+        .catch(() => setApiKeyReady(false));
+    }
+  }, [showApiKeyModal]);
 
   const isStepCompleted = (step) => {
     if (!progress || !step.progressKey) return false;
@@ -106,6 +122,24 @@ export default function Layout() {
           ))}
         </nav>
 
+        {/* API 키 상태 + 설정 */}
+        <div className="px-3 py-2 border-t border-gray-200">
+          <button
+            onClick={() => setShowApiKeyModal(true)}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors ${
+              apiKeyReady
+                ? 'text-green-700 bg-green-50 hover:bg-green-100'
+                : 'text-orange-700 bg-orange-50 hover:bg-orange-100'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${apiKeyReady ? 'bg-green-500' : 'bg-orange-500'}`} />
+            <span className="flex-1 text-left">
+              {apiKeyReady ? 'API 키 설정됨' : 'API 키 필요'}
+            </span>
+            <span className="text-gray-400">설정</span>
+          </button>
+        </div>
+
         {/* 하단 정보 */}
         <div className="p-4 border-t border-gray-200 text-xs text-gray-400">
           EduFlow v0.1.0
@@ -119,6 +153,11 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+      <ApiKeyModal
+        open={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onSaved={() => setApiKeyReady(hasApiKey())}
+      />
     </div>
   );
 }

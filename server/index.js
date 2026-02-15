@@ -30,6 +30,33 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// API 키 상태 확인 (서버 .env에 키가 있는지)
+app.get('/api/auth/status', (req, res) => {
+  const hasEnvKey = !!process.env.ANTHROPIC_API_KEY;
+  res.json({ hasEnvKey });
+});
+
+// API 키 검증 (클라이언트에서 보낸 키가 유효한지 Anthropic에 확인)
+app.post('/api/auth/verify', async (req, res) => {
+  const apiKey = req.headers['x-api-key'] || req.body.apiKey;
+  if (!apiKey) {
+    return res.status(400).json({ valid: false, message: 'API 키가 제공되지 않았습니다.' });
+  }
+  try {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey });
+    await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    res.json({ valid: true });
+  } catch (e) {
+    const msg = e.status === 401 ? '유효하지 않은 API 키입니다.' : `검증 실패: ${e.message}`;
+    res.json({ valid: false, message: msg });
+  }
+});
+
 // 라우트
 app.use('/api/models', modelsRouter);
 
