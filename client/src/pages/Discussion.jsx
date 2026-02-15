@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useProjectStore } from '../stores/projectStore';
@@ -7,6 +8,7 @@ import { apiFetch, apiStreamPost } from '../api/client';
 import ChatInterface from '../components/ChatInterface';
 
 export default function Discussion() {
+  const navigate = useNavigate();
   const { currentProject, refreshProgress } = useProjectStore();
   const { messages, isStreaming, setMessages, addMessage, appendToLastMessage, setStreaming, clearMessages } = useChatStore();
 
@@ -191,6 +193,16 @@ export default function Discussion() {
               ? '🔄 요약 재생성'
               : '✨ 논의 내용 요약하기'}
           </button>
+
+          {/* 다음 단계로 */}
+          {(summary || summaryText) && !summaryStreaming && (
+            <button
+              onClick={() => navigate('/toc')}
+              className="w-full mt-2 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+            >
+              📋 Step 2: 목차 작성으로 →
+            </button>
+          )}
         </div>
       </div>
     </div>

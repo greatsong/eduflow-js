@@ -6,7 +6,7 @@
 
   "models": [
     {
-      "id": "claude-opus-4-6-20260206",
+      "id": "claude-opus-4-6",
       "display_name": "Claude Opus 4.6",
       "tier": "최고 품질",
       "pricing": { "input": 5.0, "output": 25.0 },
@@ -20,6 +20,13 @@
       "recommended_for": ["챕터 생성", "고품질 콘텐츠"]
     },
     {
+      "id": "claude-sonnet-4-5-20250929",
+      "display_name": "Claude Sonnet 4.5",
+      "tier": "균형",
+      "pricing": { "input": 3.0, "output": 15.0 },
+      "recommended_for": ["대화", "목차 생성", "피드백"]
+    },
+    {
       "id": "claude-sonnet-4-20250514",
       "display_name": "Claude Sonnet 4",
       "tier": "빠르고 경제적",
@@ -29,7 +36,7 @@
   ],
 
   "defaults": {
-    "chapter_generation": "claude-opus-4-6-20260206",
+    "chapter_generation": "claude-opus-4-6",
     "conversation": "claude-sonnet-4-20250514"
   }
 }

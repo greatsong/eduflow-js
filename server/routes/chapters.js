@@ -36,6 +36,31 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ chapters, report });
 }));
 
+// GET /api/projects/:id/chapters/generation-status - 배치 생성 진행 상태
+router.get('/generation-status', asyncHandler(async (req, res) => {
+  const gen = new ChapterGenerator(projectPath(req.params.id));
+  const status = await gen.loadGenerationStatus();
+  if (!status) {
+    return res.json({ status: 'idle' });
+  }
+  // 5분 이상 업데이트 없는 running 상태는 stale 처리
+  if (status.status === 'running' && status.updated_at) {
+    const elapsed = Date.now() - new Date(status.updated_at).getTime();
+    if (elapsed > 5 * 60 * 1000) {
+      status.status = 'failed';
+      status.stale = true;
+    }
+  }
+  res.json(status);
+}));
+
+// POST /api/projects/:id/chapters/generation-cancel - 배치 생성 취소
+router.post('/generation-cancel', asyncHandler(async (req, res) => {
+  const gen = new ChapterGenerator(projectPath(req.params.id));
+  const cancelled = await gen.requestCancel();
+  res.json({ success: cancelled, message: cancelled ? '취소 요청됨' : '실행 중인 생성이 없습니다' });
+}));
+
 // GET /api/projects/:id/chapters/:chapterId - 챕터 내용 읽기
 router.get('/:chapterId', asyncHandler(async (req, res) => {
   const gen = new ChapterGenerator(projectPath(req.params.id));
@@ -64,7 +89,7 @@ router.put('/:chapterId', asyncHandler(async (req, res) => {
 
 // POST /api/projects/:id/chapters/generate-all - 배치 생성 (SSE)
 router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
-  const { model, maxTokens, concurrent, skipCompleted, tpmLimit } = req.body;
+  const { model, maxTokens, concurrent, skipCompleted, tpmLimit, chapterIds } = req.body;
   const projPath = projectPath(req.params.id);
 
   sseHeaders(res);
@@ -87,12 +112,13 @@ router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
 
     const report = await gen.generateAllChapters(
       tocData,
-      model || 'claude-opus-4-5-20251101',
-      maxTokens || 16000,
+      model || 'claude-opus-4-6',
+      maxTokens || 8000,
       concurrent || 1,
       progressCallback,
       skipCompleted !== false,
-      tpmLimit || 0  // TPM 제한 (0이면 비활성화)
+      tpmLimit || 0,  // TPM 제한 (0이면 비활성화)
+      chapterIds || null  // 특정 챕터만 생성 (null이면 전체)
     );
 
     // 성공한 챕터 진행 상태 업데이트
@@ -103,8 +129,7 @@ router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
       }
     }
 
-    sseSend(res, { type: 'report', report });
-    sseSend(res, { type: 'done' });
+    sseSend(res, { type: 'done', report });
   } catch (e) {
     sseSend(res, { type: 'error', message: e.message });
   }
@@ -128,8 +153,8 @@ router.post('/:chapterId/generate', requireApiKey, asyncHandler(async (req, res)
     chapterId,
     info.chapter_title || chapterId,
     info.part_context || '',
-    model || 'claude-opus-4-5-20251101',
-    maxTokens || 16000,
+    model || 'claude-opus-4-6',
+    maxTokens || 8000,
     null,
     info.estimated_time || '',
     info.total_chapters || 0,

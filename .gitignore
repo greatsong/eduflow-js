@@ -3,3 +3,13 @@ dist/
 .env
 *.log
 .DS_Store
+
+# 사용자 프로젝트 데이터 (개인 데이터 보호)
+projects/*/
+!projects/template/
+
+# Claude Code 설정
+.claude/
+
+# 베타 설정
+beta_config.json

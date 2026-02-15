@@ -58,8 +58,8 @@ cp .env.example .env
 npm run dev
 
 # 또는 개별 실행
-npm run dev:server  # 서버만 (포트 3001)
-npm run dev:client  # 클라이언트만 (포트 5173)
+npm run dev:server  # 서버만 (포트 7829)
+npm run dev:client  # 클라이언트만 (포트 7830)
 ```
 
 ### 빌드
@@ -110,8 +110,8 @@ Step 5: 배포 관리 (MkDocs/GitHub Pages)
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...    # 필수
-PORT=3001                        # 서버 포트 (기본: 3001)
-NODE_ENV=development            # 환경
+PORT=7829                        # 서버 포트 (기본: 7829)
+CLIENT_URL=http://localhost:7830 # 클라이언트 URL (기본값)
 ```
 
 ## 관련 프로젝트

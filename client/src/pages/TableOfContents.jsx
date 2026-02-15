@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { apiFetch, apiStreamPost } from '../api/client';
 
 export default function TableOfContents() {
+  const navigate = useNavigate();
   const { currentProject, refreshProgress } = useProjectStore();
 
   const [toc, setToc] = useState(null);
@@ -163,6 +165,18 @@ export default function TableOfContents() {
           />
         )}
       </div>
+
+      {/* 다음 단계로 */}
+      {toc && !generating && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <button
+            onClick={() => navigate('/feedback')}
+            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+          >
+            ✅ Step 3: 피드백 & 컨펌으로 →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

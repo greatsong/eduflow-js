@@ -235,6 +235,13 @@ router.post('/:id/references', upload.array('files', 20), asyncHandler(async (re
   res.status(201).json({ saved, count: saved.length });
 }));
 
+// GET /api/projects/:id/references/search - 검색 (/:filename보다 먼저 등록)
+router.get('/:id/references/search', asyncHandler(async (req, res) => {
+  const rm = new ReferenceManager(projectPath(req.params.id));
+  const files = await rm.searchFiles(req.query.q || '');
+  res.json({ files });
+}));
+
 // GET /api/projects/:id/references/:filename - 내용 읽기
 router.get('/:id/references/:filename', asyncHandler(async (req, res) => {
   const rm = new ReferenceManager(projectPath(req.params.id));
@@ -253,13 +260,6 @@ router.delete('/:id/references/:filename', asyncHandler(async (req, res) => {
     return res.status(404).json({ message: '파일을 찾을 수 없습니다' });
   }
   res.json({ message: '삭제 완료' });
-}));
-
-// GET /api/projects/:id/references/search - 검색
-router.get('/:id/references/search', asyncHandler(async (req, res) => {
-  const rm = new ReferenceManager(projectPath(req.params.id));
-  const files = await rm.searchFiles(req.query.q || '');
-  res.json({ files });
 }));
 
 // ============================================================
@@ -334,7 +334,7 @@ router.put('/:id/context', asyncHandler(async (req, res) => {
 
   // progress.json 업데이트 (step1 완료 처리)
   const pm = new ProgressManager(projPath);
-  await pm.completeStep('step1');
+  await pm.markStep1Completed();
 
   res.json({ success: true, message: '저장 완료' });
 }));

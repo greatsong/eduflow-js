@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import modelsRouter from './routes/models.js';
 import projectsRouter from './routes/projects.js';
 import discussionsRouter from './routes/discussions.js';
@@ -11,14 +13,15 @@ import portfolioRouter from './routes/portfolio.js';
 import betaRouter from './routes/beta.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-config(); // .env 로드
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+config({ path: path.resolve(__dirname, '..', '.env') }); // 루트 .env 로드
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 7829;
 
 // 미들웨어
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: process.env.CLIENT_URL || 'http://localhost:7830',
 }));
 app.use(express.json({ limit: '10mb' }));
 

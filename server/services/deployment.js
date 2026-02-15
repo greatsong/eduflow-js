@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, stat, mkdir } from 'fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { existsSync, createReadStream } from 'fs';
 import { execa } from 'execa';
@@ -196,17 +196,31 @@ ${navYaml}`;
   }
 
   /**
-   * MkDocs 로컬 서버 시작
+   * MkDocs 로컬 서버 시작 (기존 프로세스 정리 후 실행)
    */
   async serveLocal(port = 8000) {
     try {
+      // 해당 포트의 기존 프로세스 종료
+      try {
+        const { stdout } = await execa('lsof', ['-ti', `:${port}`]);
+        if (stdout.trim()) {
+          for (const pid of stdout.trim().split('\n')) {
+            try { process.kill(Number(pid), 'SIGTERM'); } catch { /* ignore */ }
+          }
+          // 프로세스 종료 대기
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      } catch { /* 포트 사용 중인 프로세스 없음 */ }
+
       const subprocess = execa('mkdocs', ['serve', '--dev-addr', `127.0.0.1:${port}`], {
         cwd: this.projectPath,
         detached: true,
         stdio: 'ignore',
       });
+      // 비동기 실패 시 unhandled rejection 방지
+      subprocess.catch(() => {});
       subprocess.unref();
-      return { success: true, url: `http://127.0.0.1:${port}`, pid: subprocess.pid };
+      return { success: true, url: `http://localhost:${port}`, pid: subprocess.pid };
     } catch (e) {
       return { success: false, message: e.message };
     }
@@ -252,7 +266,7 @@ ${navYaml}`;
       ], { timeout: 120000 });
 
       // 임시 파일 삭제
-      try { await (await import('fs/promises')).unlink(tempMd); } catch { /* skip */ }
+      try { await unlink(tempMd); } catch { /* skip */ }
 
       const fileStat = await stat(outputFile);
       const sizeMb = fileStat.size / 1024 / 1024;
@@ -264,7 +278,7 @@ ${navYaml}`;
         size_mb: Math.round(sizeMb * 100) / 100,
       };
     } catch (e) {
-      try { await (await import('fs/promises')).unlink(tempMd); } catch { /* skip */ }
+      try { await unlink(tempMd); } catch { /* skip */ }
       return { success: false, message: e.shortMessage || e.message, error: e.stderr };
     }
   }

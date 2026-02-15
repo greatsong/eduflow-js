@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
-import { apiFetch } from '../api/client';
+import { apiFetch, apiStreamPost, API_BASE } from '../api/client';
 
-const TABS = ['프로젝트 설정', '참고자료', '직접 입력', '프롬프트 설정'];
+const TABS = ['프로젝트 설정', '참고자료', '프롬프트 설정', '빠른 시작'];
 
 export default function ProjectManager() {
   const { projects, currentProject, fetchProjects, selectProject, clearProject } = useProjectStore();
@@ -54,8 +55,8 @@ export default function ProjectManager() {
       {/* 탭 콘텐츠 */}
       {activeTab === 0 && <ProjectSettingsTab project={currentProject} onCreated={fetchProjects} onUpdated={fetchProjects} />}
       {activeTab === 1 && <ReferencesTab projectId={currentProject?.name} />}
-      {activeTab === 2 && <DirectInputTab projectId={currentProject?.name} />}
-      {activeTab === 3 && <PromptSettingsTab projectId={currentProject?.name} />}
+      {activeTab === 2 && <PromptSettingsTab projectId={currentProject?.name} />}
+      {activeTab === 3 && <QuickStartTab projectId={currentProject?.name} />}
     </div>
   );
 }
@@ -344,7 +345,7 @@ function ReferencesTab({ projectId }) {
     for (const f of fileList) formData.append('files', f);
 
     try {
-      await fetch(`/api/projects/${projectId}/references`, {
+      await fetch(`${API_BASE}/api/projects/${projectId}/references`, {
         method: 'POST', body: formData,
       });
       await loadFiles();
@@ -403,193 +404,7 @@ function ReferencesTab({ projectId }) {
 }
 
 // ============================================================
-// 탭 3: 직접 입력
-// ============================================================
-function DirectInputTab({ projectId }) {
-  const [discussionText, setDiscussionText] = useState('');
-  const [tocText, setTocText] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [inputMode, setInputMode] = useState('discussion'); // 'discussion' | 'toc'
-
-  useEffect(() => {
-    if (!projectId) return;
-    // 기존 데이터 로드 (master-context.md와 toc.md/toc.json)
-    loadExistingData();
-  }, [projectId]);
-
-  const loadExistingData = async () => {
-    try {
-      // master-context.md (방향성 논의 요약)
-      const contextRes = await fetch(`/api/projects/${projectId}/context`);
-      if (contextRes.ok) {
-        const data = await contextRes.json();
-        if (data.content) setDiscussionText(data.content);
-      }
-    } catch {}
-
-    try {
-      // toc.md 또는 toc.json
-      const tocRes = await fetch(`/api/projects/${projectId}/toc`);
-      if (tocRes.ok) {
-        const data = await tocRes.json();
-        if (data.toc_md) setTocText(data.toc_md);
-      }
-    } catch {}
-  };
-
-  if (!projectId) {
-    return <p className="text-gray-500">먼저 프로젝트를 선택하세요.</p>;
-  }
-
-  const handleSaveDiscussion = async () => {
-    setSaving(true);
-    setMessage('');
-    try {
-      await apiFetch(`/api/projects/${projectId}/context`, {
-        method: 'PUT',
-        body: JSON.stringify({ content: discussionText }),
-      });
-      setMessage('논의사항이 저장되었습니다!');
-    } catch (e) {
-      setMessage('저장 실패: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveToc = async () => {
-    setSaving(true);
-    setMessage('');
-    try {
-      await apiFetch(`/api/projects/${projectId}/toc/direct`, {
-        method: 'POST',
-        body: JSON.stringify({ toc_md: tocText }),
-      });
-      setMessage('목차가 저장되었습니다!');
-    } catch (e) {
-      setMessage('저장 실패: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="max-w-3xl">
-      <h3 className="text-lg font-semibold mb-2">📝 목차 및 논의사항 직접 입력</h3>
-      <p className="text-sm text-gray-500 mb-4">
-        AI와의 대화 없이, 이미 정리된 목차나 논의사항을 직접 입력하여 바로 챕터 생성 단계로 이동할 수 있습니다.
-      </p>
-
-      {/* 모드 선택 */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setInputMode('discussion')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            inputMode === 'discussion' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          💬 논의사항 입력
-        </button>
-        <button
-          onClick={() => setInputMode('toc')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            inputMode === 'toc' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          📋 목차 입력
-        </button>
-      </div>
-
-      {inputMode === 'discussion' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            방향성 논의 내용 (master-context.md)
-          </label>
-          <textarea
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed"
-            rows={15}
-            value={discussionText}
-            onChange={(e) => setDiscussionText(e.target.value)}
-            placeholder={`# 교육 목표
-이 교육자료의 목표는...
-
-# 대상 독자
-- 프로그래밍 경험이 없는 입문자
-- 자기주도 학습을 원하는 학습자
-
-# 난이도
-입문 ~ 초급
-
-# 학습 시간
-약 20차시 (1차시 = 50분)
-
-# 주요 학습 내용
-- 기초 개념 이해
-- 실습 예제
-- 프로젝트 진행`}
-          />
-          <p className="mt-1 text-xs text-gray-400">
-            Markdown 형식으로 작성. AI 목차 생성 및 챕터 작성 시 참조됩니다.
-          </p>
-          <button
-            onClick={handleSaveDiscussion}
-            disabled={saving}
-            className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? '저장 중...' : '💾 논의사항 저장'}
-          </button>
-        </div>
-      )}
-
-      {inputMode === 'toc' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            목차 직접 입력 (Markdown 형식)
-          </label>
-          <textarea
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed"
-            rows={15}
-            value={tocText}
-            onChange={(e) => setTocText(e.target.value)}
-            placeholder={`# Part 1. 시작하기
-## Chapter 1. 개발 환경 설정
-- 예상 시간: 30분
-- 학습 목표: 개발 환경을 구성할 수 있다
-
-## Chapter 2. 첫 번째 프로그램
-- 예상 시간: 50분
-- 학습 목표: Hello World를 출력할 수 있다
-
-# Part 2. 기초 개념
-## Chapter 3. 변수와 자료형
-- 예상 시간: 50분
-- 학습 목표: 변수를 선언하고 사용할 수 있다`}
-          />
-          <p className="mt-1 text-xs text-gray-400">
-            # Part, ## Chapter 형식으로 작성하면 자동으로 JSON 구조로 변환됩니다.
-          </p>
-          <button
-            onClick={handleSaveToc}
-            disabled={saving}
-            className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? '저장 중...' : '💾 목차 저장 및 변환'}
-          </button>
-        </div>
-      )}
-
-      {message && (
-        <p className={`mt-4 text-sm ${message.includes('실패') ? 'text-red-600' : 'text-green-600'}`}>
-          {message}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
-// 탭 4: 프롬프트 설정
+// 탭 3: 프롬프트 설정
 // ============================================================
 function PromptSettingsTab({ projectId }) {
   const [templateInfo, setTemplateInfo] = useState(null);
@@ -701,6 +516,297 @@ function PromptSettingsTab({ projectId }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// 탭 4: 빠른 시작 (AI 분석 + 직접 입력 통합)
+// ============================================================
+function QuickStartTab({ projectId }) {
+  const navigate = useNavigate();
+  const { refreshProgress } = useProjectStore();
+  const fileInputRef = useRef(null);
+  const [mode, setMode] = useState('ai'); // 'ai' | 'manual'
+
+  // AI 분석 모드 state
+  const [mdContent, setMdContent] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [saveAsRef, setSaveAsRef] = useState(true);
+  const [model, setModel] = useState('claude-sonnet-4-20250514');
+  const [models, setModels] = useState([]);
+  const [processing, setProcessing] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [done, setDone] = useState(false);
+
+  // 직접 입력 모드 state
+  const [discussionText, setDiscussionText] = useState('');
+  const [tocText, setTocText] = useState('');
+  const [inputMode, setInputMode] = useState('discussion');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    apiFetch('/api/models').then((d) => {
+      setModels(d.models);
+      apiFetch('/api/models/default/conversation').then((r) => setModel(r.modelId)).catch(() => {});
+    }).catch(() => {});
+  }, []);
+
+  // 직접 입력 모드에서 기존 데이터 로드
+  useEffect(() => {
+    if (!projectId || mode !== 'manual') return;
+    apiFetch(`/api/projects/${projectId}/context`)
+      .then(data => { if (data?.content) setDiscussionText(data.content); })
+      .catch(() => {});
+    apiFetch(`/api/projects/${projectId}/toc`)
+      .then(data => { if (data?.toc_md) setTocText(data.toc_md); })
+      .catch(() => {});
+  }, [projectId, mode]);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => setMdContent(ev.target.result);
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleProcess = async () => {
+    if (!projectId || !mdContent) return;
+    setProcessing(true);
+    setLogs([]);
+    setDone(false);
+
+    try {
+      await apiStreamPost(
+        `/api/projects/${projectId}/toc/parse-md`,
+        { content: mdContent, model, saveAsReference: saveAsRef },
+        {
+          onProgress: (data) => setLogs((prev) => [...prev, data.message]),
+          onDone: () => { setProcessing(false); setDone(true); refreshProgress(); },
+          onError: (err) => { setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]); setProcessing(false); },
+        }
+      );
+    } catch (err) {
+      setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
+      setProcessing(false);
+    }
+  };
+
+  const handleSaveDiscussion = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await apiFetch(`/api/projects/${projectId}/context`, {
+        method: 'PUT',
+        body: JSON.stringify({ content: discussionText }),
+      });
+      setMessage('논의사항이 저장되었습니다!');
+    } catch (e) {
+      setMessage('저장 실패: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveToc = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await apiFetch(`/api/projects/${projectId}/toc/direct`, {
+        method: 'POST',
+        body: JSON.stringify({ toc_md: tocText }),
+      });
+      setMessage('목차가 저장되었습니다!');
+    } catch (e) {
+      setMessage('저장 실패: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!projectId) {
+    return <p className="text-gray-500">먼저 프로젝트를 선택하세요.</p>;
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <h3 className="text-lg font-semibold mb-2">🚀 빠른 시작</h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Step 1~3을 건너뛰고 바로 챕터 제작 단계로 이동합니다.
+      </p>
+
+      {/* 모드 선택 */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setMode('ai')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'ai' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          🤖 AI 분석 (MD 파일 업로드)
+        </button>
+        <button
+          onClick={() => setMode('manual')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'manual' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          ✏️ 직접 입력
+        </button>
+      </div>
+
+      {mode === 'ai' && (
+        <>
+          {/* 파일 업로드 */}
+          <div className="mb-4">
+            <label className="block mb-2">
+              <span
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-700"
+              >
+                📤 MD/TXT 파일 선택
+              </span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,.txt,.markdown"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </label>
+            {fileName && (
+              <p className="text-sm text-green-600 mt-1">📄 {fileName} ({mdContent.length.toLocaleString()}자)</p>
+            )}
+          </div>
+
+          {mdContent && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">미리보기</label>
+              <textarea
+                value={mdContent}
+                onChange={(e) => setMdContent(e.target.value)}
+                className="w-full h-48 border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono leading-relaxed"
+              />
+            </div>
+          )}
+
+          {/* 옵션 */}
+          <div className="mb-4 flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={saveAsRef} onChange={(e) => setSaveAsRef(e.target.checked)} className="rounded" />
+              참고자료로도 저장
+            </label>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700">모델:</label>
+              <select value={model} onChange={(e) => setModel(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white">
+                {models.map((m) => (<option key={m.id} value={m.id}>{m.label}</option>))}
+              </select>
+            </div>
+          </div>
+
+          <button
+            onClick={handleProcess}
+            disabled={processing || !mdContent}
+            className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {processing ? '분석 중...' : '🚀 목차 분석 & 빠른 시작'}
+          </button>
+
+          {logs.length > 0 && (
+            <div className="mt-4 bg-gray-900 rounded-lg p-4 max-h-48 overflow-y-auto">
+              {logs.map((log, i) => (<div key={i} className="text-xs text-gray-300 py-0.5 font-mono">{log}</div>))}
+            </div>
+          )}
+
+          {done && (
+            <div className="mt-4 space-y-2">
+              <div className="p-3 bg-green-50 rounded-lg">
+                <p className="text-sm text-green-700 font-medium">✅ 빠른 시작 완료!</p>
+                <p className="text-xs text-green-600 mt-1">Step 1~3이 자동 완료되었습니다.</p>
+              </div>
+              <button onClick={() => navigate('/chapters')} className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                ✍️ Step 4: 챕터 제작으로 →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === 'manual' && (
+        <>
+          {/* 직접 입력 서브모드 */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setInputMode('discussion')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                inputMode === 'discussion' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              💬 논의사항 입력
+            </button>
+            <button
+              onClick={() => setInputMode('toc')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                inputMode === 'toc' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📋 목차 입력
+            </button>
+          </div>
+
+          {inputMode === 'discussion' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">방향성 논의 내용 (master-context.md)</label>
+              <textarea
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed"
+                rows={12}
+                value={discussionText}
+                onChange={(e) => setDiscussionText(e.target.value)}
+                placeholder={`# 교육 목표\n이 교육자료의 목표는...\n\n# 대상 독자\n- 프로그래밍 경험이 없는 입문자\n\n# 학습 시간\n약 20차시 (1차시 = 50분)`}
+              />
+              <p className="mt-1 text-xs text-gray-400">Markdown 형식으로 작성. AI 목차 생성 및 챕터 작성 시 참조됩니다.</p>
+              <button
+                onClick={handleSaveDiscussion}
+                disabled={saving}
+                className="mt-3 px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {saving ? '저장 중...' : '💾 논의사항 저장'}
+              </button>
+            </div>
+          )}
+
+          {inputMode === 'toc' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">목차 직접 입력 (Markdown 형식)</label>
+              <textarea
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono leading-relaxed"
+                rows={12}
+                value={tocText}
+                onChange={(e) => setTocText(e.target.value)}
+                placeholder={`# Part 1. 시작하기\n## Chapter 1. 개발 환경 설정\n- 예상 시간: 30분\n\n## Chapter 2. 첫 번째 프로그램\n- 예상 시간: 50분`}
+              />
+              <p className="mt-1 text-xs text-gray-400"># Part, ## Chapter 형식으로 작성하면 자동으로 JSON 구조로 변환됩니다.</p>
+              <button
+                onClick={handleSaveToc}
+                disabled={saving}
+                className="mt-3 px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {saving ? '저장 중...' : '💾 목차 저장 및 변환'}
+              </button>
+            </div>
+          )}
+
+          {message && (
+            <p className={`mt-4 text-sm ${message.includes('실패') ? 'text-red-600' : 'text-green-600'}`}>
+              {message}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }

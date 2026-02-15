@@ -1,30 +1,39 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import ProgressBar from './ProgressBar';
-
-const NAV_ITEMS = [
-  { to: '/', label: '홈', icon: '🏠' },
-  { to: '/projects', label: '프로젝트 관리', icon: '📁' },
-  { to: '/discussion', label: '방향성 논의', icon: '💬' },
-  { to: '/toc', label: '목차 작성', icon: '📋' },
-  { to: '/feedback', label: '피드백 컨펌', icon: '✅' },
-  { to: '/chapters', label: '챕터 제작', icon: '✍️' },
-  { to: '/deploy', label: '배포 관리', icon: '🚀' },
-  { divider: true },
-  { to: '/portfolio', label: '포트폴리오', icon: '📊' },
-  { to: '/beta', label: '베타 배포', icon: '🎁' },
-];
+import Logo from './Logo';
+import { STEPS, EXTRA_NAV } from '../../../shared/constants.js';
 
 export default function Layout() {
   const currentProject = useProjectStore((s) => s.currentProject);
+  const progress = useProjectStore((s) => s.progress);
+  const restoreProject = useProjectStore((s) => s.restoreProject);
+
+  // 앱 시작 시 이전 프로젝트 선택 복원
+  useEffect(() => {
+    if (!currentProject) restoreProject();
+  }, []);
+
+  const isStepCompleted = (step) => {
+    if (!progress || !step.progressKey) return false;
+    return !!progress[step.progressKey];
+  };
 
   return (
     <div className="flex h-screen bg-gray-50">
       {/* 사이드바 */}
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">에듀플로</h1>
-          <p className="text-xs text-gray-500 mt-1">AI 교육자료 생성</p>
+          <div className="flex items-center gap-3">
+            <Logo size={36} />
+            <div>
+              <h1 className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                에듀플로
+              </h1>
+              <p className="text-xs text-gray-500">AI 교육자료 생성</p>
+            </div>
+          </div>
         </div>
 
         {/* 현재 프로젝트 */}
@@ -39,13 +48,28 @@ export default function Layout() {
 
         {/* 내비게이션 */}
         <nav className="flex-1 overflow-y-auto p-2">
-          {NAV_ITEMS.map((item, i) =>
-            item.divider ? (
-              <hr key={i} className="my-2 border-gray-200" />
-            ) : (
+          {/* 홈 */}
+          <NavLink
+            to="/"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-blue-100 text-blue-900 font-medium'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`
+            }
+          >
+            <span>🏠</span>
+            <span>홈</span>
+          </NavLink>
+
+          {/* 워크플로우 단계 */}
+          {STEPS.map((step) => {
+            const completed = isStepCompleted(step);
+            return (
               <NavLink
-                key={item.to}
-                to={item.to}
+                key={step.route}
+                to={step.route}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                     isActive
@@ -54,11 +78,32 @@ export default function Layout() {
                   }`
                 }
               >
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
+                <span>{step.icon}</span>
+                <span className="flex-1">{step.name}</span>
+                {completed && <span className="text-green-500 text-xs">✓</span>}
               </NavLink>
-            )
-          )}
+            );
+          })}
+
+          <hr className="my-2 border-gray-200" />
+
+          {/* 추가 메뉴 */}
+          {EXTRA_NAV.map((item) => (
+            <NavLink
+              key={item.route}
+              to={item.route}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? 'bg-blue-100 text-blue-900 font-medium'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`
+              }
+            >
+              <span>{item.icon}</span>
+              <span>{item.name}</span>
+            </NavLink>
+          ))}
         </nav>
 
         {/* 하단 정보 */}

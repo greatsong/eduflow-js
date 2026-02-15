@@ -133,6 +133,13 @@ export class ChapterGenerator {
 
     this.projectConfig = {};
     this.templateInfo = {};
+
+    // 생성 상태 추적 (새로고침 대응)
+    this._statusFile = join(projectPath, 'generation_status.json');
+    this._statusLogs = [];
+    this._statusWriteTimer = null;
+    this._lastStatusWrite = 0;
+    this._pendingStatusData = null;
   }
 
   async init() {
@@ -158,11 +165,14 @@ export class ChapterGenerator {
 
   async _loadModelPricing() {
     const configPath = join(__dirname, '..', '..', 'model_config.json');
+    const fallback = {
+      'claude-opus-4-6': { input: 5.0, output: 25.0 },
+      'claude-opus-4-5-20251101': { input: 5.0, output: 25.0 },
+      'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0 },
+      'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
+    };
     if (!existsSync(configPath)) {
-      return {
-        'claude-opus-4-5-20251101': { input: 15.0, output: 75.0 },
-        'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
-      };
+      return fallback;
     }
     try {
       const config = JSON.parse(await readFile(configPath, 'utf-8'));
@@ -172,7 +182,7 @@ export class ChapterGenerator {
       }
       return pricing;
     } catch {
-      return { 'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 } };
+      return fallback;
     }
   }
 
@@ -192,10 +202,34 @@ export class ChapterGenerator {
 
   _parseTimeMinutes(estimatedTime) {
     if (!estimatedTime) return 0;
-    const match = estimatedTime.match(/(\d+)/);
-    let minutes = match ? parseInt(match[1], 10) : 0;
-    if (estimatedTime.includes('시간')) minutes *= 60;
-    return minutes;
+
+    // "차시" 단위 처리: "1차시" = 50분, "2차시" = 100분
+    const chashiMatch = estimatedTime.match(/(\d+)\s*차시/);
+    if (chashiMatch) {
+      return parseInt(chashiMatch[1], 10) * 50;
+    }
+
+    // "시간" 단위 처리: "1시간" = 60분, "2시간" = 120분
+    const hourMatch = estimatedTime.match(/(\d+)\s*시간/);
+    if (hourMatch) {
+      return parseInt(hourMatch[1], 10) * 60;
+    }
+
+    // "분" 단위 처리: "50분" = 50
+    const minMatch = estimatedTime.match(/(\d+)\s*분/);
+    if (minMatch) {
+      return parseInt(minMatch[1], 10);
+    }
+
+    // 숫자만 있는 경우: 분으로 간주
+    const numMatch = estimatedTime.match(/(\d+)/);
+    if (numMatch) {
+      return parseInt(numMatch[1], 10);
+    }
+
+    // "교사 자율 학습" 등 숫자 없는 경우: 기본 30분
+    this._log(`⚠️ estimated_time 파싱 불가 ("${estimatedTime}") → 기본 30분 적용`);
+    return 30;
   }
 
   _calcMaxTokensForTime(timeMinutes, userMaxTokens) {
@@ -204,6 +238,67 @@ export class ChapterGenerator {
     const estimatedTokens = Math.floor(targetChars / 1.5);
     const timeCap = Math.max(4000, Math.floor(estimatedTokens * 1.4));
     return Math.min(userMaxTokens, timeCap);
+  }
+
+  // ============================================================
+  // 생성 상태 추적 메서드 (새로고침 대응)
+  // ============================================================
+
+  _addStatusLog(message) {
+    this._statusLogs.push(message);
+    if (this._statusLogs.length > 100) {
+      this._statusLogs = this._statusLogs.slice(-100);
+    }
+  }
+
+  async _writeGenerationStatus(data) {
+    const statusData = {
+      ...data,
+      logs: this._statusLogs,
+      updated_at: new Date().toISOString(),
+    };
+    await writeFile(this._statusFile, JSON.stringify(statusData, null, 2), 'utf-8');
+  }
+
+  async _writeGenerationStatusDebounced(data) {
+    this._pendingStatusData = data;
+    const now = Date.now();
+    if (now - this._lastStatusWrite < 2000) {
+      if (!this._statusWriteTimer) {
+        this._statusWriteTimer = setTimeout(async () => {
+          this._statusWriteTimer = null;
+          this._lastStatusWrite = Date.now();
+          await this._writeGenerationStatus(this._pendingStatusData).catch(() => {});
+        }, 2000 - (now - this._lastStatusWrite));
+      }
+      return;
+    }
+    this._lastStatusWrite = now;
+    await this._writeGenerationStatus(data).catch(() => {});
+  }
+
+  async loadGenerationStatus() {
+    if (!existsSync(this._statusFile)) return null;
+    try {
+      return JSON.parse(await readFile(this._statusFile, 'utf-8'));
+    } catch {
+      return null;
+    }
+  }
+
+  async _isCancelRequested() {
+    const status = await this.loadGenerationStatus();
+    return status?.cancel_requested === true;
+  }
+
+  async requestCancel() {
+    const status = await this.loadGenerationStatus();
+    if (status && status.status === 'running') {
+      status.cancel_requested = true;
+      await writeFile(this._statusFile, JSON.stringify(status, null, 2), 'utf-8');
+      return true;
+    }
+    return false;
   }
 
   _estimateCost(model, inputTokens, outputTokens) {
@@ -233,6 +328,41 @@ export class ChapterGenerator {
     }
     const other = text.length - korean;
     return Math.floor((korean / 2 + other / 4) * 1.1);
+  }
+
+  /**
+   * 스트리밍 방식 Claude API 호출 (실시간 진행률 표시)
+   */
+  async _streamGenerate(model, maxTokens, prompt, chapterId, progressCallback, isRetry = false) {
+    const client = new Anthropic({ apiKey: this.apiKey, timeout: 15 * 60 * 1000 });
+    const estimatedTotalChars = Math.round(maxTokens * 1.5);
+    let content = '';
+    let lastProgressTime = Date.now();
+    const prefix = isRetry ? '재시도 ' : '';
+
+    const stream = client.messages.stream({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    stream.on('text', (text) => {
+      content += text;
+      const now = Date.now();
+      if (now - lastProgressTime >= 3000 && progressCallback) {
+        const charCount = content.length;
+        const pct = Math.min(99, Math.round((charCount / estimatedTotalChars) * 100));
+        progressCallback(`📝 ${chapterId} ${prefix}생성 중... ${charCount.toLocaleString()}자 (~${pct}%)`);
+        lastProgressTime = now;
+      }
+    });
+
+    const finalMessage = await stream.finalMessage();
+    return {
+      content,
+      inputTokens: finalMessage.usage.input_tokens,
+      outputTokens: finalMessage.usage.output_tokens,
+    };
   }
 
   async _loadOutline(chapterId) {
@@ -454,7 +584,9 @@ ${docStructure}
 - **실행 가능한 코드**: 모든 코드는 복사해서 바로 실행 가능
 - **톤앤매너**: ${pc.tone}, 이모지 센스있게 활용
 - **비유와 예시 충분**: 추상적 개념을 구체적으로
-- **시각 자료**: Mermaid 다이어그램 사용 (ASCII art 절대 금지!)
+- **시각 자료**: 다이어그램은 반드시 Mermaid 코드블록 사용
+- **마크다운 테이블 금지**: 파이프(|)와 대시(-)로 만드는 표(마크다운 테이블) 절대 사용 금지! 정보 요약은 볼드+목록, 개념 비교는 Mermaid로 표현
+- **ASCII art 절대 금지**: 텍스트 문자로 그림/도표/박스를 그리지 마세요
 
 # 마크다운 형식으로 전체 챕터를 작성해주세요.
 위 구조를 **반드시 모두** 포함하되, 분량 가이드를 철저히 준수하세요.
@@ -465,7 +597,7 @@ ${templateAddition}
   /**
    * 단일 챕터 생성 (rate limit 자동 재시도 포함)
    */
-  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-5-20251101', maxTokens = 16000, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0, tokenBudget = null) {
+  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-6', maxTokens = 8000, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0, tokenBudget = null) {
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
     const effectiveMaxTokens = this._calcMaxTokensForTime(timeMinutes, maxTokens);
 
@@ -495,68 +627,70 @@ ${templateAddition}
       await tokenBudget.waitForBudget(estimatedTotalTokens, progressCallback);
     }
 
-    const MAX_RETRIES = 3;
-    let lastError = null;
+    try {
+      if (progressCallback) progressCallback(`🤖 ${chapterId} Claude API 호출 중...`);
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      try {
-        if (progressCallback) progressCallback(`🤖 ${chapterId} Claude API 호출 중...${attempt > 0 ? ` (재시도 ${attempt}/${MAX_RETRIES - 1})` : ''}`);
+      const result = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback);
+      const chapterFile = join(this.docsPath, `${chapterId}.md`);
+      await writeFile(chapterFile, result.content, 'utf-8');
 
-        const client = new Anthropic({ apiKey: this.apiKey });
-        const response = await client.messages.create({
-          model,
-          max_tokens: effectiveMaxTokens,
-          messages: [{ role: 'user', content: prompt }],
-        });
-
-        const content = response.content[0].text;
-        const chapterFile = join(this.docsPath, `${chapterId}.md`);
-        await writeFile(chapterFile, content, 'utf-8');
-
-        const inputTokens = response.usage.input_tokens;
-        const outputTokens = response.usage.output_tokens;
-
-        // TPM 예산에 실제 사용량 기록
-        if (tokenBudget) {
-          tokenBudget.recordUsage(inputTokens + outputTokens);
-        }
-
-        this._log(`✅ ${chapterId} 생성 완료 - 입력: ${inputTokens}, 출력: ${outputTokens}, 문자 수: ${content.length}`);
-        if (progressCallback) progressCallback(`✅ ${chapterId} 생성 완료!`);
-
-        return {
-          success: true,
-          chapter_id: chapterId,
-          file_path: chapterFile,
-          content,
-          tokens_used: inputTokens + outputTokens,
-          input_tokens: inputTokens,
-          output_tokens: outputTokens,
-        };
-      } catch (e) {
-        lastError = e;
-
-        // Rate limit (429) 또는 overloaded (529) 에러 감지
-        const isRateLimit = e.status === 429 || e.status === 529 ||
-          (e.message && (e.message.includes('rate') || e.message.includes('overloaded')));
-
-        if (isRateLimit && attempt < MAX_RETRIES - 1) {
-          // 지수 백오프: 30초, 60초, 120초
-          const waitTime = Math.pow(2, attempt) * 30000;
-          this._log(`⏳ ${chapterId} Rate limit - ${waitTime / 1000}초 대기 후 재시도 (${attempt + 1}/${MAX_RETRIES})`);
-          if (progressCallback) progressCallback(`⏳ Rate limit 감지 - ${waitTime / 1000}초 대기 후 재시도...`);
-          await new Promise(r => setTimeout(r, waitTime));
-          continue;
-        }
-
-        // 재시도 불가능한 에러거나 최대 재시도 초과
-        break;
+      if (tokenBudget) {
+        tokenBudget.recordUsage(result.inputTokens + result.outputTokens);
       }
-    }
 
-    this._log(`❌ ${chapterId} 생성 실패: ${lastError?.message || 'Unknown error'}`);
-    if (progressCallback) progressCallback(`❌ ${chapterId} 생성 실패: ${lastError?.message || 'Unknown error'}`);
-    return { success: false, chapter_id: chapterId, error: lastError?.message || 'Unknown error' };
+      this._log(`✅ ${chapterId} 생성 완료 - 입력: ${result.inputTokens}, 출력: ${result.outputTokens}, 문자 수: ${result.content.length}`);
+      if (progressCallback) progressCallback(`✅ ${chapterId} 완료! (${result.content.length.toLocaleString()}자, 토큰: ${(result.inputTokens + result.outputTokens).toLocaleString()})`);
+
+      return {
+        success: true,
+        chapter_id: chapterId,
+        file_path: chapterFile,
+        content: result.content,
+        tokens_used: result.inputTokens + result.outputTokens,
+        input_tokens: result.inputTokens,
+        output_tokens: result.outputTokens,
+      };
+    } catch (e) {
+      // 429 Rate limit만 1회 재시도 (토큰 낭비 최소화)
+      if (e.status === 429) {
+        this._log(`⏳ ${chapterId} Rate limit (429) - 60초 대기 후 1회 재시도`);
+        if (progressCallback) progressCallback(`⏳ Rate limit 감지 - 60초 대기 후 1회 재시도...`);
+        await new Promise(r => setTimeout(r, 60000));
+
+        try {
+          const retryResult = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback, true);
+          const chapterFile = join(this.docsPath, `${chapterId}.md`);
+          await writeFile(chapterFile, retryResult.content, 'utf-8');
+
+          if (tokenBudget) {
+            tokenBudget.recordUsage(retryResult.inputTokens + retryResult.outputTokens);
+          }
+
+          this._log(`✅ ${chapterId} 재시도 성공 - 입력: ${retryResult.inputTokens}, 출력: ${retryResult.outputTokens}`);
+          if (progressCallback) progressCallback(`✅ ${chapterId} 재시도 완료! (${retryResult.content.length.toLocaleString()}자)`);
+
+          return {
+            success: true,
+            chapter_id: chapterId,
+            file_path: chapterFile,
+            content: retryResult.content,
+            tokens_used: retryResult.inputTokens + retryResult.outputTokens,
+            input_tokens: retryResult.inputTokens,
+            output_tokens: retryResult.outputTokens,
+            retried: true,
+          };
+        } catch (e2) {
+          this._log(`❌ ${chapterId} 재시도도 실패: ${e2.message}`);
+          if (progressCallback) progressCallback(`❌ ${chapterId} 재시도 실패: ${e2.message}`);
+          return { success: false, chapter_id: chapterId, error: e2.message };
+        }
+      }
+
+      // 429 외의 에러는 재시도하지 않음 (토큰 낭비 방지)
+      this._log(`❌ ${chapterId} 생성 실패 (재시도 안 함): ${e.message}`);
+      if (progressCallback) progressCallback(`❌ ${chapterId} 생성 실패: ${e.message}`);
+      return { success: false, chapter_id: chapterId, error: e.message };
+    }
   }
 
   /**
@@ -569,17 +703,40 @@ ${templateAddition}
    * @param {boolean} skipCompleted - 완료된 챕터 건너뛰기
    * @param {number} tpmLimit - 분당 토큰 제한 (0이면 비활성화)
    */
-  async generateAllChapters(tocData, model = 'claude-opus-4-5-20251101', maxTokens = 16000, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0) {
+  async generateAllChapters(tocData, model = 'claude-opus-4-6', maxTokens = 8000, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0, chapterIds = null) {
     const startTime = Date.now();
 
     // TPM 예산 관리자 생성 (tpmLimit > 0인 경우에만)
     const tokenBudget = tpmLimit > 0 ? new TokenBudgetManager(tpmLimit) : null;
 
+    // 상태 추적 초기화
+    this._statusLogs = [];
+    const statusBase = {
+      status: 'running',
+      started_at: new Date().toISOString(),
+      model,
+      concurrent,
+      total_tasks: 0,
+      completed_tasks: 0,
+      skipped: 0,
+      failed_tasks: 0,
+      current_chapter: null,
+      current_chapter_title: null,
+      current_chapters: [],
+      cancel_requested: false,
+      report: null,
+    };
+
+    // progressCallback을 래핑하여 로그를 status 파일에도 기록
+    const wrappedProgress = (message) => {
+      this._addStatusLog(message);
+      this._writeGenerationStatusDebounced({ ...statusBase }).catch(() => {});
+      progressCallback?.(message);
+    };
+
     this._log(`🚀 챕터 배치 생성 시작 - 모델: ${model}, 동시 실행: ${concurrent}, TPM 제한: ${tpmLimit || '없음'}`);
-    if (progressCallback) {
-      progressCallback('🚀 챕터 배치 생성 시작!');
-      if (tpmLimit > 0) progressCallback(`📊 TPM 제한: ${tpmLimit.toLocaleString()} 토큰/분`);
-    }
+    wrappedProgress('🚀 챕터 배치 생성 시작!');
+    if (tpmLimit > 0) wrappedProgress(`📊 TPM 제한: ${tpmLimit.toLocaleString()} 토큰/분`);
 
     const totalChaptersCount = (tocData.parts || []).reduce((sum, p) => sum + (p.chapters || []).length, 0);
 
@@ -594,8 +751,14 @@ ${templateAddition}
         chapterCounter++;
         const chapterId = chapter.chapter_id;
 
+        // chapterIds 필터: 지정된 챕터만 생성
+        if (chapterIds && !chapterIds.includes(chapterId)) {
+          skippedCount++;
+          continue;
+        }
+
         if (skipCompleted && existsSync(join(this.docsPath, `${chapterId}.md`))) {
-          if (progressCallback) progressCallback(`⏭️  ${chapterId} - 이미 완료됨 (건너뜀)`);
+          wrappedProgress(`⏭️  ${chapterId} - 이미 완료됨 (건너뜀)`);
           skippedCount++;
           continue;
         }
@@ -612,18 +775,33 @@ ${templateAddition}
     }
 
     const totalTasks = tasks.length;
-    if (progressCallback) {
-      const skipMsg = skippedCount > 0 ? ` (${skippedCount}개 건너뜀)` : '';
-      progressCallback(`📊 총 ${totalTasks}개 챕터 생성 예정${skipMsg}`);
-    }
+    statusBase.total_tasks = totalTasks;
+    statusBase.skipped = skippedCount;
+    await this._writeGenerationStatus(statusBase);
+
+    const skipMsg = skippedCount > 0 ? ` (${skippedCount}개 건너뜀)` : '';
+    wrappedProgress(`📊 총 ${totalTasks}개 챕터 생성 예정${skipMsg}`);
 
     // p-limit으로 동시성 제어
     const limit = pLimit(concurrent);
     let completedCount = 0;
+    let cancelledCount = 0;
 
     const promises = tasks.map((task) =>
       limit(async () => {
-        if (progressCallback) progressCallback(`\n[${completedCount + 1}/${totalTasks}] ${task.chapter_id}`);
+        // 취소 확인
+        if (await this._isCancelRequested()) {
+          cancelledCount++;
+          wrappedProgress(`🛑 ${task.chapter_id} - 취소됨 (건너뜀)`);
+          return { success: false, chapter_id: task.chapter_id, error: '사용자 취소', cancelled: true };
+        }
+
+        statusBase.current_chapter = task.chapter_id;
+        statusBase.current_chapter_title = task.chapter_title;
+        statusBase.current_chapters = [...new Set([...(statusBase.current_chapters || []), task.chapter_id])];
+        await this._writeGenerationStatusDebounced({ ...statusBase }).catch(() => {});
+
+        wrappedProgress(`\n[${completedCount + 1}/${totalTasks}] ${task.chapter_id}`);
 
         const result = await this.generateChapter(
           task.chapter_id,
@@ -631,14 +809,22 @@ ${templateAddition}
           task.part_context,
           model,
           maxTokens,
-          progressCallback,
+          wrappedProgress,
           task.estimated_time,
           task.total_chapters,
           task.current_chapter_num,
-          tokenBudget  // TPM 예산 관리자 전달
+          tokenBudget
         );
 
         completedCount++;
+        if (result.success) {
+          statusBase.completed_tasks++;
+        } else {
+          statusBase.failed_tasks++;
+        }
+        statusBase.current_chapters = (statusBase.current_chapters || []).filter(id => id !== task.chapter_id);
+        await this._writeGenerationStatusDebounced({ ...statusBase }).catch(() => {});
+
         return result;
       })
     );
@@ -646,35 +832,38 @@ ${templateAddition}
     const results = await Promise.allSettled(promises);
     const resolvedResults = results.map((r) => (r.status === 'fulfilled' ? r.value : { success: false, chapter_id: 'unknown', error: r.reason?.message || 'Unknown error' }));
 
-    // 결과 집계
+    // 결과 집계 (취소된 것은 실패에서 제외)
     const successCount = resolvedResults.filter((r) => r.success).length;
-    const failedCount = totalTasks - successCount;
+    const actualFailed = resolvedResults.filter((r) => !r.success && !r.cancelled).length;
     const totalInputTokens = resolvedResults.filter((r) => r.success).reduce((sum, r) => sum + (r.input_tokens || 0), 0);
     const totalOutputTokens = resolvedResults.filter((r) => r.success).reduce((sum, r) => sum + (r.output_tokens || 0), 0);
     const totalTokens = totalInputTokens + totalOutputTokens;
     const estimatedCost = this._estimateCost(model, totalInputTokens, totalOutputTokens);
 
-    const errors = resolvedResults.filter((r) => !r.success).map((r) => ({ chapter_id: r.chapter_id, error: r.error }));
+    const errors = resolvedResults.filter((r) => !r.success && !r.cancelled).map((r) => ({ chapter_id: r.chapter_id, error: r.error }));
     const elapsedTime = (Date.now() - startTime) / 1000;
 
-    this._log(`🎉 배치 생성 완료 - 성공: ${successCount}, 실패: ${failedCount}, 건너뜀: ${skippedCount}`);
+    const wasCancelled = cancelledCount > 0;
+    const statusLabel = wasCancelled ? '중단됨' : '완료';
+
+    this._log(`🎉 배치 생성 ${statusLabel} - 성공: ${successCount}, 실패: ${actualFailed}, 건너뜀: ${skippedCount}, 취소: ${cancelledCount}`);
     this._log(`⏱️  총 소요 시간: ${elapsedTime.toFixed(1)}초, 총 토큰: ${totalTokens.toLocaleString()}`);
     this._log(`💰 추정 비용: $${estimatedCost.total_cost.toFixed(4)}`);
 
-    if (progressCallback) {
-      progressCallback(`\n🎉 생성 완료!`);
-      progressCallback(`✅ 성공: ${successCount}/${totalTasks}`);
-      if (failedCount > 0) progressCallback(`❌ 실패: ${failedCount}`);
-      if (skippedCount > 0) progressCallback(`⏭️  건너뜀: ${skippedCount}`);
-      progressCallback(`⏱️  소요 시간: ${elapsedTime.toFixed(1)}초`);
-      progressCallback(`🪙 총 토큰: ${totalTokens.toLocaleString()} (입력: ${totalInputTokens.toLocaleString()} / 출력: ${totalOutputTokens.toLocaleString()})`);
-      progressCallback(`💰 추정 비용: ~$${estimatedCost.total_cost.toFixed(4)}`);
-    }
+    wrappedProgress(`\n${wasCancelled ? '🛑' : '🎉'} 생성 ${statusLabel}!`);
+    wrappedProgress(`✅ 성공: ${successCount}/${totalTasks}`);
+    if (actualFailed > 0) wrappedProgress(`❌ 실패: ${actualFailed}`);
+    if (skippedCount > 0) wrappedProgress(`⏭️  건너뜀: ${skippedCount}`);
+    if (cancelledCount > 0) wrappedProgress(`🛑 취소: ${cancelledCount}`);
+    wrappedProgress(`⏱️  소요 시간: ${elapsedTime.toFixed(1)}초`);
+    wrappedProgress(`🪙 총 토큰: ${totalTokens.toLocaleString()} (입력: ${totalInputTokens.toLocaleString()} / 출력: ${totalOutputTokens.toLocaleString()})`);
+    wrappedProgress(`💰 추정 비용: ~$${estimatedCost.total_cost.toFixed(4)}`);
 
     // 리포트 저장
     const report = {
       success: successCount,
-      failed: failedCount,
+      failed: actualFailed,
+      cancelled: cancelledCount,
       skipped: skippedCount,
       total: totalTasks + skippedCount,
       chapters: resolvedResults,
@@ -686,9 +875,22 @@ ${templateAddition}
       elapsed_time: elapsedTime,
       generated_at: new Date().toISOString(),
       model,
+      was_cancelled: wasCancelled,
     };
 
     await writeFile(join(this.projectPath, 'generation_report.json'), JSON.stringify(report, null, 2), 'utf-8');
+
+    // 최종 상태 파일 갱신
+    statusBase.status = wasCancelled ? 'cancelled' : (actualFailed === totalTasks ? 'failed' : 'completed');
+    statusBase.current_chapter = null;
+    statusBase.current_chapter_title = null;
+    statusBase.current_chapters = [];
+    statusBase.report = report;
+    if (this._statusWriteTimer) {
+      clearTimeout(this._statusWriteTimer);
+      this._statusWriteTimer = null;
+    }
+    await this._writeGenerationStatus(statusBase);
 
     return report;
   }

@@ -150,9 +150,131 @@ router.post('/direct', asyncHandler(async (req, res) => {
 
   // progress 업데이트
   const pm = new ProgressManager(projPath);
-  await pm.completeStep('step2');
+  await pm.markStep2Completed();
 
   res.json({ success: true, toc });
+}));
+
+// POST /api/projects/:id/toc/parse-md - MD 파일 내용을 Claude로 분석하여 TOC 생성 (SSE)
+router.post('/parse-md', requireApiKey, asyncHandler(async (req, res) => {
+  const { content, model, saveAsReference } = req.body;
+  if (!content) {
+    return res.status(400).json({ message: 'content가 필요합니다' });
+  }
+
+  const projPath = projectPath(req.params.id);
+
+  // SSE 헤더
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sseSend = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    sseSend({ type: 'progress', message: '📄 MD 파일 분석 중...' });
+
+    // 참고자료로도 저장 (옵션)
+    if (saveAsReference) {
+      const refManager = new ReferenceManager(projPath);
+      const refFileName = `uploaded-${Date.now()}.md`;
+      const refsDir = join(projPath, 'references');
+      const { mkdir } = await import('fs/promises');
+      if (!existsSync(refsDir)) await mkdir(refsDir, { recursive: true });
+      await writeFile(join(refsDir, refFileName), content, 'utf-8');
+      sseSend({ type: 'progress', message: `📚 참고자료로 저장: ${refFileName}` });
+    }
+
+    // Claude API로 MD → JSON TOC 변환
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: req.apiKey });
+
+    sseSend({ type: 'progress', message: '🤖 Claude가 목차를 분석하고 있습니다...' });
+
+    const response = await client.messages.create({
+      model: model || 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: `다음 마크다운 교육자료를 분석하여 목차(Table of Contents)를 JSON 형식으로 추출해주세요.
+
+## 입력 내용
+${content.slice(0, 50000)}
+
+## 출력 형식 (반드시 이 JSON 형식을 지켜주세요)
+\`\`\`json
+{
+  "title": "교육자료 제목",
+  "target_audience": "대상 독자",
+  "description": "설명",
+  "total_hours": "총 학습시간",
+  "parts": [
+    {
+      "part_number": 1,
+      "part_title": "Part 제목",
+      "part_description": "Part 설명",
+      "chapters": [
+        {
+          "chapter_id": "chapter01",
+          "chapter_number": 1,
+          "chapter_title": "챕터 제목",
+          "estimated_time": "50분",
+          "learning_objectives": ["목표1", "목표2"],
+          "key_topics": ["주제1", "주제2"],
+          "outline": "챕터 개요"
+        }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+## 주의사항
+- 마크다운의 구조(# 제목, ## 소제목 등)를 기반으로 Part와 Chapter를 나누세요
+- chapter_id는 chapter01, chapter02 형식으로 순차 할당하세요
+- estimated_time은 내용량에 따라 20분~90분 사이로 추정하세요
+- 반드시 유효한 JSON만 출력하세요 (설명 텍스트 없이 JSON 코드블록만)` }],
+    });
+
+    const responseText = response.content[0].text;
+
+    // JSON 추출
+    const jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/) || responseText.match(/\{[\s\S]*\}/);
+    let tocData;
+
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[1] || jsonMatch[0];
+      tocData = JSON.parse(jsonStr);
+    } else {
+      tocData = JSON.parse(responseText);
+    }
+
+    sseSend({ type: 'progress', message: `✅ 목차 분석 완료: ${tocData.parts?.length || 0}개 Part` });
+
+    // 저장
+    const tg = new TOCGenerator(projPath);
+    await tg.saveToc(tocData);
+    await tg.generateOutlines(tocData);
+
+    // progress 업데이트 (Step 1, 2, 3 모두 완료 처리)
+    const pm = new ProgressManager(projPath);
+    await pm.markStep1Completed();
+    await pm.markStep2Completed();
+    await pm.markStep3Confirmed();
+
+    // toc_confirmed.txt 생성
+    await writeFile(join(projPath, 'toc_confirmed.txt'), 'confirmed', 'utf-8');
+
+    sseSend({ type: 'progress', message: '✅ 목차 저장 및 아웃라인 생성 완료!' });
+    sseSend({ type: 'progress', message: '✅ Step 1~3 자동 완료 처리됨 → 바로 챕터 제작 가능!' });
+    sseSend({ type: 'toc', toc: tocData });
+    sseSend({ type: 'done' });
+  } catch (e) {
+    sseSend({ type: 'error', message: `분석 실패: ${e.message}` });
+  }
+
+  res.end();
 }));
 
 // Markdown 목차 → JSON 변환 헬퍼
@@ -160,6 +282,7 @@ function parseTocMarkdown(md) {
   const lines = md.split('\n');
   const toc = {
     title: '',
+    description: '',
     target_audience: '',
     total_hours: '',
     parts: [],
@@ -167,20 +290,34 @@ function parseTocMarkdown(md) {
 
   let currentPart = null;
   let chapterNum = 0;
+  let foundFirstH1 = false;
 
   for (const line of lines) {
-    const partMatch = line.match(/^#\s+(?:Part\s*\d*\.?\s*)?(.+)/i);
+    const h1Match = line.match(/^#\s+(.+)/);
     const chapterMatch = line.match(/^##\s+(?:Chapter\s*\d*\.?\s*)?(.+)/i);
-    const metaMatch = line.match(/^-\s*(예상\s*시간|학습\s*목표|목표):\s*(.+)/i);
+    const metaMatch = line.match(/^-\s*(예상\s*시간|학습\s*목표|목표|대상|설명):\s*(.+)/i);
 
-    if (partMatch) {
-      currentPart = {
-        part_number: toc.parts.length + 1,
-        part_title: partMatch[1].trim(),
-        part_summary: '',
-        chapters: [],
-      };
-      toc.parts.push(currentPart);
+    if (h1Match) {
+      const text = h1Match[1].trim();
+      // "Part"로 시작하는 H1만 Part로 인식, 그 외 첫 H1은 제목
+      const isPartH1 = /^Part\s*\d/i.test(text);
+
+      if (!foundFirstH1 && !isPartH1) {
+        // 첫 번째 H1이면서 Part가 아니면 → 교재 제목으로 처리
+        toc.title = text;
+        foundFirstH1 = true;
+      } else {
+        // Part H1 또는 두 번째 이후 H1 → Part로 처리
+        foundFirstH1 = true;
+        const partTitle = text.replace(/^Part\s*\d*\.?\s*/i, '').trim();
+        currentPart = {
+          part_number: toc.parts.length + 1,
+          part_title: partTitle || text,
+          part_summary: '',
+          chapters: [],
+        };
+        toc.parts.push(currentPart);
+      }
     } else if (chapterMatch && currentPart) {
       chapterNum++;
       const chapterId = `chapter${String(chapterNum).padStart(2, '0')}`;
@@ -192,14 +329,20 @@ function parseTocMarkdown(md) {
         learning_objectives: [],
         key_topics: [],
       });
-    } else if (metaMatch && currentPart && currentPart.chapters.length > 0) {
-      const lastChapter = currentPart.chapters[currentPart.chapters.length - 1];
+    } else if (metaMatch) {
       const key = metaMatch[1].trim().toLowerCase();
       const value = metaMatch[2].trim();
-      if (key.includes('시간')) {
-        lastChapter.estimated_time = value;
-      } else if (key.includes('목표')) {
-        lastChapter.learning_objectives.push(value);
+      if (key.includes('대상')) {
+        toc.target_audience = value;
+      } else if (key === '설명') {
+        toc.description = value;
+      } else if (currentPart && currentPart.chapters.length > 0) {
+        const lastChapter = currentPart.chapters[currentPart.chapters.length - 1];
+        if (key.includes('시간')) {
+          lastChapter.estimated_time = value;
+        } else if (key.includes('목표')) {
+          lastChapter.learning_objectives.push(value);
+        }
       }
     }
   }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useProjectStore } from '../stores/projectStore';
@@ -326,6 +327,148 @@ function InteractiveTab({ project }) {
 }
 
 // =============================================
+// 헬퍼: 챕터를 파트별로 그룹화
+// =============================================
+function groupChaptersByPart(chapters) {
+  const parts = {};
+  for (const ch of chapters) {
+    const key = ch.part_number || 0;
+    if (!parts[key]) {
+      parts[key] = { part_number: ch.part_number, part_title: ch.part_title, chapters: [] };
+    }
+    parts[key].chapters.push(ch);
+  }
+  return Object.values(parts).sort((a, b) => (a.part_number || 0) - (b.part_number || 0));
+}
+
+// =============================================
+// 챕터 상태 아이콘 (애니메이션 포함)
+// =============================================
+function ChapterStatusIcon({ hasContent, isGenerating }) {
+  if (hasContent) return <span title="완료">✅</span>;
+  if (isGenerating) {
+    return (
+      <span className="relative flex h-3 w-3" title="생성 중...">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+      </span>
+    );
+  }
+  return <span className="inline-flex h-3 w-3 rounded-full border-2 border-gray-300" title="대기 중" />;
+}
+
+// =============================================
+// 파트별 챕터 진행 상태 목록
+// =============================================
+function ChapterProgressList({ chapters, currentGenerating, status, selectedChapters, onToggleSelect, onRegenerate, onSelectAll }) {
+  const parts = groupChaptersByPart(chapters);
+  const [collapsedParts, setCollapsedParts] = useState({});
+
+  const togglePart = (partNum) => {
+    setCollapsedParts((prev) => ({ ...prev, [partNum]: !prev[partNum] }));
+  };
+
+  const selectedCount = selectedChapters?.size || 0;
+  const allSelected = chapters.length > 0 && selectedCount === chapters.length;
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* 전체 선택 */}
+      {status !== 'running' && chapters.length > 0 && (
+        <div className="flex items-center gap-2 pb-2 mb-1 border-b border-gray-100 flex-shrink-0">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={() => onSelectAll?.(!allSelected)}
+            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+          />
+          <span className="text-xs text-gray-500">
+            {allSelected ? '전체 해제' : '전체 선택'} ({selectedCount}/{chapters.length})
+          </span>
+        </div>
+      )}
+      <div className="flex-1 overflow-y-auto space-y-2">
+        {parts.map((part) => {
+          const partCompleted = part.chapters.filter((ch) => ch.has_content).length;
+          const partTotal = part.chapters.length;
+          const isCollapsed = collapsedParts[part.part_number];
+
+          return (
+            <div key={part.part_number} className="border border-gray-100 rounded-lg">
+              <button
+                onClick={() => togglePart(part.part_number)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-t-lg"
+              >
+                <span className="text-xs text-gray-400">{isCollapsed ? '▶' : '▼'}</span>
+                <span className="font-medium text-gray-700 truncate">
+                  Part {part.part_number}: {part.part_title}
+                </span>
+                <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">
+                  {partCompleted}/{partTotal}
+                </span>
+                <div className="w-16 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
+                  <div
+                    className="bg-blue-500 h-1.5 rounded-full transition-all"
+                    style={{ width: `${partTotal > 0 ? (partCompleted / partTotal) * 100 : 0}%` }}
+                  />
+                </div>
+              </button>
+
+              {!isCollapsed && (
+                <div className="px-3 pb-2 space-y-0.5">
+                  {part.chapters.map((ch) => {
+                    const isGenerating = status === 'running' && currentGenerating?.has(ch.chapter_id);
+                    const isSelected = selectedChapters?.has(ch.chapter_id);
+                    return (
+                      <div
+                        key={ch.chapter_id}
+                        onClick={() => status !== 'running' && onToggleSelect?.(ch.chapter_id)}
+                        className={`flex items-center gap-2 text-sm py-1 px-2 rounded cursor-pointer transition-colors ${
+                          isGenerating ? 'bg-blue-50' : isSelected ? 'bg-amber-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        {status !== 'running' && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected || false}
+                            onChange={() => onToggleSelect?.(ch.chapter_id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 flex-shrink-0"
+                          />
+                        )}
+                        <ChapterStatusIcon hasContent={ch.has_content} isGenerating={isGenerating} />
+                        <span className={`truncate ${isGenerating ? 'text-blue-700 font-medium' : 'text-gray-600'}`}>
+                          {ch.chapter_id}: {ch.chapter_title}
+                        </span>
+                        {ch.estimated_time && (
+                          <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">{ch.estimated_time}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 선택된 챕터 재생성 버튼 */}
+      {selectedCount > 0 && status !== 'running' && (
+        <div className="pt-3 mt-2 border-t border-gray-100">
+          <button
+            onClick={onRegenerate}
+            className="w-full py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+          >
+            🔄 선택한 {selectedCount}개 챕터 재생성
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================
 // 탭 2: 배치 자동화 모드
 // =============================================
 function BatchTab({ project, onComplete }) {
@@ -333,12 +476,15 @@ function BatchTab({ project, onComplete }) {
   const [report, setReport] = useState(null);
   const [model, setModel] = useState('claude-opus-4-5-20251101');
   const [models, setModels] = useState([]);
-  const [maxTokens, setMaxTokens] = useState(16000);
-  const [concurrent, setConcurrent] = useState(3);
-  const [tpmLimit, setTpmLimit] = useState(40000); // TPM 제한 (Tier 2 기본값)
-  const [status, setStatus] = useState('idle'); // idle, running, completed
+  const [maxTokens, setMaxTokens] = useState(8000);
+  const [concurrent, setConcurrent] = useState(2);
+  const [tpmLimit, setTpmLimit] = useState(40000);
+  const [status, setStatus] = useState('idle'); // idle, running, completed, cancelled
   const [logs, setLogs] = useState([]);
+  const [currentGenerating, setCurrentGenerating] = useState(new Set());
+  const [selectedChapters, setSelectedChapters] = useState(new Set());
   const logEndRef = useRef(null);
+  const pollRef = useRef(null);
 
   useEffect(() => {
     apiFetch('/api/models').then((d) => {
@@ -358,9 +504,59 @@ function BatchTab({ project, onComplete }) {
 
   useEffect(() => { loadChapters(); }, [loadChapters]);
 
+  // 마운트 시 서버 생성 상태 확인 (새로고침 대응)
+  useEffect(() => {
+    if (!project) return;
+    checkGenerationStatus();
+    return () => stopPolling();
+  }, [project]);
+
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const checkGenerationStatus = async () => {
+    try {
+      const genStatus = await apiFetch(`/api/projects/${project.name}/chapters/generation-status`);
+      if (genStatus.status === 'running') {
+        setStatus('running');
+        setLogs(genStatus.logs || []);
+        setCurrentGenerating(new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
+        startPolling();
+      } else if (genStatus.status === 'completed' || genStatus.status === 'cancelled') {
+        if (genStatus.logs?.length > 0) setLogs(genStatus.logs);
+        if (genStatus.report) setReport(genStatus.report);
+        setStatus(genStatus.status);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const startPolling = () => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const genStatus = await apiFetch(`/api/projects/${project.name}/chapters/generation-status`);
+        setLogs(genStatus.logs || []);
+        setCurrentGenerating(new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
+
+        if (genStatus.status === 'completed' || genStatus.status === 'cancelled' || genStatus.status === 'failed') {
+          setStatus(genStatus.status === 'failed' ? 'idle' : genStatus.status);
+          if (genStatus.report) setReport(genStatus.report);
+          setCurrentGenerating(new Set());
+          loadChapters();
+          onComplete?.();
+          stopPolling();
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+  };
 
   const totalChapters = chapters.length;
   const completedChapters = chapters.filter((ch) => ch.has_content).length;
@@ -370,6 +566,7 @@ function BatchTab({ project, onComplete }) {
     setStatus('running');
     setLogs([]);
     setReport(null);
+    setCurrentGenerating(new Set());
 
     try {
       await apiStreamPost(
@@ -378,31 +575,153 @@ function BatchTab({ project, onComplete }) {
         {
           onProgress: (data) => {
             setLogs((prev) => [...prev, data.message]);
+            // SSE progress 메시지에서 현재 챕터 추가/제거
+            const startMatch = data.message?.match(/📖\s+(chapter\d+)\s+생성 시작/);
+            if (startMatch) {
+              setCurrentGenerating((prev) => new Set([...prev, startMatch[1]]));
+            }
+            const doneMatch = data.message?.match(/✅\s+(chapter\d+)\s+(?:완료|재시도 완료)/);
+            if (doneMatch) {
+              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(doneMatch[1]); return next; });
+              setChapters((prev) => prev.map((ch) =>
+                ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
+              ));
+            }
+            const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
+            if (failMatch) {
+              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(failMatch[1]); return next; });
+            }
           },
           onDone: (data) => {
             if (data?.report) setReport(data.report);
-            setStatus('completed');
+            const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
+            setStatus(finalStatus);
+            setCurrentGenerating(new Set());
             loadChapters();
             onComplete?.();
           },
           onError: (err) => {
             setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
             setStatus('idle');
+            setCurrentGenerating(new Set());
           },
         }
       );
     } catch (err) {
-      setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
-      setStatus('idle');
+      // SSE 연결 끊어짐 → 폴링으로 전환
+      setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
+      startPolling();
+    }
+  };
+
+  const handleCancel = async () => {
+    try {
+      await apiFetch(`/api/projects/${project.name}/chapters/generation-cancel`, {
+        method: 'POST',
+      });
+      setLogs((prev) => [...prev, '🛑 취소 요청을 보냈습니다. 현재 생성 중인 챕터가 끝나면 중단됩니다...']);
+    } catch (err) {
+      setLogs((prev) => [...prev, `❌ 취소 실패: ${err.message}`]);
+    }
+  };
+
+  const handleToggleSelect = (chapterId) => {
+    setSelectedChapters((prev) => {
+      const next = new Set(prev);
+      if (next.has(chapterId)) next.delete(chapterId);
+      else next.add(chapterId);
+      return next;
+    });
+  };
+
+  const handleSelectAll = (selectAll) => {
+    if (selectAll) {
+      setSelectedChapters(new Set(chapters.map((ch) => ch.chapter_id)));
+    } else {
+      setSelectedChapters(new Set());
+    }
+  };
+
+  const handleRegenerateSelected = async () => {
+    if (selectedChapters.size === 0) return;
+    const ids = [...selectedChapters];
+    setSelectedChapters(new Set());
+    setStatus('running');
+    setLogs([]);
+    setReport(null);
+    setCurrentGenerating(new Set());
+
+    try {
+      await apiStreamPost(
+        `/api/projects/${project.name}/chapters/generate-all`,
+        { model, maxTokens, concurrent, skipCompleted: false, tpmLimit, chapterIds: ids },
+        {
+          onProgress: (data) => {
+            setLogs((prev) => [...prev, data.message]);
+            const startMatch = data.message?.match(/📖\s+(chapter\d+)\s+생성 시작/);
+            if (startMatch) {
+              setCurrentGenerating((prev) => new Set([...prev, startMatch[1]]));
+            }
+            const doneMatch = data.message?.match(/✅\s+(chapter\d+)\s+(?:완료|재시도 완료)/);
+            if (doneMatch) {
+              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(doneMatch[1]); return next; });
+              setChapters((prev) => prev.map((ch) =>
+                ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
+              ));
+            }
+            const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
+            if (failMatch) {
+              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(failMatch[1]); return next; });
+            }
+          },
+          onDone: (data) => {
+            if (data?.report) setReport(data.report);
+            const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
+            setStatus(finalStatus);
+            setCurrentGenerating(new Set());
+            loadChapters();
+            onComplete?.();
+          },
+          onError: (err) => {
+            setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
+            setStatus('idle');
+            setCurrentGenerating(new Set());
+          },
+        }
+      );
+    } catch (err) {
+      setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
+      startPolling();
     }
   };
 
   return (
     <div className="flex flex-col h-full gap-4">
-      {/* 설정 + 진행 상태 */}
-      <div className="flex gap-4">
+      {/* 생성 중 취소 바 (항상 보이는 위치) */}
+      {status === 'running' && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl flex-shrink-0">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+          </span>
+          <span className="text-sm text-blue-700 font-medium flex-1">
+            {currentGenerating.size > 0
+              ? `✍️ ${[...currentGenerating].join(', ')} 생성 중...`
+              : '🚀 배치 생성 진행 중...'}
+          </span>
+          <button
+            onClick={handleCancel}
+            className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+          >
+            🛑 생성 중단
+          </button>
+        </div>
+      )}
+
+      {/* 설정 + 진행 상태 (높이 통일) */}
+      <div className={`flex gap-4 ${logs.length > 0 ? 'flex-shrink-0 h-80' : 'flex-1 min-h-[320px]'}`}>
         {/* 설정 패널 */}
-        <div className="w-72 bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+        <div className="w-72 bg-white rounded-xl border border-gray-200 p-4 space-y-4 overflow-y-auto">
           <h3 className="font-semibold text-gray-900 text-sm">⚙️ 배치 생성 설정</h3>
 
           <div>
@@ -423,8 +742,8 @@ function BatchTab({ project, onComplete }) {
             <label className="block text-xs text-gray-500 mb-1">최대 토큰: {maxTokens.toLocaleString()}</label>
             <input
               type="range"
-              min={4000}
-              max={32000}
+              min={2000}
+              max={16000}
               step={1000}
               value={maxTokens}
               onChange={(e) => setMaxTokens(Number(e.target.value))}
@@ -468,67 +787,98 @@ function BatchTab({ project, onComplete }) {
             </p>
           </div>
 
-          {/* 생성 버튼 */}
+          {/* 예상 비용 */}
+          {remainingChapters > 0 && status !== 'running' && (
+            <div className="pt-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+              <p className="text-xs font-medium text-amber-800 mb-1">💰 예상 비용</p>
+              <EstimatedCost
+                model={model}
+                models={models}
+                maxTokens={maxTokens}
+                chapterCount={remainingChapters}
+              />
+            </div>
+          )}
+
+          {/* 생성 / 취소 버튼 */}
           <div className="space-y-2 pt-2">
-            <button
-              onClick={() => handleGenerate(true)}
-              disabled={status === 'running' || remainingChapters === 0}
-              className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              {completedChapters > 0 && remainingChapters > 0
-                ? `▶️ 이어서 생성 (${remainingChapters}개)`
-                : '▶️ 전체 생성 시작'}
-            </button>
-            <button
-              onClick={() => handleGenerate(false)}
-              disabled={status === 'running'}
-              className="w-full py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              🔁 처음부터 다시
-            </button>
+            {status === 'running' ? (
+              <button
+                onClick={handleCancel}
+                className="w-full py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+              >
+                🛑 생성 중단
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleGenerate(true)}
+                  disabled={remainingChapters === 0}
+                  className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {completedChapters > 0 && remainingChapters > 0
+                    ? `▶️ 이어서 생성 (${remainingChapters}개)`
+                    : '▶️ 전체 생성 시작'}
+                </button>
+                <button
+                  onClick={() => handleGenerate(false)}
+                  className="w-full py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  🔁 처음부터 다시
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {/* 목차 + 상태 */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="font-semibold text-gray-900 text-sm mb-3">📋 목차 및 진행 상태</h3>
+        <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between mb-3 flex-shrink-0">
+            <h3 className="font-semibold text-gray-900 text-sm">📋 목차 및 진행 상태</h3>
+            <button onClick={loadChapters} className="text-xs text-blue-600 hover:underline">
+              🔄 새로고침
+            </button>
+          </div>
 
           {totalChapters === 0 ? (
             <p className="text-sm text-gray-400">목차가 없습니다. Step 2에서 먼저 목차를 생성하세요.</p>
           ) : (
             <>
-              {/* 진행률 바 */}
-              <div className="mb-3">
+              {/* 전체 진행률 바 */}
+              <div className="mb-3 flex-shrink-0">
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>완료: {completedChapters}/{totalChapters}개</span>
+                  <span>
+                    완료: {completedChapters}/{totalChapters}개
+                    {status === 'running' && currentGenerating.size > 0 && (
+                      <span className="ml-2 text-blue-600 animate-pulse">
+                        ✍️ {[...currentGenerating].join(', ')} 생성 중...
+                      </span>
+                    )}
+                  </span>
                   <span>{totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all"
+                    className={`h-2.5 rounded-full transition-all ${
+                      status === 'running' ? 'bg-blue-500 animate-pulse' : 'bg-blue-600'
+                    }`}
                     style={{ width: `${totalChapters > 0 ? (completedChapters / totalChapters) * 100 : 0}%` }}
                   />
                 </div>
               </div>
 
-              {/* 챕터 목록 */}
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {chapters.map((ch) => (
-                  <div key={ch.chapter_id} className="flex items-center gap-2 text-sm py-1">
-                    <span>{ch.has_content ? '✅' : '⬜'}</span>
-                    <span className="text-gray-600">
-                      {ch.chapter_id}: {ch.chapter_title}
-                    </span>
-                  </div>
-                ))}
+              {/* 파트별 챕터 목록 */}
+              <div className="flex-1 min-h-0">
+                <ChapterProgressList
+                  chapters={chapters}
+                  currentGenerating={currentGenerating}
+                  status={status}
+                  selectedChapters={selectedChapters}
+                  onToggleSelect={handleToggleSelect}
+                  onRegenerate={handleRegenerateSelected}
+                  onSelectAll={handleSelectAll}
+                />
               </div>
-
-              <button
-                onClick={loadChapters}
-                className="mt-2 text-xs text-blue-600 hover:underline"
-              >
-                🔄 상태 새로고침
-              </button>
             </>
           )}
         </div>
@@ -536,7 +886,7 @@ function BatchTab({ project, onComplete }) {
 
       {/* 로그 */}
       {logs.length > 0 && (
-        <div className="flex-1 min-h-0 bg-gray-900 rounded-xl p-4 overflow-y-auto font-mono text-xs text-gray-300">
+        <div className="flex-[2] min-h-[300px] bg-gray-900 rounded-xl p-4 overflow-y-auto font-mono text-sm leading-relaxed text-gray-300">
           {logs.map((log, i) => (
             <div key={i} className="py-0.5">{log}</div>
           ))}
@@ -545,7 +895,54 @@ function BatchTab({ project, onComplete }) {
       )}
 
       {/* 완료 리포트 */}
-      {(status === 'completed' || report) && report && <ReportPanel report={report} />}
+      {(status === 'completed' || status === 'cancelled' || report) && report && <ReportPanel report={report} />}
+
+      {/* 다음 단계로 */}
+      {status === 'completed' && remainingChapters === 0 && (
+        <NextStepButton />
+      )}
+    </div>
+  );
+}
+
+// =============================================
+// 다음 단계로 버튼
+// =============================================
+function NextStepButton() {
+  const navigate = useNavigate();
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-200">
+      <button
+        onClick={() => navigate('/deploy')}
+        className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+      >
+        🚀 Step 5: 배포 관리로 →
+      </button>
+    </div>
+  );
+}
+
+// =============================================
+// 예상 비용 컴포넌트
+// =============================================
+function EstimatedCost({ model, models, maxTokens, chapterCount }) {
+  const modelInfo = models.find((m) => m.id === model);
+  if (!modelInfo || !modelInfo.pricing) {
+    return <p className="text-xs text-gray-400">모델 가격 정보 없음</p>;
+  }
+
+  const { input: inputPrice, output: outputPrice } = modelInfo.pricing;
+  const estimatedInputPerChapter = 10000; // 평균 입력 토큰 (프롬프트 + 아웃라인 + 참고자료)
+  const totalInput = chapterCount * estimatedInputPerChapter;
+  const totalOutput = chapterCount * maxTokens;
+  const inputCost = (totalInput / 1_000_000) * inputPrice;
+  const outputCost = (totalOutput / 1_000_000) * outputPrice;
+  const totalCost = inputCost + outputCost;
+
+  return (
+    <div className="text-xs text-amber-700 space-y-0.5">
+      <p>{chapterCount}개 x 입력 ~{estimatedInputPerChapter.toLocaleString()} + 출력 ~{maxTokens.toLocaleString()} 토큰</p>
+      <p className="font-semibold">~${totalCost.toFixed(2)} (입력 ${inputCost.toFixed(2)} + 출력 ${outputCost.toFixed(2)})</p>
     </div>
   );
 }

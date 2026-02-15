@@ -1,6 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { useState, useEffect } from 'react';
 import { apiFetch } from '../api/client';
 
 const STATUS_COLORS = {
@@ -21,11 +19,20 @@ function StatCard({ label, value }) {
   );
 }
 
-function ProjectCard({ project, onDetail, onPreview }) {
+function ProjectCard({ project, onDetail, onDelete }) {
   const statusColor = STATUS_COLORS[project.status] || 'bg-gray-400';
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow relative group">
+      {/* 삭제 버튼 */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(project); }}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all text-sm"
+        title="프로젝트 삭제"
+      >
+        🗑️
+      </button>
+
       {/* 헤더 */}
       <div className="flex items-start justify-between mb-2">
         <h3 className="text-lg font-bold text-gray-900 line-clamp-1">{project.title}</h3>
@@ -64,7 +71,7 @@ function ProjectCard({ project, onDetail, onPreview }) {
         >
           상세 보기
         </button>
-        {project.siteUrl ? (
+        {project.siteUrl && (
           <a
             href={project.siteUrl}
             target="_blank"
@@ -73,13 +80,6 @@ function ProjectCard({ project, onDetail, onPreview }) {
           >
             🌐 사이트 ↗
           </a>
-        ) : project.hasChapters && (
-          <button
-            onClick={() => onPreview(project)}
-            className="flex-1 text-xs py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            📖 미리보기
-          </button>
         )}
       </div>
     </div>
@@ -136,7 +136,7 @@ function DetailPanel({ project, onClose }) {
         {/* 생성 리포트 */}
         {project.model && (
           <div className="mb-6">
-            <h4 className="font-semibold text-gray-800 mb-2">본문 생성 리포트</h4>
+            <h4 className="font-semibold text-gray-800 mb-2">생성 리포트</h4>
             <div className="grid grid-cols-3 gap-3 mb-2">
               <div className="text-center p-2 bg-gray-50 rounded-lg">
                 <p className="text-sm font-bold">{project.completedChapters}/{project.totalChapters}</p>
@@ -157,86 +157,21 @@ function DetailPanel({ project, onClose }) {
           </div>
         )}
 
-        {/* 열람 */}
-        <div>
-          <h4 className="font-semibold text-gray-800 mb-2">열람</h4>
-          <div className="flex gap-2">
-            {project.siteUrl ? (
-              <a
-                href={project.siteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-center text-xs py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-              >
-                🌐 사이트 열기 ↗
-              </a>
-            ) : (
-              <span className={`flex-1 text-center text-xs py-2 rounded-lg ${project.hasSite ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
-                🌐 {project.hasSite ? '로컬 사이트 있음' : '사이트 없음'}
-              </span>
-            )}
-            <span className={`flex-1 text-center text-xs py-2 rounded-lg ${project.hasDocx ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
-              📥 {project.hasDocx ? 'DOCX 있음' : 'DOCX 없음'}
-            </span>
+        {/* 저장소 링크 (GitHub Pages는 카드에 있음) */}
+        {project.repoUrl && (
+          <div>
+            <h4 className="font-semibold text-gray-800 mb-2">저장소</h4>
+            <a
+              href={project.repoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-center text-xs py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+            >
+              📦 GitHub 저장소 ↗
+            </a>
           </div>
-        </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-function PreviewPanel({ project, onClose }) {
-  const [selectedChapter, setSelectedChapter] = useState('');
-  const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const chapters = project?.chapterFiles || [];
-
-  useEffect(() => {
-    if (chapters.length > 0 && !selectedChapter) {
-      setSelectedChapter(chapters[0].replace('.md', ''));
-    }
-  }, [chapters]);
-
-  useEffect(() => {
-    if (!project || !selectedChapter) return;
-    setLoading(true);
-    apiFetch(`/api/portfolio/${project.name}/chapter/${selectedChapter}`)
-      .then((d) => setContent(d.content))
-      .catch(() => setContent('챕터를 불러올 수 없습니다.'))
-      .finally(() => setLoading(false));
-  }, [project, selectedChapter]);
-
-  if (!project) return null;
-
-  return (
-    <div className="mt-6 bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-gray-900">📖 미리보기: {project.title}</h3>
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">닫기 ✕</button>
-      </div>
-
-      <select
-        value={selectedChapter}
-        onChange={(e) => setSelectedChapter(e.target.value)}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-sm"
-      >
-        {chapters.map((f) => (
-          <option key={f} value={f.replace('.md', '')}>{f.replace('.md', '')}</option>
-        ))}
-      </select>
-
-      {loading ? (
-        <div className="text-center py-8 text-gray-400">로딩 중...</div>
-      ) : (
-        <div className="prose prose-sm max-w-none max-h-[60vh] overflow-y-auto">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {content.length > 10000
-              ? content.slice(0, 10000) + `\n\n---\n📝 전체 ${content.length.toLocaleString()}자 중 처음 10,000자만 표시합니다.`
-              : content}
-          </ReactMarkdown>
-        </div>
-      )}
     </div>
   );
 }
@@ -248,9 +183,9 @@ export default function Portfolio() {
   const [sort, setSort] = useState('newest');
   const [filter, setFilter] = useState('all');
   const [detailProject, setDetailProject] = useState(null);
-  const [previewProject, setPreviewProject] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  useEffect(() => {
+  const fetchData = () => {
     setLoading(true);
     apiFetch('/api/portfolio')
       .then((d) => {
@@ -259,7 +194,21 @@ export default function Portfolio() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleDelete = async (project) => {
+    if (!confirm(`"${project.title}" 프로젝트를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+      return;
+    }
+    try {
+      await apiFetch(`/api/projects/${project.name}`, { method: 'DELETE' });
+      fetchData();
+    } catch (e) {
+      alert('삭제 실패: ' + e.message);
+    }
+  };
 
   // 정렬 + 필터
   const displayed = (() => {
@@ -342,15 +291,10 @@ export default function Portfolio() {
               key={p.name}
               project={p}
               onDetail={setDetailProject}
-              onPreview={setPreviewProject}
+              onDelete={handleDelete}
             />
           ))}
         </div>
-      )}
-
-      {/* 미리보기 패널 */}
-      {previewProject && (
-        <PreviewPanel project={previewProject} onClose={() => setPreviewProject(null)} />
       )}
 
       {/* 상세 보기 슬라이드 패널 */}

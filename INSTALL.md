@@ -79,7 +79,7 @@
 # Mac: brew install git
 # Windows: https://git-scm.com/download/win
 
-git clone https://github.com/YOUR_USERNAME/eduflow.git
+git clone https://github.com/greatsong/eduflow.git
 cd eduflow
 ```
 
@@ -133,25 +133,20 @@ API 키는 AI를 사용하기 위한 "비밀번호" 같은 것입니다.
 
 ## 5단계: API 키 설정하기
 
-에듀플로 폴더의 `server` 폴더 안에 `.env` 파일을 만듭니다.
+에듀플로 **루트 폴더**에 `.env` 파일을 만듭니다.
 
-### Mac/Linux
+### 가장 쉬운 방법
 
 ```bash
-cd /path/to/eduflow/server
-echo 'ANTHROPIC_API_KEY=여기에-API키-붙여넣기' > .env
+cd /path/to/eduflow  # 에듀플로 폴더로 이동
+cp .env.example .env
 ```
 
-### Windows (PowerShell)
-
-```powershell
-cd C:\path\to\eduflow\server
-echo 'ANTHROPIC_API_KEY=여기에-API키-붙여넣기' > .env
-```
+그리고 `.env` 파일을 열어서 `sk-ant-xxx` 부분을 실제 API 키로 교체합니다.
 
 ### 또는 직접 파일 만들기
 
-1. `eduflow/server` 폴더 열기
+1. `eduflow` 루트 폴더 열기
 2. 새 텍스트 파일 만들기
 3. 아래 내용 입력:
    ```
@@ -170,7 +165,7 @@ echo 'ANTHROPIC_API_KEY=여기에-API키-붙여넣기' > .env
 npm run dev
 ```
 
-2~3초 후 자동으로 브라우저가 열립니다. (http://localhost:5173)
+실행 후 브라우저에서 http://localhost:7830 에 접속합니다.
 
 **축하합니다! 이제 에듀플로를 사용할 수 있습니다!**
 
@@ -180,8 +175,8 @@ npm run dev
 
 | 서비스 | 포트 | 설명 |
 |--------|------|------|
-| 웹 화면 | 5173 | 브라우저에서 접속하는 주소 |
-| API 서버 | 3001 | 백엔드 (직접 접속할 일 없음) |
+| 웹 화면 | 7830 | 브라우저에서 접속하는 주소 |
+| API 서버 | 7829 | 백엔드 (직접 접속할 일 없음) |
 
 ---
 
@@ -202,7 +197,7 @@ npm install
 
 ### "API key not found" 오류
 
-1. `server/.env` 파일이 있는지 확인
+1. 루트 폴더에 `.env` 파일이 있는지 확인
 2. 파일 내용 확인: `ANTHROPIC_API_KEY=sk-ant-...`
 3. 등호(=) 양쪽에 공백이 없어야 함
 4. 터미널 재시작 후 `npm run dev`
@@ -213,8 +208,8 @@ npm install
 
 ```bash
 # Mac/Linux: 포트 사용 중인 프로세스 종료
-lsof -ti:5173 | xargs kill -9
-lsof -ti:3001 | xargs kill -9
+lsof -ti:7830 | xargs kill -9
+lsof -ti:7829 | xargs kill -9
 
 # 다시 실행
 npm run dev
@@ -256,6 +251,6 @@ npm run dev
 | 속도 | 보통 | 빠름 |
 | UI | 간단 | 모던 |
 | 설치 | pip | npm |
-| 포트 | 8501 | 5173 |
+| 포트 | 8501 | 7830 |
 
 두 버전 모두 같은 기능을 제공합니다. 취향에 맞게 선택하세요!

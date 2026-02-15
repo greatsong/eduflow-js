@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
 import { apiFetch, apiStreamPost } from '../api/client';
 import ChatInterface from '../components/ChatInterface';
 
 export default function Feedback() {
+  const navigate = useNavigate();
   const { currentProject, refreshProgress } = useProjectStore();
   const { messages, isStreaming, setMessages, addMessage, appendToLastMessage, setStreaming, clearMessages } = useChatStore();
 
@@ -176,9 +178,17 @@ export default function Feedback() {
           {/* 확정 버튼 */}
           <div className="border-t border-gray-200 pt-3">
             {confirmed ? (
-              <div className="p-3 bg-green-50 rounded-lg">
-                <p className="text-sm text-green-700 font-medium">✅ 목차가 확정되었습니다!</p>
-                <p className="text-xs text-green-600 mt-1">이제 챕터 제작 단계로 넘어갈 수 있습니다.</p>
+              <div className="space-y-2">
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-700 font-medium">✅ 목차가 확정되었습니다!</p>
+                  <p className="text-xs text-green-600 mt-1">이제 챕터 제작 단계로 넘어갈 수 있습니다.</p>
+                </div>
+                <button
+                  onClick={() => navigate('/chapters')}
+                  className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                >
+                  ✍️ Step 4: 챕터 제작으로 →
+                </button>
               </div>
             ) : (
               <div className="space-y-2">

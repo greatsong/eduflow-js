@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || '';
+export const API_BASE = import.meta.env.VITE_API_URL || '';
 
 /**
  * 기본 fetch 래퍼
@@ -103,6 +103,7 @@ export async function apiStreamPost(path, body, { onText, onProgress, onError, o
         switch (data.type) {
           case 'text': onText?.(data.content); break;
           case 'progress': onProgress?.(data); break;
+          case 'report': onProgress?.(data); break;
           case 'error': onError?.(new Error(data.message)); return;
           case 'done': onDone?.(data); return;
         }
