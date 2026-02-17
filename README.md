@@ -9,6 +9,35 @@ Claude AI를 활용하여 교재, 강의 자료, 워크샵 교안 등을 체계�
 ![React](https://img.shields.io/badge/React-19-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
+> **제작 교재 둘러보기**: [에듀플로 포트폴리오](https://greatsong.github.io/eduflow-portfolio/)
+
+---
+
+## 빠른 시작
+
+### 1. 사전 준비
+
+- **Node.js 18 이상** ([다운로드](https://nodejs.org))
+- **Anthropic API 키** ([발급 방법](#anthropic-api-키-발급-방법) 참고)
+
+### 2. 설치 & 실행
+
+```bash
+git clone https://github.com/greatsong/eduflow-js.git
+cd eduflow-js
+npm install
+npm run dev
+```
+
+브라우저에서 **http://localhost:7830** 에 접속하면 에듀플로가 실행됩니다.
+
+### 3. API 키 설정
+
+두 가지 방법 중 택 1:
+
+- **브라우저에서 입력**: 좌측 사이드바의 API 키 버튼 클릭 → 키 입력 (별도 파일 설정 불필요)
+- **`.env` 파일 사용**: 루트에 `.env` 파일 생성 후 `ANTHROPIC_API_KEY=sk-ant-api03-...` 입력
+
 ---
 
 ## 워크플로우
@@ -25,45 +54,77 @@ Step 3: 피드백 & 컨펌     → 목차 리뷰, AI와 추가 논의 후 확정
 Step 4: 챕터 제작         → 배치 생성(전체) 또는 인터랙티브(1장씩) 모드
     ↓
 Step 5: 배포 관리         → MkDocs 사이트, GitHub Pages, DOCX 파일 생성
+                           + 포트폴리오 자동 갱신
 ```
+
+### Step 0: 프로젝트 관리
+
+새 프로젝트를 만들거나 기존 프로젝트를 선택합니다.
+
+- **빈 프로젝트**: 이름, 저자, 설명만 입력하여 생성
+- **템플릿 사용**: 6종의 교육 템플릿 중 선택
+- **빠른 시작**: 주제와 대상만 입력하면 AI가 프로젝트 설정부터 목차까지 한 번에 생성
+- **레퍼런스 업로드**: 기존 자료(PDF, 텍스트 등)를 업로드하여 AI가 참고
+
+### Step 1: 방향성 논의
+
+Claude AI와 실시간 채팅으로 교육자료의 방향을 잡습니다. 대화 내용은 자동 저장되며, AI가 생성한 요약이 이후 단계의 기초가 됩니다.
+
+### Step 2: 목차 작성
+
+AI가 논의 내용을 바탕으로 Part > Chapter 구조의 목차를 자동 생성합니다. 각 챕터에 학습 목표, 개요, 예상 소요시간이 포함되며, JSON 편집기로 직접 수정할 수 있습니다.
+
+### Step 3: 피드백 & 컨펌
+
+AI와 추가 대화로 목차를 개선하고, 만족스러우면 **목차 확정** 후 다음 단계로 진행합니다.
+
+### Step 4: 챕터 제작
+
+- **배치 생성**: 전체 챕터를 한 번에 자동 생성 (병렬 처리)
+- **인터랙티브 모드**: 챕터별로 AI와 대화하며 하나씩 생성
+- 실시간 진행 상황 표시, 비용 추정 제공
+
+### Step 5: 배포 관리
+
+- **MkDocs 사이트**: 정적 웹사이트로 빌드 (Material 테마)
+- **GitHub Pages**: 빌드된 사이트를 GitHub Pages로 자동 배포
+- **DOCX 파일**: Word 문서로 변환하여 다운로드
 
 ---
 
-## 빠른 시작
+## 포트폴리오 시스템
 
-### 1. 사전 준비
+GitHub Pages로 배포하면 **나만의 포트폴리오 페이지**가 자동으로 관리됩니다.
 
-- **Node.js 18 이상** ([다운로드](https://nodejs.org))
-- **Anthropic API 키** (아래 발급 방법 참고)
+배포할 때마다 자동으로 반영되는 항목:
+- 교재 제목, 설명, URL
+- 차시 수, 페이지 수
+- GitHub Discussions 활성화
 
-### 2. 설치
+### 초기 설정 (최초 1회)
 
-```bash
-git clone https://github.com/greatsong/eduflow-js.git
-cd eduflow-js
-
-npm install
-```
-
-### 3. API 키 설정
+[GitHub CLI](https://cli.github.com) 설치 후 아래 명령을 실행합니다:
 
 ```bash
-cp .env.example .env
+# 1. GitHub 인증
+gh auth login
+
+# 2. 포트폴리오 저장소 생성
+gh repo create eduflow-portfolio --public
+
+# 3. 빈 projects.json 초기화
+gh api repos/$(gh api user --jq .login)/eduflow-portfolio/contents/projects.json \
+  -X PUT -f message="Init" -f content=$(echo '[]' | base64)
+
+# 4. GitHub Pages 활성화
+gh api repos/$(gh api user --jq .login)/eduflow-portfolio/pages \
+  -X POST -f source='{"branch":"master","path":"/"}' 2>/dev/null || echo "OK"
 ```
 
-`.env` 파일을 열어 `sk-ant-xxx` 부분을 실제 API 키로 교체합니다:
+이후 에듀플로에서 교재를 배포할 때마다 `https://{username}.github.io/eduflow-portfolio/`에 자동 반영됩니다.
 
-```env
-ANTHROPIC_API_KEY=sk-ant-api03-여기에-실제-키-입력
-```
-
-### 4. 실행
-
-```bash
-npm run dev
-```
-
-브라우저에서 **http://localhost:7830** 에 접속하면 에듀플로가 실행됩니다.
+> 저장소에 `index.html`을 추가하면 커스텀 포트폴리오 페이지를 만들 수 있습니다.
+> [예시 포트폴리오](https://greatsong.github.io/eduflow-portfolio/)를 참고하세요.
 
 ---
 
@@ -71,13 +132,13 @@ npm run dev
 
 에듀플로는 Claude AI를 사용하므로 Anthropic API 키가 필요합니다.
 
-### Step 1: 계정 만들기
+**1단계: 계정 만들기**
 
 1. [console.anthropic.com](https://console.anthropic.com) 접속
-2. **Sign Up** 클릭 → 이메일 또는 Google 계정으로 회원가입
+2. **Sign Up** → 이메일 또는 Google 계정으로 회원가입
 3. 이메일 인증 완료
 
-### Step 2: 크레딧 충전
+**2단계: 크레딧 충전**
 
 1. 로그인 후 좌측 메뉴 **Settings > Billing** 클릭
 2. **Add Payment Method** → 신용카드 등록
@@ -85,66 +146,61 @@ npm run dev
 
 > **비용 참고**: 10챕터 분량 교재 기준 약 $1~5 정도입니다. 사용한 만큼만 과금됩니다.
 
-### Step 3: API 키 생성
+**3단계: API 키 생성**
 
 1. 좌측 메뉴 **API Keys** 클릭
-2. **Create Key** 클릭 → 이름 입력 (예: `eduflow`)
+2. **Create Key** → 이름 입력 (예: `eduflow`)
 3. 생성된 키 복사 (`sk-ant-api03-...`으로 시작)
 
-> **주의**: API 키는 생성 시 한 번만 표시됩니다. 반드시 안전한 곳에 저장하세요.
+> API 키는 생성 시 한 번만 표시됩니다. 반드시 안전한 곳에 저장하세요.
 
 ---
 
-## 사용 방법
+## 배포에 필요한 도구 (선택)
 
-### Step 0: 프로젝트 관리
+GitHub Pages 배포와 DOCX 변환을 사용하려면 추가 도구가 필요합니다:
 
-새 프로젝트를 만들거나, 기존 프로젝트를 선택합니다.
+| 도구 | 용도 | 설치 |
+|------|------|------|
+| [MkDocs](https://www.mkdocs.org) + Material 테마 | 웹사이트 빌드/배포 | `pip install mkdocs mkdocs-material` |
+| [Pandoc](https://pandoc.org) | DOCX 변환 | `brew install pandoc` (Mac) |
+| [GitHub CLI](https://cli.github.com) | GitHub Pages 배포 | `brew install gh` (Mac) |
+| [Git](https://git-scm.com) | 버전 관리 | 보통 이미 설치됨 |
 
-- **빈 프로젝트**: 이름, 저자, 설명만 입력하여 생성
-- **템플릿 사용**: 6종의 교육 템플릿 중 선택 (프로그래밍 교재, 학교 교과서, 워크샵 자료 등)
-- **빠른 시작**: 주제와 대상만 입력하면 AI가 프로젝트 설정부터 목차까지 한 번에 생성
-- **레퍼런스 업로드**: 기존 자료(PDF, 텍스트 등)를 업로드하여 AI가 참고하도록 설정
+---
 
-### Step 1: 방향성 논의
+## 교육 템플릿
 
-Claude AI와 실시간 채팅으로 교육자료의 방향을 잡습니다.
+| 템플릿 | 설명 |
+|--------|------|
+| 프로그래밍 교재 | 코딩 실습 중심의 교재 |
+| 학교 교과서 | 학교 수업용 교과서 |
+| 자기주도 학습서 | 독학용 학습 교재 |
+| 워크샵 교안 | 실습 워크샵용 자료 |
+| 비즈니스 교육 | 기업 교육 자료 |
+| 교사용 지도서 | 4C 기반 교사 가이드 |
 
-- 대상 독자, 난이도, 분량, 구성 방식 등을 논의
-- 대화 내용은 자동 저장되며, AI가 요약본을 생성
-- 이 요약이 이후 목차 생성과 본문 작성의 기초가 됩니다
+---
 
-### Step 2: 목차 작성
+## 명령어 정리
 
-AI가 논의 내용을 바탕으로 목차를 자동 생성합니다.
+```bash
+npm run dev          # 프론트 + 백엔드 동시 실행
+npm run dev:server   # 백엔드만 (http://localhost:7829)
+npm run dev:client   # 프론트만 (http://localhost:7830)
+npm run build        # 프론트엔드 프로덕션 빌드
+npm start            # 프로덕션 서버 실행
+```
 
-- Part → Chapter 구조로 자동 구성
-- 각 챕터에 학습 목표, 개요, 예상 소요시간 포함
-- JSON 편집기로 목차를 직접 수정 가능
+## 환경변수
 
-### Step 3: 피드백 & 컨펌
-
-생성된 목차를 검토하고 확정합니다.
-
-- AI와 추가 대화로 목차 개선
-- 만족스러우면 **목차 확정** → 이후 단계로 진행
-
-### Step 4: 챕터 제작
-
-확정된 목차를 바탕으로 본문을 생성합니다.
-
-- **배치 생성**: 전체 챕터를 한 번에 자동 생성 (병렬 처리로 빠름)
-- **인터랙티브 모드**: 챕터별로 AI와 대화하며 하나씩 생성
-- 실시간 진행 상황 표시, 비용 추정 제공
-- 생성된 챕터는 마크다운으로 저장
-
-### Step 5: 배포 관리
-
-완성된 교재를 다양한 형태로 배포합니다.
-
-- **MkDocs 사이트**: 정적 웹사이트로 빌드 (Material 테마)
-- **GitHub Pages**: 빌드된 사이트를 GitHub Pages로 자동 배포
-- **DOCX 파일**: Word 문서로 변환하여 다운로드
+| 변수 | 필수 | 기본값 | 설명 |
+|------|------|--------|------|
+| `ANTHROPIC_API_KEY` | X | - | Anthropic API 키 (브라우저 입력도 가능) |
+| `PORT` | X | `7829` | 백엔드 서버 포트 |
+| `CLIENT_URL` | X | `http://localhost:7830` | CORS 허용 프론트엔드 URL |
+| `PROJECTS_DIR` | X | `./projects` | 프로젝트 데이터 저장 경로 |
+| `TEMPLATES_DIR` | X | `./templates` | 템플릿 파일 경로 |
 
 ---
 
@@ -155,17 +211,16 @@ eduflow-js/
 ├── client/                 # React 프론트엔드 (Vite)
 │   └── src/
 │       ├── api/            # API 클라이언트 (fetch, SSE)
-│       ├── components/     # 공통 컴포넌트 (Layout, ProgressBar)
-│       ├── pages/          # 8개 페이지 컴포넌트
+│       ├── components/     # Layout, ProgressBar, ChatInterface, ApiKeyModal
+│       ├── pages/          # 9개 페이지 (Home~Portfolio, BetaDeploy)
 │       └── stores/         # Zustand 상태 관리
 ├── server/                 # Express 백엔드
 │   ├── routes/             # REST API + SSE 라우트
-│   ├── services/           # 비즈니스 로직 (AI 연동, 생성, 배포)
+│   ├── services/           # AI 연동, 생성, 배포, 포트폴리오
 │   └── middleware/         # API 키 검증, 에러 핸들링
 ├── shared/                 # 프론트/백 공유 상수
 ├── templates/              # 교육 템플릿 6종
 ├── projects/               # 프로젝트 데이터 (로컬 저장)
-│   └── template/           # 새 프로젝트 폴더 구조
 └── model_config.json       # Claude 모델 설정
 ```
 
@@ -181,70 +236,22 @@ eduflow-js/
 
 ---
 
-## 환경변수
-
-| 변수 | 필수 | 기본값 | 설명 |
-|------|------|--------|------|
-| `ANTHROPIC_API_KEY` | O | - | Anthropic API 키 |
-| `PORT` | X | `7829` | 백엔드 서버 포트 |
-| `CLIENT_URL` | X | `http://localhost:7830` | CORS 허용 프론트엔드 URL |
-| `PROJECTS_DIR` | X | `./projects` | 프로젝트 데이터 저장 경로 |
-| `TEMPLATES_DIR` | X | `./templates` | 템플릿 파일 경로 |
-
----
-
-## 명령어 정리
-
-```bash
-npm run dev          # 프론트 + 백엔드 동시 실행
-npm run dev:server   # 백엔드만 (http://localhost:7829)
-npm run dev:client   # 프론트만 (http://localhost:7830)
-npm run build        # 프론트엔드 프로덕션 빌드
-npm start            # 프로덕션 서버 실행
-```
-
----
-
 ## 문제 해결
 
-### API 키 오류
+**API 키 오류** - 브라우저 사이드바에서 API 키를 입력하거나, `.env` 파일에 `ANTHROPIC_API_KEY`를 설정하세요.
 
-```
-Anthropic API 키가 필요합니다
-```
-
-→ 루트 폴더의 `.env` 파일에 `ANTHROPIC_API_KEY`가 설정되어 있는지 확인하세요.
-
-### 포트 충돌
-
+**포트 충돌**
 ```bash
-# 이미 사용 중인 포트 해제 (Mac/Linux)
 lsof -ti:7830 | xargs kill -9
 lsof -ti:7829 | xargs kill -9
 npm run dev
 ```
 
-### npm install 오류
-
+**npm install 오류**
 ```bash
 npm cache clean --force
 npm install
 ```
-
----
-
-## 교육 템플릿
-
-에듀플로에는 6종의 교육 템플릿이 포함되어 있습니다:
-
-| 템플릿 | 설명 |
-|--------|------|
-| 프로그래밍 교재 | 코딩 실습 중심의 교재 |
-| 학교 교과서 | 학교 수업용 교과서 |
-| 자기주도 학습서 | 독학용 학습 교재 |
-| 워크샵 교안 | 실습 워크샵용 자료 |
-| 비즈니스 교육 | 기업 교육 자료 |
-| 교사용 지도서 | 4C 기반 교사 가이드 |
 
 ---
 
