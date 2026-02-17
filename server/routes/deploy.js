@@ -129,7 +129,7 @@ router.post('/github', asyncHandler(async (req, res) => {
 
   const result = await dep.deployToGitHub(repoName);
 
-  // 배포 성공 시 deployment_info.json에 저장
+  // 배포 성공 시 deployment_info.json 저장 + 포트폴리오 자동 갱신
   if (result.success && result.site_url) {
     const { writeFile } = await import('fs/promises');
     const infoPath = join(projectPath(req.params.id), 'deployment_info.json');
@@ -139,6 +139,12 @@ router.post('/github', asyncHandler(async (req, res) => {
       username: result.username,
       deployed_at: new Date().toISOString(),
     }, null, 2), 'utf-8');
+
+    // 포트폴리오 자동 갱신 (실패해도 배포 결과에는 영향 없음)
+    const portfolioResult = await dep.updatePortfolio(
+      repoName, result.site_url, result.repo_url, result.username
+    );
+    result.portfolio = portfolioResult;
   }
 
   res.json(result);

@@ -296,6 +296,74 @@ ${navYaml}`;
   }
 
   /**
+   * 포트폴리오 저장소(eduflow-portfolio)의 projects.json 자동 갱신
+   */
+  async updatePortfolio(repoName, siteUrl, repoUrl, username) {
+    const portfolioRepo = `${username}/eduflow-portfolio`;
+
+    try {
+      // 현재 projects.json 가져오기
+      let projects = [];
+      let sha = null;
+      try {
+        const { stdout } = await execa('gh', [
+          'api', `repos/${portfolioRepo}/contents/projects.json`,
+          '--jq', '.content + "\\n" + .sha',
+        ]);
+        const lines = stdout.trim().split('\n');
+        sha = lines.pop();
+        const base64Content = lines.join('');
+        projects = JSON.parse(Buffer.from(base64Content, 'base64').toString('utf-8'));
+      } catch {
+        // 포트폴리오 저장소나 파일이 없으면 빈 배열
+      }
+
+      // 프로젝트 메타데이터 로드
+      const configPath = join(this.projectPath, 'config.json');
+      let config = {};
+      if (existsSync(configPath)) {
+        try { config = JSON.parse(await readFile(configPath, 'utf-8')); } catch { /* skip */ }
+      }
+
+      // 기존 항목 업데이트 또는 새로 추가
+      const entry = {
+        name: repoName,
+        title: config.title || repoName,
+        description: config.description || '',
+        url: siteUrl,
+        repoUrl,
+        createdAt: config.created_at || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isEduflow: true,
+      };
+
+      const idx = projects.findIndex((p) => p.name === repoName);
+      if (idx >= 0) {
+        projects[idx] = { ...projects[idx], ...entry };
+      } else {
+        projects.unshift(entry);
+      }
+
+      // projects.json 업데이트 (GitHub API)
+      const content = Buffer.from(JSON.stringify(projects, null, 2)).toString('base64');
+      const apiArgs = [
+        'api', `repos/${portfolioRepo}/contents/projects.json`,
+        '-X', 'PUT',
+        '-f', `message=Update portfolio: ${config.title || repoName}`,
+        '-f', `content=${content}`,
+      ];
+      if (sha) apiArgs.push('-f', `sha=${sha}`);
+
+      await execa('gh', apiArgs);
+
+      return { success: true, message: '포트폴리오가 자동 갱신되었습니다' };
+    } catch (e) {
+      // 포트폴리오 갱신 실패는 배포 자체를 실패시키지 않음
+      return { success: false, message: `포트폴리오 갱신 실패: ${e.message}` };
+    }
+  }
+
+  /**
    * GitHub Pages 배포
    */
   async deployToGitHub(repoName) {
