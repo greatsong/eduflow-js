@@ -405,6 +405,11 @@ ${navYaml}`;
         }
       }
 
+      // Discussions 활성화
+      try {
+        await execa('gh', ['api', '-X', 'PATCH', `repos/${username}/${repoName}`, '-f', 'has_discussions=true']);
+      } catch { /* 실패해도 배포에 영향 없음 */ }
+
       // mkdocs gh-deploy
       await execa('mkdocs', ['gh-deploy', '--force'], { cwd: this.projectPath, timeout: 180000 });
 
