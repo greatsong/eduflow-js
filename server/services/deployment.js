@@ -325,6 +325,17 @@ ${navYaml}`;
         try { config = JSON.parse(await readFile(configPath, 'utf-8')); } catch { /* skip */ }
       }
 
+      // 챕터 수 및 페이지 수 계산
+      const chapters = await this.getChapterFiles();
+      let totalChars = 0;
+      for (const ch of chapters) {
+        try {
+          const s = await stat(ch.path);
+          totalChars += s.size;
+        } catch { /* skip */ }
+      }
+      const pages = totalChars > 0 ? Math.max(1, Math.round(totalChars / 1800)) : 0;
+
       // 기존 항목 업데이트 또는 새로 추가
       const entry = {
         name: repoName,
@@ -335,6 +346,8 @@ ${navYaml}`;
         createdAt: config.created_at || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isEduflow: true,
+        chapters: chapters.length,
+        pages,
       };
 
       const idx = projects.findIndex((p) => p.name === repoName);
