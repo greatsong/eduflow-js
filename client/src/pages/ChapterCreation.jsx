@@ -477,8 +477,8 @@ function BatchTab({ project, onComplete }) {
   const [model, setModel] = useState('claude-opus-4-5-20251101');
   const [models, setModels] = useState([]);
   const [maxTokens, setMaxTokens] = useState(8000);
-  const [concurrent, setConcurrent] = useState(2);
-  const [tpmLimit, setTpmLimit] = useState(40000);
+  const [concurrent, setConcurrent] = useState(5);
+  const [tpmLimit, setTpmLimit] = useState(200000);
   const [status, setStatus] = useState('idle'); // idle, running, completed, cancelled
   const [logs, setLogs] = useState([]);
   const [currentGenerating, setCurrentGenerating] = useState(new Set());
@@ -757,7 +757,7 @@ function BatchTab({ project, onComplete }) {
             <input
               type="range"
               min={1}
-              max={10}
+              max={20}
               value={concurrent}
               onChange={(e) => setConcurrent(Number(e.target.value))}
               disabled={status === 'running'}
@@ -767,24 +767,48 @@ function BatchTab({ project, onComplete }) {
 
           <div>
             <label className="block text-xs text-gray-500 mb-1">
-              TPM 제한: {tpmLimit > 0 ? `${(tpmLimit / 1000).toFixed(0)}K/분` : '없음'}
+              출력 TPM 제한: {tpmLimit > 0 ? `${(tpmLimit / 1000).toFixed(0)}K/분` : '없음'}
             </label>
             <input
               type="range"
               min={0}
-              max={200000}
+              max={800000}
               step={10000}
               value={tpmLimit}
               onChange={(e) => setTpmLimit(Number(e.target.value))}
               disabled={status === 'running'}
               className="w-full"
             />
-            <p className="text-xs text-gray-400 mt-1">
-              {tpmLimit === 0 ? '제한 없음 (rate limit 시 자동 재시도)' :
-               tpmLimit <= 20000 ? 'Tier 1 (Free)' :
-               tpmLimit <= 40000 ? 'Tier 2' :
-               tpmLimit <= 80000 ? 'Tier 3' : 'Tier 4+'}
-            </p>
+            <div className="flex items-center gap-1 mt-1 flex-wrap">
+              <p className="text-xs text-gray-400">
+                {tpmLimit === 0 ? '제한 없음 (rate limit 시 자동 재시도)' :
+                 tpmLimit <= 40000 ? 'Tier 1~2' :
+                 tpmLimit <= 80000 ? 'Tier 3' :
+                 tpmLimit <= 200000 ? 'Tier 4 (Opus/Sonnet)' :
+                 tpmLimit <= 400000 ? 'Tier 4 최대 (Opus/Sonnet)' : 'Tier 4 (Haiku 800K)'}
+              </p>
+              {status !== 'running' && (
+                <div className="flex gap-1 ml-auto">
+                  {[
+                    { label: 'T4', value: 200000 },
+                    { label: 'Max', value: 400000 },
+                    { label: '없음', value: 0 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => setTpmLimit(preset.value)}
+                      className={`px-1.5 py-0.5 text-[10px] rounded border ${
+                        tpmLimit === preset.value
+                          ? 'bg-blue-100 border-blue-300 text-blue-700'
+                          : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 예상 비용 */}

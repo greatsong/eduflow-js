@@ -230,9 +230,33 @@ eduflow-js/
 |------|------|
 | Frontend | React 19, Vite 6, React Router 7, Zustand, Tailwind CSS 4 |
 | Backend | Express 5, Node.js, @anthropic-ai/sdk |
-| AI | Claude API (Opus 4.6 / Sonnet 4.5) |
+| AI | Claude API (Opus 4.6 / Sonnet 4.6 / Haiku 4.5) |
 | 스트리밍 | Server-Sent Events (SSE) |
 | 모노레포 | npm workspaces |
+
+---
+
+## API Tier별 권장 설정
+
+에듀플로의 배치 생성(Step 4)은 Anthropic API의 Rate Limit에 맞춰 설정을 조정해야 합니다. 현재 기본값은 **Tier 4** 기준입니다.
+
+| 설정 | Tier 1 (Free/신규) | Tier 2 | Tier 3 | Tier 4 (기본값) |
+|------|---------------------|--------|--------|-----------------|
+| 동시 실행 | 1~2개 | 2~3개 | 3~5개 | 5~10개 |
+| 출력 TPM 제한 | 20K | 40K | 80K | 200K~400K |
+| 권장 모델 | Haiku 4.5 | Sonnet 4 | Sonnet 4.6 | Opus 4.6 |
+
+### Tier 1 (무료 / 신규 사용자) 권장 설정
+
+Tier 1은 출력 TPM이 매우 제한적이므로 보수적으로 설정해야 합니다:
+
+1. **배치 설정 패널**에서:
+   - 동시 실행: **1~2개**
+   - 출력 TPM 제한: **20K/분**
+   - 모델: **Claude Haiku 4.5** (가장 경제적, Tier 1에서도 80K 출력 TPM)
+2. Rate limit(429)이 발생해도 자동으로 재시도하지만, 동시 실행을 낮추면 처음부터 방지할 수 있습니다.
+
+> **내 Tier 확인**: [console.anthropic.com](https://console.anthropic.com) → Settings → Limits에서 확인할 수 있습니다. 크레딧을 충전하면 자동으로 Tier가 올라갑니다.
 
 ---
 

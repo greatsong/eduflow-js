@@ -9,54 +9,84 @@ import { TemplateManager } from './templateManager.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ============================================================
-// TPM (Tokens Per Minute) 예산 관리자
+// TPM (Tokens Per Minute) 예산 관리자 — 출력 TPM 기준 (Tier 4 최적화)
+// Tier 4: 출력 400K (Opus/Sonnet), 800K (Haiku 4.5) / 입력 2M+
+// 병목은 항상 출력 TPM이므로, 출력 토큰만 추적하여 불필요한 대기 제거
+//
+// 핵심: "예약(reserve)" 메커니즘으로 인플라이트 토큰을 추적하여
+// 동시 실행 시 여러 요청이 같은 예산을 중복 사용하는 것을 방지
 // ============================================================
 class TokenBudgetManager {
-  constructor(tpmLimit = 40000) {
-    this.tpmLimit = tpmLimit;
-    this.tokensUsedThisMinute = 0;
-    this.minuteStart = Date.now();
-    this.requestHistory = []; // {timestamp, tokens} 배열
+  constructor(outputTpmLimit = 200000) {
+    this.outputTpmLimit = outputTpmLimit;
+    this.outputTokensUsedThisMinute = 0;
+    this.reservedTokens = 0; // API 호출 중인 예약 토큰
+    this.requestHistory = []; // {timestamp, outputTokens} 배열
   }
 
-  // 1분 윈도우 내의 사용량 계산
+  // 1분 슬라이딩 윈도우 내의 출력 사용량 계산
   _cleanupOldRequests() {
     const oneMinuteAgo = Date.now() - 60000;
     this.requestHistory = this.requestHistory.filter(r => r.timestamp > oneMinuteAgo);
-    this.tokensUsedThisMinute = this.requestHistory.reduce((sum, r) => sum + r.tokens, 0);
+    this.outputTokensUsedThisMinute = this.requestHistory.reduce((sum, r) => sum + r.outputTokens, 0);
   }
 
-  // 예상 토큰만큼 예산이 있는지 확인하고, 없으면 대기
-  async waitForBudget(estimatedTokens, progressCallback = null) {
+  // 총 사용량 = 완료된 기록 + 인플라이트 예약
+  _totalUsage() {
+    return this.outputTokensUsedThisMinute + this.reservedTokens;
+  }
+
+  // 예상 출력 토큰만큼 예산이 있는지 확인하고, 없으면 대기 → 통과 시 예약
+  async waitForBudget(estimatedOutputTokens, progressCallback = null) {
     this._cleanupOldRequests();
 
-    // 예산 초과 시 대기
-    if (this.tokensUsedThisMinute + estimatedTokens > this.tpmLimit) {
+    if (this._totalUsage() + estimatedOutputTokens > this.outputTpmLimit) {
+      // 가장 오래된 완료 기록 기준으로 대기 시간 계산
       const oldestRequest = this.requestHistory[0];
       if (oldestRequest) {
         const waitTime = Math.max(0, 60000 - (Date.now() - oldestRequest.timestamp) + 1000);
         if (waitTime > 0 && progressCallback) {
-          progressCallback(`⏳ TPM 예산 대기 중... (${Math.ceil(waitTime / 1000)}초)`);
+          const usage = this._totalUsage().toLocaleString();
+          const limit = this.outputTpmLimit.toLocaleString();
+          progressCallback(`⏳ 출력 TPM 예산 대기 중... ${usage}/${limit} (${Math.ceil(waitTime / 1000)}초)`);
         }
         await this._sleep(waitTime);
-        return this.waitForBudget(estimatedTokens, progressCallback);
+        return this.waitForBudget(estimatedOutputTokens, progressCallback);
+      }
+      // 기록은 없지만 예약만 있는 경우 — 짧게 대기 후 재확인
+      if (this.reservedTokens > 0) {
+        if (progressCallback) {
+          progressCallback(`⏳ 인플라이트 요청 완료 대기 중... (예약: ${this.reservedTokens.toLocaleString()})`);
+        }
+        await this._sleep(5000);
+        return this.waitForBudget(estimatedOutputTokens, progressCallback);
       }
     }
+
+    // 예산 통과 → 즉시 예약하여 다른 동시 요청이 같은 예산을 쓰지 못하게 함
+    this.reservedTokens += estimatedOutputTokens;
   }
 
-  // 사용한 토큰 기록
-  recordUsage(tokens) {
-    this.requestHistory.push({ timestamp: Date.now(), tokens });
+  // API 완료 후: 예약 해제 + 실제 사용량 기록
+  recordUsage(outputTokens, reservedAmount) {
+    this.reservedTokens = Math.max(0, this.reservedTokens - reservedAmount);
+    this.requestHistory.push({ timestamp: Date.now(), outputTokens });
     this._cleanupOldRequests();
+  }
+
+  // 예약만 해제 (실패 시 — 실제 사용 없음)
+  releaseReservation(reservedAmount) {
+    this.reservedTokens = Math.max(0, this.reservedTokens - reservedAmount);
   }
 
   // 현재 사용량 조회
   getCurrentUsage() {
     this._cleanupOldRequests();
     return {
-      used: this.tokensUsedThisMinute,
-      limit: this.tpmLimit,
-      remaining: Math.max(0, this.tpmLimit - this.tokensUsedThisMinute),
+      used: this.outputTokensUsedThisMinute,
+      reserved: this.reservedTokens,
+      limit: this.outputTpmLimit,
+      remaining: Math.max(0, this.outputTpmLimit - this._totalUsage()),
     };
   }
 
@@ -168,8 +198,10 @@ export class ChapterGenerator {
     const fallback = {
       'claude-opus-4-6': { input: 5.0, output: 25.0 },
       'claude-opus-4-5-20251101': { input: 5.0, output: 25.0 },
+      'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
       'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0 },
       'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
+      'claude-haiku-4-5-20251001': { input: 0.8, output: 4.0 },
     };
     if (!existsSync(configPath)) {
       return fallback;
@@ -233,8 +265,9 @@ export class ChapterGenerator {
   }
 
   _calcMaxTokensForTime(timeMinutes, userMaxTokens) {
-    if (timeMinutes <= 0) return userMaxTokens;
-    const targetChars = timeMinutes * 100;
+    // estimated_time이 없으면 기본 1차시(50분) 적용하여 과도한 생성 방지
+    const effectiveMinutes = timeMinutes > 0 ? timeMinutes : 50;
+    const targetChars = effectiveMinutes * 100;
     const estimatedTokens = Math.floor(targetChars / 1.5);
     const timeCap = Math.max(4000, Math.floor(estimatedTokens * 1.4));
     return Math.min(userMaxTokens, timeCap);
@@ -462,23 +495,26 @@ export class ChapterGenerator {
     const templateAddition = await tm.getChapterPromptAddition(this.projectPath);
 
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
+    // estimated_time이 없으면 기본 1차시(50분) 기준으로 분량 가이드 생성
+    const effectiveMinutes = timeMinutes > 0 ? timeMinutes : 50;
+    const effectiveTimeLabel = estimatedTime || '50분 (기본)';
     let timeConstraint = '';
-    if (timeMinutes > 0) {
+    {
       let courseInfo = '';
       if (totalChapters > 0 && currentNum > 0) {
-        courseInfo = `\n**전체 과정**: 총 ${totalChapters}차시 중 ${currentNum}차시\n- 각 차시는 ${estimatedTime} 분량입니다\n`;
+        courseInfo = `\n**전체 과정**: 총 ${totalChapters}차시 중 ${currentNum}차시\n- 각 차시는 ${effectiveTimeLabel} 분량입니다\n`;
       }
-      const charMin = timeMinutes * 60;
-      const charMax = timeMinutes * 100;
-      const conceptCount = Math.max(1, Math.min(4, Math.floor(timeMinutes / 20)));
-      const stepCount = Math.max(2, Math.min(6, Math.floor(timeMinutes / 10)));
+      const charMin = effectiveMinutes * 60;
+      const charMax = effectiveMinutes * 100;
+      const conceptCount = Math.max(1, Math.min(4, Math.floor(effectiveMinutes / 20)));
+      const stepCount = Math.max(2, Math.min(6, Math.floor(effectiveMinutes / 10)));
 
       timeConstraint = `
 # ⏱️ 학습 시간 제약 (최우선 준수사항!)
-**이 챕터의 목표 학습 시간: ${estimatedTime}**
+**이 챕터의 목표 학습 시간: ${effectiveTimeLabel}**
 ${courseInfo}
 
-## 분량 가이드 (${estimatedTime} 기준)
+## 분량 가이드 (${effectiveTimeLabel} 기준)
 - 전체 글자 수: 약 ${charMin.toLocaleString()}~${charMax.toLocaleString()}자 (이 범위를 반드시 지키세요!)
 - 핵심 개념: ${conceptCount}개에 집중
 - 따라하기 실습: ${stepCount}단계 이내
@@ -487,15 +523,15 @@ ${courseInfo}
 ## 절대 금지
 - ${charMax.toLocaleString()}자를 초과하는 분량 작성 절대 금지
 - 하나의 차시에 너무 많은 개념을 담지 마세요
-- 이것은 ${estimatedTime} 수업 **한 차시** 분량입니다 (전체 교재가 아님!)
+- 이것은 ${effectiveTimeLabel} 수업 **한 차시** 분량입니다 (전체 교재가 아님!)
 `;
     }
 
     const pc = this._getPromptConfig();
-    const isCompact = timeMinutes > 0 && timeMinutes <= 60;
+    const isCompact = effectiveMinutes <= 60;
 
     const docStructure = isCompact
-      ? `# 문서 구조 (필수 - 경량 버전, ${estimatedTime} 차시용)
+      ? `# 문서 구조 (필수 - 경량 버전, ${effectiveTimeLabel} 차시용)
 
 ## 🎯 이 장에서 배우는 것
 - [ ] ...할 수 있다 (2-3개 체크박스)
@@ -601,8 +637,9 @@ ${templateAddition}
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
     const effectiveMaxTokens = this._calcMaxTokensForTime(timeMinutes, maxTokens);
 
-    if (timeMinutes > 0 && effectiveMaxTokens < maxTokens) {
-      this._log(`⏱️ ${chapterId} 시간 제약 적용: ${estimatedTime} → max_tokens ${maxTokens} → ${effectiveMaxTokens}`);
+    if (effectiveMaxTokens < maxTokens) {
+      const source = timeMinutes > 0 ? estimatedTime : '기본 1차시(50분)';
+      this._log(`⏱️ ${chapterId} 시간 제약 적용: ${source} → max_tokens ${maxTokens} → ${effectiveMaxTokens}`);
     }
 
     this._log(`📖 ${chapterId} (${chapterTitle}) 생성 시작 [max_tokens=${effectiveMaxTokens}]`);
@@ -618,13 +655,10 @@ ${templateAddition}
     const references = await this._loadReferences();
     const prompt = await this._buildPrompt(chapterId, chapterTitle, outline, references, partContext, effectiveMaxTokens, estimatedTime, totalChapters, currentNum);
 
-    // 예상 토큰 계산 (입력 + 출력)
-    const estimatedInputTokens = this._estimateTokens(prompt);
-    const estimatedTotalTokens = estimatedInputTokens + effectiveMaxTokens;
-
-    // TPM 예산 대기 (TokenBudgetManager가 있는 경우)
+    // TPM 예산 대기 — 출력 토큰 기준 (병목), 통과 시 자동 예약됨
+    const reserved = tokenBudget ? effectiveMaxTokens : 0;
     if (tokenBudget) {
-      await tokenBudget.waitForBudget(estimatedTotalTokens, progressCallback);
+      await tokenBudget.waitForBudget(effectiveMaxTokens, progressCallback);
     }
 
     try {
@@ -635,7 +669,7 @@ ${templateAddition}
       await writeFile(chapterFile, result.content, 'utf-8');
 
       if (tokenBudget) {
-        tokenBudget.recordUsage(result.inputTokens + result.outputTokens);
+        tokenBudget.recordUsage(result.outputTokens, reserved);
       }
 
       this._log(`✅ ${chapterId} 생성 완료 - 입력: ${result.inputTokens}, 출력: ${result.outputTokens}, 문자 수: ${result.content.length}`);
@@ -651,11 +685,55 @@ ${templateAddition}
         output_tokens: result.outputTokens,
       };
     } catch (e) {
-      // 429 Rate limit만 1회 재시도 (토큰 낭비 최소화)
+      // 429 Rate limit — Retry-After 헤더 활용, 최대 2회 재시도
       if (e.status === 429) {
-        this._log(`⏳ ${chapterId} Rate limit (429) - 60초 대기 후 1회 재시도`);
-        if (progressCallback) progressCallback(`⏳ Rate limit 감지 - 60초 대기 후 1회 재시도...`);
-        await new Promise(r => setTimeout(r, 60000));
+        const maxRetries = 2;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          const retryAfter = e.headers?.['retry-after'];
+          const waitSec = retryAfter ? Math.min(parseInt(retryAfter, 10) || 30, 120) : (attempt === 1 ? 30 : 60);
+          this._log(`⏳ ${chapterId} Rate limit (429) - ${waitSec}초 대기 후 재시도 ${attempt}/${maxRetries}`);
+          if (progressCallback) progressCallback(`⏳ Rate limit 감지 - ${waitSec}초 대기 후 재시도 (${attempt}/${maxRetries})...`);
+          await new Promise(r => setTimeout(r, waitSec * 1000));
+
+          try {
+            const retryResult = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback, true);
+            const chapterFile = join(this.docsPath, `${chapterId}.md`);
+            await writeFile(chapterFile, retryResult.content, 'utf-8');
+
+            if (tokenBudget) {
+              tokenBudget.recordUsage(retryResult.outputTokens, reserved);
+            }
+
+            this._log(`✅ ${chapterId} 재시도 ${attempt} 성공 - 입력: ${retryResult.inputTokens}, 출력: ${retryResult.outputTokens}`);
+            if (progressCallback) progressCallback(`✅ ${chapterId} 재시도 완료! (${retryResult.content.length.toLocaleString()}자)`);
+
+            return {
+              success: true,
+              chapter_id: chapterId,
+              file_path: chapterFile,
+              content: retryResult.content,
+              tokens_used: retryResult.inputTokens + retryResult.outputTokens,
+              input_tokens: retryResult.inputTokens,
+              output_tokens: retryResult.outputTokens,
+              retried: true,
+            };
+          } catch (retryErr) {
+            if (retryErr.status !== 429 || attempt === maxRetries) {
+              this._log(`❌ ${chapterId} 재시도 ${attempt} 실패: ${retryErr.message}`);
+              if (progressCallback) progressCallback(`❌ ${chapterId} 재시도 실패: ${retryErr.message}`);
+              if (tokenBudget) tokenBudget.releaseReservation(reserved);
+              return { success: false, chapter_id: chapterId, error: retryErr.message };
+            }
+            e = retryErr; // 다음 루프에서 Retry-After 헤더 다시 확인
+          }
+        }
+      }
+
+      // 529 Overloaded — 잠시 대기 후 1회 재시도
+      if (e.status === 529) {
+        this._log(`⏳ ${chapterId} API Overloaded (529) - 30초 대기 후 1회 재시도`);
+        if (progressCallback) progressCallback(`⏳ API 과부하 감지 - 30초 대기 후 재시도...`);
+        await new Promise(r => setTimeout(r, 30000));
 
         try {
           const retryResult = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback, true);
@@ -663,10 +741,10 @@ ${templateAddition}
           await writeFile(chapterFile, retryResult.content, 'utf-8');
 
           if (tokenBudget) {
-            tokenBudget.recordUsage(retryResult.inputTokens + retryResult.outputTokens);
+            tokenBudget.recordUsage(retryResult.outputTokens, reserved);
           }
 
-          this._log(`✅ ${chapterId} 재시도 성공 - 입력: ${retryResult.inputTokens}, 출력: ${retryResult.outputTokens}`);
+          this._log(`✅ ${chapterId} 529 재시도 성공`);
           if (progressCallback) progressCallback(`✅ ${chapterId} 재시도 완료! (${retryResult.content.length.toLocaleString()}자)`);
 
           return {
@@ -680,13 +758,15 @@ ${templateAddition}
             retried: true,
           };
         } catch (e2) {
-          this._log(`❌ ${chapterId} 재시도도 실패: ${e2.message}`);
+          this._log(`❌ ${chapterId} 529 재시도 실패: ${e2.message}`);
           if (progressCallback) progressCallback(`❌ ${chapterId} 재시도 실패: ${e2.message}`);
+          if (tokenBudget) tokenBudget.releaseReservation(reserved);
           return { success: false, chapter_id: chapterId, error: e2.message };
         }
       }
 
-      // 429 외의 에러는 재시도하지 않음 (토큰 낭비 방지)
+      // 그 외 에러는 재시도하지 않음 — 예약 해제
+      if (tokenBudget) tokenBudget.releaseReservation(reserved);
       this._log(`❌ ${chapterId} 생성 실패 (재시도 안 함): ${e.message}`);
       if (progressCallback) progressCallback(`❌ ${chapterId} 생성 실패: ${e.message}`);
       return { success: false, chapter_id: chapterId, error: e.message };
@@ -706,7 +786,7 @@ ${templateAddition}
   async generateAllChapters(tocData, model = 'claude-opus-4-6', maxTokens = 8000, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0, chapterIds = null) {
     const startTime = Date.now();
 
-    // TPM 예산 관리자 생성 (tpmLimit > 0인 경우에만)
+    // 출력 TPM 예산 관리자 생성 (tpmLimit > 0인 경우에만)
     const tokenBudget = tpmLimit > 0 ? new TokenBudgetManager(tpmLimit) : null;
 
     // 상태 추적 초기화
@@ -734,9 +814,9 @@ ${templateAddition}
       progressCallback?.(message);
     };
 
-    this._log(`🚀 챕터 배치 생성 시작 - 모델: ${model}, 동시 실행: ${concurrent}, TPM 제한: ${tpmLimit || '없음'}`);
+    this._log(`🚀 챕터 배치 생성 시작 - 모델: ${model}, 동시 실행: ${concurrent}, 출력 TPM 제한: ${tpmLimit || '없음'}`);
     wrappedProgress('🚀 챕터 배치 생성 시작!');
-    if (tpmLimit > 0) wrappedProgress(`📊 TPM 제한: ${tpmLimit.toLocaleString()} 토큰/분`);
+    if (tpmLimit > 0) wrappedProgress(`📊 출력 TPM 제한: ${tpmLimit.toLocaleString()} 토큰/분`);
 
     const totalChaptersCount = (tocData.parts || []).reduce((sum, p) => sum + (p.chapters || []).length, 0);
 
