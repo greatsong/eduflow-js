@@ -1,0 +1,2 @@
+/* 헤더 제목 클릭 시 홈으로 이동 */
+.md-header__title { cursor: pointer; }

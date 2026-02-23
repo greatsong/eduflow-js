@@ -1,0 +1,2126 @@
+
+<!doctype html>
+<html lang="ko" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="프로그래밍 경험이 없는 고등학생을 위한 라즈베리파이 피코 입문서로, 6주간 직접 만들고 확인하며 배우는 실습 중심 교육 자료입니다.">
+      
+      
+        <meta name="author" content="Created with Data-AI-Book Generator">
+      
+      
+      
+        <link rel="prev" href="..">
+      
+      
+        <link rel="next" href="../chapter02/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>피코야, 반가워! - 하드웨어 살펴보기 - 고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#-" class="md-skip">
+          콘텐츠로 이동
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="상단/헤더">
+    <a href=".." title="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" class="md-header__button md-logo" aria-label="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              피코야, 반가워! - 하드웨어 살펴보기
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="검색" placeholder="검색" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="검색">
+        
+        <button type="reset" class="md-search__icon md-icon" title="지우기" aria-label="지우기" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            검색 초기화
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="탭" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Part 1 - 피코와 첫 만남
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter04/" class="md-tabs__link">
+          
+  
+  
+  Part 2 - 빛으로 말하기 - LED 제어
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter07/" class="md-tabs__link">
+          
+  
+  
+  Part 3 - 입력을 받아라 - 버튼과 상호작용
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter10/" class="md-tabs__link">
+          
+  
+  
+  Part 4 - 소리로 표현하기 - 부저 활용
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter13/" class="md-tabs__link">
+          
+  
+  
+  Part 5 - 세상을 감지하라 - 센서 활용
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter16/" class="md-tabs__link">
+          
+  
+  
+  Part 6 - 나만의 스마트 기기 - 통합 프로젝트
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="네비게이션" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" class="md-nav__button md-logo" aria-label="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 1 - 피코와 첫 만남
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 1 - 피코와 첫 만남
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    피코야, 반가워! - 하드웨어 살펴보기
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    피코야, 반가워! - 하드웨어 살펴보기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="목차">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      목차
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 이 장에서 배우는 것
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        💡 왜 이걸 배우나요?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📚 핵심 개념
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📚 핵심 개념">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 1: 라즈베리파이 피코란?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 2: 피코 보드의 주요 부품
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-gpio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 3: GPIO 핀이란?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔨 따라하기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔨 따라하기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: 피코 보드 관찰하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: 피코를 컴퓨터에 연결하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: 연결 상태 확인하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠️ 자주 하는 실수
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="⚠️ 자주 하는 실수">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-bootsel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 1: BOOTSEL 버튼을 안 누르고 연결함
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 2: 충전 전용 케이블 사용
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 3: 보드를 잘못 잡아서 정전기 피해
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ 스스로 점검하기
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 더 해보기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 더 해보기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 1: 핀 번호 찾기 👀
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-vs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 2: 피코 vs 아두이노 검색하기 🔍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 3: 피코로 만든 프로젝트 구경하기 ⭐
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔗 다음 장으로
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter02/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    개발 환경 설정 - Thonny 설치하기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter03/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hello, Pico! - 첫 번째 프로그램 실행
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 2 - 빛으로 말하기 - LED 제어
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 2 - 빛으로 말하기 - LED 제어
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter04/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    브레드보드와 친해지기 - LED 회로 구성
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter05/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    깜빡깜빡 - LED 점멸 프로그램
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter06/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    무지개 신호등 - 다중 LED 패턴
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 3 - 입력을 받아라 - 버튼과 상호작용
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 3 - 입력을 받아라 - 버튼과 상호작용
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter07/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    버튼 연결하기 - 디지털 입력의 시작
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter08/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    누르면 반응해! - 조건문 활용
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter09/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    반응속도 게임 만들기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 4 - 소리로 표현하기 - 부저 활용
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 4 - 소리로 표현하기 - 부저 활용
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter10/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    삐- 소리의 원리 - 부저 연결과 PWM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter11/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    나만의 멜로디 - 학교종 연주하기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter12/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    피아노 만들기 - 버튼으로 연주
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 5 - 세상을 감지하라 - 센서 활용
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 5 - 세상을 감지하라 - 센서 활용
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter13/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    밝기 감지 - 조도 센서
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter14/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    자동 조명 만들기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    온도계 만들기 - 온도 센서 활용
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 6 - 나만의 스마트 기기 - 통합 프로젝트
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 6 - 나만의 스마트 기기 - 통합 프로젝트
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter16/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    프로젝트 기획 - 아이디어 구체화
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter17/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    만들기 - 회로 구성과 코딩
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter18/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    발표와 공유 - 프로젝트 시연
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="목차">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      목차
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 이 장에서 배우는 것
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        💡 왜 이걸 배우나요?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📚 핵심 개념
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📚 핵심 개념">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 1: 라즈베리파이 피코란?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 2: 피코 보드의 주요 부품
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-gpio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 3: GPIO 핀이란?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔨 따라하기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔨 따라하기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: 피코 보드 관찰하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: 피코를 컴퓨터에 연결하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: 연결 상태 확인하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠️ 자주 하는 실수
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="⚠️ 자주 하는 실수">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-bootsel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 1: BOOTSEL 버튼을 안 누르고 연결함
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 2: 충전 전용 케이블 사용
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 3: 보드를 잘못 잡아서 정전기 피해
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ 스스로 점검하기
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 더 해보기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 더 해보기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 1: 핀 번호 찾기 👀
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-vs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 2: 피코 vs 아두이노 검색하기 🔍
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 3: 피코로 만든 프로젝트 구경하기 ⭐
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔗 다음 장으로
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="-">피코야, 반가워! - 하드웨어 살펴보기<a class="headerlink" href="#-" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>Part 1</strong>: 피코와 첫 만남 | ⏱️ <strong>30분</strong></p>
+</blockquote>
+<hr />
+<h2 id="_1">🎯 이 장에서 배우는 것<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[ ] 라즈베리파이 피코가 무엇인지 설명할 수 있다</li>
+<li>[ ] 피코 보드의 주요 부품(USB, LED, 핀)의 역할을 말할 수 있다</li>
+<li>[ ] 피코를 컴퓨터에 안전하게 연결할 수 있다</li>
+</ul>
+<hr />
+<h2 id="_2">💡 왜 이걸 배우나요?<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<p>여러분이 레고 블록으로 무언가를 만들기 전에 각 블록이 어떤 역할을 하는지 알아야 하듯이, 피코로 프로젝트를 만들기 전에 이 작은 보드가 어떻게 생겼고 각 부분이 무슨 일을 하는지 알아야 해요.</p>
+<p>"이 USB 포트는 왜 여기 있지?", "이 작은 버튼은 뭐지?", "옆에 늘어선 구멍들은 뭐야?"</p>
+<p>이런 궁금증을 해결하고 나면, 앞으로 LED를 켜고, 센서를 연결하고, 인터넷에 연결하는 모든 과정이 훨씬 쉬워집니다!</p>
+<hr />
+<h2 id="_3">📚 핵심 개념<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<h3 id="1">개념 1: 라즈베리파이 피코란?<a class="headerlink" href="#1" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>비유로 시작</strong>: "피코는 마치 <strong>아주 작은 컴퓨터</strong>와 같아요. 우리가 쓰는 컴퓨터처럼 프로그램을 실행할 수 있지만, 키보드나 모니터 대신 LED, 센서, 모터 같은 것들을 연결해서 사용해요."</p>
+</li>
+<li>
+<p><strong>정확한 정의</strong>: "라즈베리파이 피코(Raspberry Pi Pico)는 <strong>마이크로컨트롤러 보드</strong>입니다. 우리가 작성한 코드를 실행해서 전자 부품들을 제어하는 역할을 해요."</p>
+</li>
+<li>
+<p><strong>예시로 확인</strong>: "스마트폰이 앱을 실행하듯, 피코는 우리가 작성한 코드를 실행해요. 예를 들어 '버튼을 누르면 LED를 켜라'라는 코드를 넣으면, 피코가 24시간 그 일을 해줍니다!"</p>
+</li>
+</ol>
+<p><strong>쉽게 말하면</strong>: 피코는 전자부품들의 두뇌 역할을 하는 초소형 컴퓨터예요! 🧠</p>
+<hr />
+<h3 id="2">개념 2: 피코 보드의 주요 부품<a class="headerlink" href="#2" title="Permanent link">&para;</a></h3>
+<p>피코 보드를 손에 들고 직접 살펴볼까요?</p>
+<div class="mermaid">flowchart TB
+    subgraph PICO["🔲 라즈베리파이 피코 보드"]
+        direction TB
+        USB["🔌 USB 포트"]
+        BOOTSEL["⚪ BOOTSEL 버튼"]
+        LED["💡 내장 LED"]
+        CHIP["🧠 RP2040 칩"]
+        PINS["📍 GPIO 핀들"]
+    end
+
+    USB --&gt; |"전원 공급 &amp; 코드 전송"| CHIP
+    BOOTSEL --&gt; |"특수 모드 진입"| CHIP
+    CHIP --&gt; |"제어 신호"| LED
+    CHIP --&gt; |"입출력 제어"| PINS
+
+    style USB fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style BOOTSEL fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style LED fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style CHIP fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style PINS fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px</div>
+<table>
+<thead>
+<tr>
+<th>부품</th>
+<th>위치</th>
+<th>역할</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🔌 <strong>USB 포트</strong></td>
+<td>보드 한쪽 끝</td>
+<td>컴퓨터 연결, 전원 공급, 코드 전송</td>
+</tr>
+<tr>
+<td>⚪ <strong>BOOTSEL 버튼</strong></td>
+<td>USB 포트 옆</td>
+<td>특수 모드로 부팅 (처음 설정할 때 사용)</td>
+</tr>
+<tr>
+<td>💡 <strong>내장 LED</strong></td>
+<td>보드 중앙</td>
+<td>테스트용, 코드가 잘 동작하는지 확인</td>
+</tr>
+<tr>
+<td>🧠 <strong>RP2040 칩</strong></td>
+<td>보드 중앙 큰 칩</td>
+<td>피코의 두뇌, 모든 계산 수행</td>
+</tr>
+<tr>
+<td>📍 <strong>GPIO 핀</strong></td>
+<td>보드 양쪽 가장자리</td>
+<td>센서, LED 등 외부 장치 연결</td>
+</tr>
+</tbody>
+</table>
+<p><strong>쉽게 말하면</strong>: USB로 전원과 코드를 받고, 칩이 계산하고, 핀으로 외부 장치를 제어해요!</p>
+<hr />
+<h3 id="3-gpio">개념 3: GPIO 핀이란?<a class="headerlink" href="#3-gpio" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>비유로 시작</strong>: "GPIO 핀은 피코의 <strong>손가락</strong>과 같아요. 손가락으로 버튼을 누르거나 물건을 집듯이, GPIO 핀으로 신호를 보내거나 받을 수 있어요."</p>
+</li>
+<li>
+<p><strong>정확한 정의</strong>: "GPIO는 General Purpose Input/Output의 약자로, <strong>범용 입출력 핀</strong>이라는 뜻이에요. 프로그램으로 이 핀들을 제어해서 전자부품과 소통해요."</p>
+</li>
+<li>
+<p><strong>예시로 확인</strong>: </p>
+</li>
+<li>📤 <strong>출력</strong>: "GP16 핀에 HIGH 신호를 보내면 LED가 켜져요"</li>
+<li>📥 <strong>입력</strong>: "GP20 핀으로 버튼이 눌렸는지 확인할 수 있어요"</li>
+</ol>
+<p><strong>쉽게 말하면</strong>: GPIO 핀 = 피코와 외부 세계를 연결하는 통로!</p>
+<hr />
+<h2 id="_4">🔨 따라하기<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<h3 id="step-1">Step 1: 피코 보드 관찰하기<a class="headerlink" href="#step-1" title="Permanent link">&para;</a></h3>
+<p><strong>목표</strong>: 실제 피코 보드를 손에 들고 각 부품의 위치를 확인해요.</p>
+<p><strong>해볼 것</strong>:
+1. 키트에서 피코 보드를 꺼내세요
+2. USB 포트가 있는 쪽을 찾아보세요 (보드의 한쪽 끝에 있어요)
+3. USB 포트 바로 옆에 있는 작은 흰색 버튼(BOOTSEL)을 찾아보세요
+4. 보드 중앙의 작은 LED를 찾아보세요
+5. 보드 양쪽 가장자리에 늘어선 핀(구멍)들을 확인하세요</p>
+<p><strong>여기서 잠깐! 🤔</strong>
+피코를 다룰 때는 <strong>가장자리를 잡으세요</strong>! 보드 중앙의 칩이나 금속 부분을 손으로 직접 만지면 정전기로 고장날 수 있어요.</p>
+<hr />
+<h3 id="step-2">Step 2: 피코를 컴퓨터에 연결하기<a class="headerlink" href="#step-2" title="Permanent link">&para;</a></h3>
+<p><strong>목표</strong>: USB 케이블로 피코를 컴퓨터에 안전하게 연결해요.</p>
+<p><strong>준비물</strong>: 
+- 라즈베리파이 피코
+- Micro USB 케이블</p>
+<p><strong>연결 순서</strong>:</p>
+<div class="mermaid">flowchart LR
+    A["1️⃣ 케이블 준비"] --&gt; B["2️⃣ BOOTSEL 누름"]
+    B --&gt; C["3️⃣ USB 연결"]
+    C --&gt; D["4️⃣ 버튼 떼기"]
+    D --&gt; E["5️⃣ 드라이브 확인"]
+
+    style A fill:#e3f2fd,stroke:#1976d2
+    style B fill:#fff3e0,stroke:#f57c00
+    style C fill:#e8f5e9,stroke:#388e3c
+    style D fill:#fce4ec,stroke:#c2185b
+    style E fill:#f3e5f5,stroke:#7b1fa2</div>
+<ol>
+<li><strong>케이블 준비</strong>: Micro USB 케이블의 작은 쪽이 피코에 연결됩니다</li>
+<li><strong>BOOTSEL 버튼 누르기</strong>: 피코의 BOOTSEL 버튼을 <strong>누른 상태로 유지</strong></li>
+<li><strong>USB 연결</strong>: 버튼을 누른 채로 USB 케이블을 피코에 연결</li>
+<li><strong>컴퓨터 연결</strong>: 케이블의 반대쪽을 컴퓨터 USB 포트에 연결</li>
+<li><strong>버튼 떼기</strong>: 연결이 완료되면 BOOTSEL 버튼에서 손을 뗌</li>
+</ol>
+<p><strong>성공 확인</strong>:
+- 컴퓨터에서 <strong>RPI-RP2</strong>라는 이름의 USB 드라이브가 나타나면 성공! 🎉</p>
+<p><strong>여기서 잠깐! 🤔</strong>
+BOOTSEL 버튼을 누른 상태로 연결하는 건 <strong>처음 한 번</strong>만 필요해요. 나중에 MicroPython을 설치하고 나면, 그냥 연결만 하면 됩니다!</p>
+<hr />
+<h3 id="step-3">Step 3: 연결 상태 확인하기<a class="headerlink" href="#step-3" title="Permanent link">&para;</a></h3>
+<p><strong>목표</strong>: 피코가 컴퓨터에 제대로 인식되었는지 확인해요.</p>
+<p><strong>Windows에서 확인</strong>:
+1. 파일 탐색기를 열어요
+2. "내 PC" 또는 "이 PC"를 클릭
+3. <strong>RPI-RP2</strong> 드라이브가 보이는지 확인</p>
+<p><strong>Mac에서 확인</strong>:
+1. Finder를 열어요
+2. 왼쪽 사이드바에 <strong>RPI-RP2</strong>가 보이는지 확인</p>
+<div class="mermaid">flowchart LR
+    subgraph 컴퓨터["💻 컴퓨터"]
+        탐색기["📁 파일 탐색기"]
+    end
+
+    subgraph 드라이브["✅ 성공!"]
+        RPI["📀 RPI-RP2"]
+    end
+
+    탐색기 --&gt; RPI
+
+    style 탐색기 fill:#e3f2fd,stroke:#1976d2
+    style RPI fill:#e8f5e9,stroke:#388e3c</div>
+<hr />
+<h2 id="_5">⚠️ 자주 하는 실수<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<h3 id="1-bootsel">실수 1: BOOTSEL 버튼을 안 누르고 연결함<a class="headerlink" href="#1-bootsel" title="Permanent link">&para;</a></h3>
+<p><strong>증상</strong>: USB 드라이브(RPI-RP2)가 나타나지 않음</p>
+<p><strong>원인</strong>: 피코가 일반 모드로 부팅되어서 드라이브로 인식되지 않음</p>
+<p><strong>해결</strong>:
+1. USB 케이블을 뽑으세요
+2. BOOTSEL 버튼을 <strong>먼저</strong> 누르고
+3. <strong>누른 상태로</strong> USB를 다시 연결하세요
+4. 연결 후 버튼을 떼세요</p>
+<hr />
+<h3 id="2_1">실수 2: 충전 전용 케이블 사용<a class="headerlink" href="#2_1" title="Permanent link">&para;</a></h3>
+<p><strong>증상</strong>: 피코에 전원은 들어오는 것 같은데(LED가 깜빡일 수 있음) 컴퓨터에서 인식 안 됨</p>
+<p><strong>원인</strong>: 데이터 전송이 안 되는 충전 전용 케이블 사용</p>
+<p><strong>해결</strong>:
+- <strong>데이터 전송이 가능한</strong> Micro USB 케이블을 사용하세요
+- 스마트폰 충전기에 포함된 케이블 중 일부는 충전만 됩니다
+- 키트에 포함된 케이블을 사용하면 확실해요!</p>
+<hr />
+<h3 id="3">실수 3: 보드를 잘못 잡아서 정전기 피해<a class="headerlink" href="#3" title="Permanent link">&para;</a></h3>
+<p><strong>증상</strong>: 처음엔 됐는데 갑자기 피코가 인식이 안 됨</p>
+<p><strong>원인</strong>: 손으로 칩이나 핀을 직접 만져서 정전기 피해 발생</p>
+<p><strong>해결</strong>:
+- 항상 <strong>보드의 가장자리</strong>를 잡으세요
+- 금속 부분을 직접 만지지 마세요
+- 작업 전 금속 물체를 만져서 정전기를 빼는 것도 좋아요</p>
+<hr />
+<h2 id="_6">✅ 스스로 점검하기<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>피코의 역할은 무엇인가요?</strong></p>
+</li>
+<li>
+<p><strong>BOOTSEL 버튼은 언제 사용하나요?</strong></p>
+</li>
+<li>
+<p><strong>GPIO 핀의 역할을 한 문장으로 설명해보세요.</strong></p>
+</li>
+<li>
+<p><strong>피코를 컴퓨터에 연결했을 때, 성공적으로 인식되면 무엇이 나타나나요?</strong></p>
+</li>
+</ol>
+<details>
+<summary>정답 확인</summary>
+
+1. **피코의 역할**: 우리가 작성한 코드를 실행해서 LED, 센서, 모터 같은 전자부품을 제어하는 초소형 컴퓨터(마이크로컨트롤러)
+
+2. **BOOTSEL 버튼**: 피코를 특수 모드(부트 모드)로 부팅할 때 사용. 주로 처음 MicroPython을 설치하거나 펌웨어를 업데이트할 때 필요
+
+3. **GPIO 핀의 역할**: 피코와 외부 전자부품(센서, LED 등)을 연결해서 신호를 주고받는 통로
+
+4. **성공 시 나타나는 것**: RPI-RP2라는 이름의 USB 드라이브
+
+</details>
+
+<hr />
+<h2 id="_7">🚀 더 해보기<a class="headerlink" href="#_7" title="Permanent link">&para;</a></h2>
+<h3 id="1_1">도전 1: 핀 번호 찾기 👀<a class="headerlink" href="#1_1" title="Permanent link">&para;</a></h3>
+<p>피코 보드를 자세히 보면 각 핀 옆에 작은 글씨로 번호가 적혀 있어요. GP0, GP1, GP2... 이런 식으로요. <strong>GP16이 어디 있는지</strong> 찾아보세요!</p>
+<h3 id="2-vs">도전 2: 피코 vs 아두이노 검색하기 🔍<a class="headerlink" href="#2-vs" title="Permanent link">&para;</a></h3>
+<p>"라즈베리파이 피코 vs 아두이노"를 검색해서 둘의 차이점을 3가지 찾아보세요. 어떤 점이 다른가요?</p>
+<h3 id="3_1">도전 3: 피코로 만든 프로젝트 구경하기 ⭐<a class="headerlink" href="#3_1" title="Permanent link">&para;</a></h3>
+<p>YouTube에서 "Raspberry Pi Pico project"를 검색해보세요. 어떤 멋진 프로젝트들이 있나요? 가장 만들어보고 싶은 것을 하나 골라보세요!</p>
+<hr />
+<h2 id="_8">🔗 다음 장으로<a class="headerlink" href="#_8" title="Permanent link">&para;</a></h2>
+<p>축하해요! 🎉 이번 장에서 우리는:
+- ✅ 피코가 무엇인지 알았어요
+- ✅ 보드의 각 부품(USB, BOOTSEL, LED, 칩, 핀)이 무슨 역할을 하는지 배웠어요
+- ✅ 피코를 컴퓨터에 안전하게 연결하는 방법을 익혔어요</p>
+<p><strong>다음 장</strong>에서는 피코에 <strong>MicroPython</strong>을 설치하고, 드디어 <strong>첫 번째 코드</strong>를 실행해볼 거예요. "Hello, World!"를 출력하고, 피코의 내장 LED를 깜빡이게 만들어봐요! </p>
+<p>우리의 피코에 생명을 불어넣을 준비 되셨나요? 💪</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  맨위로
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\ud074\ub9bd\ubcf4\ub4dc\uc5d0 \ubcf5\uc0ac\ub428", "clipboard.copy": "\ud074\ub9bd\ubcf4\ub4dc\ub85c \ubcf5\uc0ac", "search.result.more.one": "\uc774 \ubb38\uc11c\uc5d0\uc11c 1\uac1c\uc758 \uac80\uc0c9 \uacb0\uacfc \ub354 \ubcf4\uae30", "search.result.more.other": "\uc774 \ubb38\uc11c\uc5d0\uc11c #\uac1c\uc758 \uac80\uc0c9 \uacb0\uacfc \ub354 \ubcf4\uae30", "search.result.none": "\uac80\uc0c9\uc5b4\uc640 \uc77c\uce58\ud558\ub294 \ubb38\uc11c\uac00 \uc5c6\uc2b5\ub2c8\ub2e4", "search.result.one": "1\uac1c\uc758 \uc77c\uce58\ud558\ub294 \ubb38\uc11c", "search.result.other": "#\uac1c\uc758 \uc77c\uce58\ud558\ub294 \ubb38\uc11c", "search.result.placeholder": "\uac80\uc0c9\uc5b4\ub97c \uc785\ub825\ud558\uc138\uc694", "search.result.term.missing": "\ud3ec\ud568\ub418\uc9c0 \uc54a\uc740 \uac80\uc0c9\uc5b4", "select.version": "\ubc84\uc804 \uc120\ud0dd"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10/dist/mermaid.min.js"></script>
+      
+        <script src="../javascripts/title-link.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,2271 @@
+
+<!doctype html>
+<html lang="ko" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="프로그래밍 경험이 없는 고등학생을 위한 라즈베리파이 피코 입문서로, 6주간 직접 만들고 확인하며 배우는 실습 중심 교육 자료입니다.">
+      
+      
+        <meta name="author" content="Created with Data-AI-Book Generator">
+      
+      
+      
+        <link rel="prev" href="../chapter03/">
+      
+      
+        <link rel="next" href="../chapter05/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>브레드보드와 친해지기 - LED 회로 구성 - 고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/custom.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#chapter-04-led" class="md-skip">
+          콘텐츠로 이동
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="상단/헤더">
+    <a href=".." title="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" class="md-header__button md-logo" aria-label="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              브레드보드와 친해지기 - LED 회로 구성
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="검색" placeholder="검색" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="검색">
+        
+        <button type="reset" class="md-search__icon md-icon" title="지우기" aria-label="지우기" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            검색 초기화
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="탭" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter01/" class="md-tabs__link">
+          
+  
+  
+  Part 1 - 피코와 첫 만남
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Part 2 - 빛으로 말하기 - LED 제어
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter07/" class="md-tabs__link">
+          
+  
+  
+  Part 3 - 입력을 받아라 - 버튼과 상호작용
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter10/" class="md-tabs__link">
+          
+  
+  
+  Part 4 - 소리로 표현하기 - 부저 활용
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter13/" class="md-tabs__link">
+          
+  
+  
+  Part 5 - 세상을 감지하라 - 센서 활용
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chapter16/" class="md-tabs__link">
+          
+  
+  
+  Part 6 - 나만의 스마트 기기 - 통합 프로젝트
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="네비게이션" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" class="md-nav__button md-logo" aria-label="고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    고등학생을 위한 피코 첫걸음: 만들면서 배우는 6주 프로젝트
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 1 - 피코와 첫 만남
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 1 - 피코와 첫 만남
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter01/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    피코야, 반가워! - 하드웨어 살펴보기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter02/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    개발 환경 설정 - Thonny 설치하기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter03/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hello, Pico! - 첫 번째 프로그램 실행
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 2 - 빛으로 말하기 - LED 제어
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 2 - 빛으로 말하기 - LED 제어
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    브레드보드와 친해지기 - LED 회로 구성
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    브레드보드와 친해지기 - LED 회로 구성
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="목차">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      목차
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 이 장에서 배우는 것
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        💡 왜 이걸 배우나요?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📚 핵심 개념
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📚 핵심 개념">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 1: 브레드보드의 구조
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 2: LED의 극성
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 3: 저항의 역할
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔨 따라하기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔨 따라하기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: 브레드보드 연결 이해하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: LED 회로 구성하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: 코드로 LED 제어하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-grove-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Grove LED 사용하기 (더 쉬운 방법!)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📝 전체 코드
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠️ 자주 하는 실수
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="⚠️ 자주 하는 실수">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 1: LED가 안 켜져요!
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-led_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 2: LED가 매우 어둡거나 안 켜져요
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 3: 저항 없이 연결했어요
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ 스스로 점검하기
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 더 해보기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 더 해보기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 1: 깜빡임 속도 조절하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-led-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 2: LED 2개 연결하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-sos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 3: SOS 신호 만들기 ⭐
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔗 다음 장으로
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter05/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    깜빡깜빡 - LED 점멸 프로그램
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter06/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    무지개 신호등 - 다중 LED 패턴
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 3 - 입력을 받아라 - 버튼과 상호작용
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 3 - 입력을 받아라 - 버튼과 상호작용
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter07/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    버튼 연결하기 - 디지털 입력의 시작
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter08/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    누르면 반응해! - 조건문 활용
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter09/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    반응속도 게임 만들기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 4 - 소리로 표현하기 - 부저 활용
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 4 - 소리로 표현하기 - 부저 활용
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter10/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    삐- 소리의 원리 - 부저 연결과 PWM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter11/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    나만의 멜로디 - 학교종 연주하기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter12/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    피아노 만들기 - 버튼으로 연주
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 5 - 세상을 감지하라 - 센서 활용
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 5 - 세상을 감지하라 - 센서 활용
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter13/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    밝기 감지 - 조도 센서
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter14/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    자동 조명 만들기
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    온도계 만들기 - 온도 센서 활용
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part 6 - 나만의 스마트 기기 - 통합 프로젝트
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Part 6 - 나만의 스마트 기기 - 통합 프로젝트
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter16/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    프로젝트 기획 - 아이디어 구체화
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter17/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    만들기 - 회로 구성과 코딩
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chapter18/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    발표와 공유 - 프로젝트 시연
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="목차">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      목차
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎯 이 장에서 배우는 것
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        💡 왜 이걸 배우나요?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📚 핵심 개념
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📚 핵심 개념">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 1: 브레드보드의 구조
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 2: LED의 극성
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        개념 3: 저항의 역할
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔨 따라하기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🔨 따라하기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: 브레드보드 연결 이해하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: LED 회로 구성하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: 코드로 LED 제어하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-grove-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Grove LED 사용하기 (더 쉬운 방법!)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📝 전체 코드
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠️ 자주 하는 실수
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="⚠️ 자주 하는 실수">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-led" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 1: LED가 안 켜져요!
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-led_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 2: LED가 매우 어둡거나 안 켜져요
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        실수 3: 저항 없이 연결했어요
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ 스스로 점검하기
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🚀 더 해보기
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🚀 더 해보기">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 1: 깜빡임 속도 조절하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-led-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 2: LED 2개 연결하기
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-sos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        도전 3: SOS 신호 만들기 ⭐
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🔗 다음 장으로
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="chapter-04-led">Chapter 04: 브레드보드와 친해지기 - LED 회로 구성<a class="headerlink" href="#chapter-04-led" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>Part 2</strong>: 빛으로 말하기 - LED 제어</p>
+</blockquote>
+<hr />
+<h2 id="_1">🎯 이 장에서 배우는 것<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[ ] 브레드보드의 구조와 내부 연결 원리를 설명할 수 있다</li>
+<li>[ ] LED의 극성(+/-)을 구분하고 올바르게 연결할 수 있다</li>
+<li>[ ] 저항의 역할을 이해하고 LED 보호 회로를 구성할 수 있다</li>
+<li>[ ] 회로도를 보고 브레드보드에 동일한 회로를 구성할 수 있다</li>
+</ul>
+<hr />
+<h2 id="_2">💡 왜 이걸 배우나요?<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<p>지금까지는 피코에 내장된 LED만 제어했어요. 하지만 실제 프로젝트에서는 <strong>외부 부품</strong>을 연결해야 합니다. 무드등, 알림 장치, 로봇 눈... 모두 외부 LED가 필요하죠!</p>
+<p>브레드보드는 <strong>납땜 없이</strong> 부품을 연결할 수 있는 마법의 보드예요. 레고 블록처럼 꽂았다 뺐다 할 수 있어서, 실험하고 수정하기 딱 좋습니다.</p>
+<p>이번 장을 마치면, 여러분은 직접 LED 회로를 구성하고 코드로 제어할 수 있게 됩니다! 🎉</p>
+<hr />
+<h2 id="_3">📚 핵심 개념<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<h3 id="1">개념 1: 브레드보드의 구조<a class="headerlink" href="#1" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>비유로 시작</strong>: "브레드보드는 마치 <strong>아파트 복도</strong>와 같아요. 같은 층(가로줄)에 사는 사람들은 서로 연결되어 있고, 다른 층과는 분리되어 있죠."</p>
+</li>
+<li>
+<p><strong>정확한 정의</strong>: "브레드보드는 내부에 금속 클립이 있어서 특정 구멍들이 전기적으로 연결되어 있는 실험용 기판입니다."</p>
+</li>
+<li>
+<p><strong>예시로 확인</strong>: "예를 들어, 1번 줄의 a-b-c-d-e 구멍은 모두 연결되어 있어요. 여기에 부품 다리들을 꽂으면 자동으로 연결됩니다!"</p>
+</li>
+</ol>
+<div class="mermaid">flowchart TB
+    subgraph 브레드보드["🔌 브레드보드 연결 구조"]
+        direction TB
+        subgraph 전원["⚡ 전원 레일 (세로 연결)"]
+            P1["+ + + + +"]
+            P2["- - - - -"]
+        end
+        subgraph 중앙["📍 중앙 영역 (가로 연결)"]
+            R1["a b c d e ← 연결됨"]
+            GAP["--- 홈 ---"]
+            R2["f g h i j ← 연결됨"]
+        end
+    end
+
+    style 브레드보드 fill:#f5f5f5,stroke:#424242
+    style 전원 fill:#ffcdd2,stroke:#c62828
+    style 중앙 fill:#e3f2fd,stroke:#1565c0</div>
+<p><strong>쉽게 말하면</strong>: 가로줄은 연결되고, 홈을 기준으로 위아래는 분리됩니다!</p>
+<hr />
+<h3 id="2-led">개념 2: LED의 극성<a class="headerlink" href="#2-led" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>비유로 시작</strong>: "LED는 마치 <strong>일방통행 도로</strong>와 같아요. 전류가 정해진 방향으로만 흐를 수 있습니다."</p>
+</li>
+<li>
+<p><strong>정확한 정의</strong>: "LED(Light Emitting Diode)는 전류 방향이 정해진 부품입니다. 긴 다리가 양극(+, 애노드), 짧은 다리가 음극(-, 캐소드)입니다."</p>
+</li>
+<li>
+<p><strong>예시로 확인</strong>: "LED를 거꾸로 연결하면? 도로를 역주행하는 것처럼 전류가 흐르지 않아서 빛이 나지 않아요!"</p>
+</li>
+</ol>
+<div class="mermaid">flowchart LR
+    subgraph LED["💡 LED 구분법"]
+        direction TB
+        L1["긴 다리 = + (애노드)"]
+        L2["짧은 다리 = - (캐소드)"]
+        L3["💡 몸체 평평한 쪽 = -"]
+    end
+
+    A["🔋 전원 +"] --&gt;|"긴 다리로"| B["💡 LED"]
+    B --&gt;|"짧은 다리에서"| C["🔌 GND -"]
+
+    style LED fill:#fff9c4,stroke:#f9a825
+    style A fill:#c8e6c9,stroke:#2e7d32
+    style B fill:#ffecb3,stroke:#ff8f00
+    style C fill:#ffcdd2,stroke:#c62828</div>
+<p><strong>쉽게 말하면</strong>: <strong>긴 다리 = 플러스(+), 짧은 다리 = 마이너스(-)</strong></p>
+<hr />
+<h3 id="3">개념 3: 저항의 역할<a class="headerlink" href="#3" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>비유로 시작</strong>: "저항은 마치 <strong>수도꼭지</strong>와 같아요. 물(전류)이 너무 세게 흐르면 파이프(LED)가 망가지니까, 적당히 조절해주는 거예요."</p>
+</li>
+<li>
+<p><strong>정확한 정의</strong>: "저항은 전류의 흐름을 제한하는 부품입니다. LED에 과전류가 흐르면 타버리기 때문에, 저항으로 전류를 제한합니다."</p>
+</li>
+<li>
+<p><strong>예시로 확인</strong>: "피코의 3.3V에 LED를 직접 연결하면? LED가 순간적으로 밝게 빛나다가 타버릴 수 있어요! 220Ω~330Ω 저항을 함께 연결하면 안전합니다."</p>
+</li>
+</ol>
+<p><strong>쉽게 말하면</strong>: <strong>저항 = LED 보호대</strong>, 없으면 LED가 타요! 🔥</p>
+<hr />
+<h2 id="_4">🔨 따라하기<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<h3 id="step-1">Step 1: 브레드보드 연결 이해하기<a class="headerlink" href="#step-1" title="Permanent link">&para;</a></h3>
+<p><strong>목표</strong>: 브레드보드의 어떤 구멍들이 연결되어 있는지 파악합니다.</p>
+<p>실제로 부품을 꽂기 전에, 연결 원리를 확실히 이해해봅시다!</p>
+<div class="mermaid">flowchart TB
+    subgraph BB["🔌 브레드보드 상세 구조"]
+        direction LR
+        subgraph LEFT["왼쪽 전원"]
+            LP["+&lt;br&gt;-"]
+        end
+        subgraph CENTER["중앙 영역"]
+            direction TB
+            TOP["1: a b c d e"]
+            MID["홈 (분리선)"]
+            BOT["1: f g h i j"]
+        end
+        subgraph RIGHT["오른쪽 전원"]
+            RP["+&lt;br&gt;-"]
+        end
+    end
+
+    style BB fill:#fafafa,stroke:#616161
+    style LEFT fill:#ffcdd2,stroke:#c62828
+    style CENTER fill:#e3f2fd,stroke:#1976d2
+    style RIGHT fill:#ffcdd2,stroke:#c62828</div>
+<p><strong>핵심 규칙</strong>:
+| 영역 | 연결 방향 | 용도 |
+|------|----------|------|
+| 전원 레일 (+/-) | <strong>세로</strong>로 전체 연결 | 전원 공급 |
+| 중앙 영역 | <strong>가로</strong>로 5칸씩 연결 | 부품 연결 |
+| 중앙 홈 | 위아래 <strong>분리</strong> | IC칩 장착용 |</p>
+<p><strong>여기서 잠깐! 🤔</strong></p>
+<blockquote>
+<p>같은 가로줄에 꽂으면 연결되고, 홈을 넘어가면 분리됩니다!</p>
+</blockquote>
+<hr />
+<h3 id="step-2-led">Step 2: LED 회로 구성하기<a class="headerlink" href="#step-2-led" title="Permanent link">&para;</a></h3>
+<p><strong>목표</strong>: 브레드보드에 LED와 저항을 연결합니다.</p>
+<p><strong>준비물</strong>: 브레드보드, LED 1개, 220Ω 저항 1개, 점퍼선 2개</p>
+<div class="mermaid">flowchart LR
+    subgraph PICO["🎛️ 피코"]
+        GP16["GP16"]
+        GND["GND"]
+    end
+
+    subgraph BREAD["🔌 브레드보드"]
+        R["저항 220Ω"]
+        LED["💡 LED"]
+    end
+
+    GP16 --&gt;|"빨간선"| R
+    R --&gt;|"같은 줄"| LED
+    LED --&gt;|"검은선"| GND
+
+    style PICO fill:#e8f5e9,stroke:#2e7d32
+    style BREAD fill:#fff3e0,stroke:#ef6c00</div>
+<p><strong>연결 순서</strong>:</p>
+<ol>
+<li><strong>저항 연결</strong>: 저항의 한쪽 다리를 5번 줄 a에, 다른 쪽을 5번 줄 e에 꽂습니다</li>
+<li><strong>LED 연결</strong>: LED의 <strong>긴 다리(+)</strong>를 5번 줄 d에, <strong>짧은 다리(-)</strong>를 10번 줄 d에 꽂습니다</li>
+<li><strong>점퍼선 연결</strong>: </li>
+<li>빨간선: 피코 GP16 → 브레드보드 5번 줄 a</li>
+<li>검은선: 피코 GND → 브레드보드 10번 줄 a</li>
+</ol>
+<p><strong>여기서 잠깐! 🤔</strong></p>
+<blockquote>
+<p>저항과 LED의 긴 다리가 <strong>같은 가로줄</strong>에 있어야 연결됩니다!</p>
+</blockquote>
+<hr />
+<h3 id="step-3-led">Step 3: 코드로 LED 제어하기<a class="headerlink" href="#step-3-led" title="Permanent link">&para;</a></h3>
+<p><strong>목표</strong>: 외부 LED를 깜빡이게 합니다.</p>
+<p><strong>코드</strong>:
+<div class="highlight"><pre><span></span><code><span class="c1"># === WHAT: 외부 LED를 깜빡이는 코드 ===</span>
+<span class="c1"># 브레드보드에 연결한 LED를 제어합니다</span>
+
+<span class="c1"># --- WHY: 왜 필요한지 ---</span>
+<span class="c1"># 내장 LED 말고, 원하는 위치에 LED를 추가하려면</span>
+<span class="c1"># 외부 LED 연결 방법을 알아야 해요!</span>
+
+<span class="c1"># HOW: 어떻게 동작하는지</span>
+<span class="kn">from</span> <span class="nn">machine</span> <span class="kn">import</span> <span class="n">Pin</span>  <span class="c1"># 핀 제어 기능 가져오기</span>
+<span class="kn">import</span> <span class="nn">time</span>              <span class="c1"># 시간 관련 기능 가져오기</span>
+
+<span class="c1"># GP16 핀을 출력 모드로 설정</span>
+<span class="n">led</span> <span class="o">=</span> <span class="n">Pin</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">Pin</span><span class="o">.</span><span class="n">OUT</span><span class="p">)</span>
+
+<span class="c1"># 무한 반복</span>
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">led</span><span class="o">.</span><span class="n">on</span><span class="p">()</span>         <span class="c1"># LED 켜기 (3.3V 출력)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;💡 LED ON&quot;</span><span class="p">)</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># 0.5초 대기</span>
+
+    <span class="n">led</span><span class="o">.</span><span class="n">off</span><span class="p">()</span>        <span class="c1"># LED 끄기 (0V 출력)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;LED OFF&quot;</span><span class="p">)</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># 0.5초 대기</span>
+</code></pre></div></p>
+<p><strong>실행 결과</strong>:
+<div class="highlight"><pre><span></span><code>💡 LED ON
+LED OFF
+💡 LED ON
+LED OFF
+...
+</code></pre></div></p>
+<p><strong>여기서 잠깐! 🤔</strong></p>
+<blockquote>
+<p><code>Pin("LED")</code>는 내장 LED, <code>Pin(16)</code>은 GP16 핀입니다. 숫자로 쓰면 외부 핀!</p>
+</blockquote>
+<hr />
+<h3 id="step-4-grove-led">Step 4: Grove LED 사용하기 (더 쉬운 방법!)<a class="headerlink" href="#step-4-grove-led" title="Permanent link">&para;</a></h3>
+<p><strong>목표</strong>: Grove 케이블로 간편하게 LED를 연결합니다.</p>
+<p>Grove Shield가 있다면, 브레드보드 없이도 LED를 연결할 수 있어요!</p>
+<div class="mermaid">flowchart LR
+    subgraph GS["🛡️ Grove Shield"]
+        D16["D16 포트"]
+    end
+
+    subgraph GL["💡 Grove LED"]
+        CONN["Grove 커넥터"]
+    end
+
+    D16 &lt;--&gt;|"Grove 케이블"| CONN
+
+    style GS fill:#e8f5e9,stroke:#388e3c
+    style GL fill:#fff9c4,stroke:#f9a825</div>
+<p><strong>연결 방법</strong>: Grove LED 모듈을 Grove Shield의 <strong>D16 포트</strong>에 케이블로 연결하면 끝!</p>
+<p><strong>코드는 동일합니다</strong>:
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">machine</span> <span class="kn">import</span> <span class="n">Pin</span>
+<span class="kn">import</span> <span class="nn">time</span>
+
+<span class="n">led</span> <span class="o">=</span> <span class="n">Pin</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">Pin</span><span class="o">.</span><span class="n">OUT</span><span class="p">)</span>  <span class="c1"># D16 포트 = GP16</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">led</span><span class="o">.</span><span class="n">toggle</span><span class="p">()</span>     <span class="c1"># 현재 상태 반전 (켜짐↔꺼짐)</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+</code></pre></div></p>
+<hr />
+<h2 id="_5">📝 전체 코드<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="c1"># === 외부 LED 깜빡이기 - 완성 코드 ===</span>
+<span class="c1"># 브레드보드 또는 Grove LED 모두 사용 가능</span>
+
+<span class="kn">from</span> <span class="nn">machine</span> <span class="kn">import</span> <span class="n">Pin</span>
+<span class="kn">import</span> <span class="nn">time</span>
+
+<span class="c1"># 설정</span>
+<span class="n">LED_PIN</span> <span class="o">=</span> <span class="mi">16</span>        <span class="c1"># GP16 (Grove D16 포트)</span>
+<span class="n">BLINK_TIME</span> <span class="o">=</span> <span class="mf">0.5</span>    <span class="c1"># 깜빡임 간격 (초)</span>
+
+<span class="c1"># LED 핀 설정</span>
+<span class="n">led</span> <span class="o">=</span> <span class="n">Pin</span><span class="p">(</span><span class="n">LED_PIN</span><span class="p">,</span> <span class="n">Pin</span><span class="o">.</span><span class="n">OUT</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🚀 LED 깜빡이기 시작!&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;중지하려면 Ctrl+C를 누르세요&quot;</span><span class="p">)</span>
+
+<span class="c1"># 메인 루프</span>
+<span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">led</span><span class="o">.</span><span class="n">toggle</span><span class="p">()</span>
+    <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">if</span> <span class="n">led</span><span class="o">.</span><span class="n">value</span><span class="p">():</span>  <span class="c1"># LED가 켜져 있으면</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;💡 ON  (#</span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;   OFF (#</span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">BLINK_TIME</span><span class="p">)</span>
+</code></pre></div>
+<hr />
+<h2 id="_6">⚠️ 자주 하는 실수<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<h3 id="1-led">실수 1: LED가 안 켜져요!<a class="headerlink" href="#1-led" title="Permanent link">&para;</a></h3>
+<p><strong>증상</strong>: 코드는 실행되는데 LED가 켜지지 않음</p>
+<p><strong>원인</strong>: LED 방향이 거꾸로 되어 있음</p>
+<p><strong>해결</strong>:
+<div class="highlight"><pre><span></span><code><span class="c1"># LED 방향 확인하기</span>
+<span class="c1"># 긴 다리(+) → 저항 쪽 (GP16)</span>
+<span class="c1"># 짧은 다리(-) → GND 쪽</span>
+
+<span class="c1"># 💡 팁: LED를 180도 돌려서 다시 꽂아보세요!</span>
+</code></pre></div></p>
+<hr />
+<h3 id="2-led_1">실수 2: LED가 매우 어둡거나 안 켜져요<a class="headerlink" href="#2-led_1" title="Permanent link">&para;</a></h3>
+<p><strong>증상</strong>: LED가 희미하게 켜지거나 전혀 안 켜짐</p>
+<p><strong>원인</strong>: 같은 줄에 연결하지 않아서 회로가 끊어짐</p>
+<p><strong>해결</strong>:
+<div class="highlight"><pre><span></span><code><span class="c1"># 잘못된 연결 (서로 다른 줄)</span>
+<span class="c1"># 저항: 5번 줄</span>
+<span class="c1"># LED 긴 다리: 6번 줄  ← 연결 안 됨!</span>
+
+<span class="c1"># 올바른 연결 (같은 줄)</span>
+<span class="c1"># 저항: 5번 줄 a, e</span>
+<span class="c1"># LED 긴 다리: 5번 줄 d  ← 연결됨!</span>
+</code></pre></div></p>
+<hr />
+<h3 id="3_1">실수 3: 저항 없이 연결했어요<a class="headerlink" href="#3_1" title="Permanent link">&para;</a></h3>
+<p><strong>증상</strong>: LED가 엄청 밝았다가 갑자기 안 켜짐</p>
+<p><strong>원인</strong>: 과전류로 LED가 손상됨</p>
+<p><strong>해결</strong>:
+<div class="highlight"><pre><span></span><code><span class="c1"># 잘못된 회로: GP16 → LED → GND (저항 없음)</span>
+<span class="c1"># 위험! LED가 타버릴 수 있어요 🔥</span>
+
+<span class="c1"># 올바른 회로: GP16 → 저항 → LED → GND</span>
+<span class="c1"># 220Ω ~ 330Ω 저항을 반드시 연결하세요!</span>
+</code></pre></div></p>
+<hr />
+<h2 id="_7">✅ 스스로 점검하기<a class="headerlink" href="#_7" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>브레드보드에서 같은 가로줄의 a, b, c, d, e 구멍은 서로 연결되어 있나요, 분리되어 있나요?</strong></p>
+</li>
+<li>
+<p><strong>LED의 긴 다리는 +극인가요, -극인가요?</strong></p>
+</li>
+<li>
+<p><strong>저항을 연결하지 않으면 어떤 문제가 생길 수 있나요?</strong></p>
+</li>
+</ol>
+<details>
+<summary>정답 확인</summary>
+
+1. **연결되어 있습니다.** 같은 가로줄의 a-e는 내부적으로 연결되어 있어요.
+
+2. **+극(양극, 애노드)입니다.** 긴 다리 = +, 짧은 다리 = - 로 기억하세요!
+
+3. **LED가 과전류로 손상될 수 있습니다.** 저항은 전류를 제한해서 LED를 보호하는 역할을 합니다.
+
+</details>
+
+<hr />
+<h2 id="_8">🚀 더 해보기<a class="headerlink" href="#_8" title="Permanent link">&para;</a></h2>
+<h3 id="1_1">도전 1: 깜빡임 속도 조절하기<a class="headerlink" href="#1_1" title="Permanent link">&para;</a></h3>
+<p><code>BLINK_TIME</code> 값을 0.1, 0.2, 1.0 등으로 바꿔보세요. 어떤 변화가 있나요?</p>
+<h3 id="2-led-2">도전 2: LED 2개 연결하기<a class="headerlink" href="#2-led-2" title="Permanent link">&para;</a></h3>
+<p>GP16과 GP17에 각각 LED를 연결하고, 번갈아 깜빡이게 해보세요!</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># 힌트</span>
+<span class="n">led1</span> <span class="o">=</span> <span class="n">Pin</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">Pin</span><span class="o">.</span><span class="n">OUT</span><span class="p">)</span>
+<span class="n">led2</span> <span class="o">=</span> <span class="n">Pin</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span> <span class="n">Pin</span><span class="o">.</span><span class="n">OUT</span><span class="p">)</span>
+<span class="c1"># 번갈아 켜려면?</span>
+</code></pre></div>
+<h3 id="3-sos">도전 3: SOS 신호 만들기 ⭐<a class="headerlink" href="#3-sos" title="Permanent link">&para;</a></h3>
+<p>모스 부호로 SOS(···−−−···)를 LED로 표현해보세요!
+- 점(·): 0.2초 켜기
+- 선(−): 0.6초 켜기
+- 글자 사이: 0.4초 끄기</p>
+<hr />
+<h2 id="_9">🔗 다음 장으로<a class="headerlink" href="#_9" title="Permanent link">&para;</a></h2>
+<p>이번 장에서 배운 것:
+- ✅ 브레드보드의 연결 구조 (가로 연결, 홈으로 분리)
+- ✅ LED의 극성 (+긴 다리, -짧은 다리)
+- ✅ 저항으로 LED 보호하기
+- ✅ 외부 LED를 코드로 제어하기</p>
+<p><strong>다음 장</strong>에서는 <strong>PWM으로 LED 밝기 조절하기</strong>를 배웁니다. 단순히 켜고 끄는 것을 넘어서, LED를 서서히 밝아지게 하거나 어둡게 하는 방법을 알아볼 거예요! 🌟</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  맨위로
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\ud074\ub9bd\ubcf4\ub4dc\uc5d0 \ubcf5\uc0ac\ub428", "clipboard.copy": "\ud074\ub9bd\ubcf4\ub4dc\ub85c \ubcf5\uc0ac", "search.result.more.one": "\uc774 \ubb38\uc11c\uc5d0\uc11c 1\uac1c\uc758 \uac80\uc0c9 \uacb0\uacfc \ub354 \ubcf4\uae30", "search.result.more.other": "\uc774 \ubb38\uc11c\uc5d0\uc11c #\uac1c\uc758 \uac80\uc0c9 \uacb0\uacfc \ub354 \ubcf4\uae30", "search.result.none": "\uac80\uc0c9\uc5b4\uc640 \uc77c\uce58\ud558\ub294 \ubb38\uc11c\uac00 \uc5c6\uc2b5\ub2c8\ub2e4", "search.result.one": "1\uac1c\uc758 \uc77c\uce58\ud558\ub294 \ubb38\uc11c", "search.result.other": "#\uac1c\uc758 \uc77c\uce58\ud558\ub294 \ubb38\uc11c", "search.result.placeholder": "\uac80\uc0c9\uc5b4\ub97c \uc785\ub825\ud558\uc138\uc694", "search.result.term.missing": "\ud3ec\ud568\ub418\uc9c0 \uc54a\uc740 \uac80\uc0c9\uc5b4", "select.version": "\ubc84\uc804 \uc120\ud0dd"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10/dist/mermaid.min.js"></script>
+      
+        <script src="../javascripts/title-link.js"></script>
+      
+    
+  </body>
+</html>
