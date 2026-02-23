@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import ProgressBar from './ProgressBar';
 import Logo from './Logo';
@@ -40,7 +40,7 @@ export default function Layout() {
     <div className="flex h-screen bg-gray-50">
       {/* 사이드바 */}
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
+        <Link to="/" className="block p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors">
           <div className="flex items-center gap-3">
             <Logo size={36} />
             <div>
@@ -50,16 +50,16 @@ export default function Layout() {
               <p className="text-xs text-gray-500">AI 교육자료 생성</p>
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* 현재 프로젝트 */}
         {currentProject && (
-          <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+          <Link to="/" className="block px-4 py-2 bg-blue-50 border-b border-blue-100 hover:bg-blue-100 transition-colors">
             <p className="text-xs text-blue-600 font-medium">현재 프로젝트</p>
             <p className="text-sm text-blue-900 font-semibold truncate">
               {currentProject.title || currentProject.name}
             </p>
-          </div>
+          </Link>
         )}
 
         {/* 내비게이션 */}

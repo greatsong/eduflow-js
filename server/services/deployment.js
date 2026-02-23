@@ -1,7 +1,10 @@
-import { readFile, writeFile, readdir, stat, mkdir, unlink } from 'fs/promises';
-import { join } from 'path';
+import { readFile, writeFile, readdir, stat, mkdir, unlink, copyFile } from 'fs/promises';
+import { join, dirname } from 'path';
 import { existsSync, createReadStream } from 'fs';
+import { fileURLToPath } from 'url';
 import { execa } from 'execa';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export class Deployment {
   constructor(projectPath) {
@@ -113,6 +116,22 @@ export class Deployment {
 
     const desc = tocData?.description || '';
 
+    // 커스텀 CSS 복사
+    const stylesDir = join(this.docsPath, 'stylesheets');
+    if (!existsSync(stylesDir)) await mkdir(stylesDir, { recursive: true });
+    const customCssSource = join(__dirname, '..', 'assets', 'mkdocs-custom.css');
+    if (existsSync(customCssSource)) {
+      await copyFile(customCssSource, join(stylesDir, 'custom.css'));
+    }
+
+    // 커스텀 JS 복사 (헤더 제목 클릭 → 홈 이동)
+    const jsDir = join(this.docsPath, 'javascripts');
+    if (!existsSync(jsDir)) await mkdir(jsDir, { recursive: true });
+    const titleLinkJsSource = join(__dirname, '..', 'assets', 'mkdocs-title-link.js');
+    if (existsSync(titleLinkJsSource)) {
+      await copyFile(titleLinkJsSource, join(jsDir, 'title-link.js'));
+    }
+
     const config = `site_name: "${siteName}"
 site_description: "${desc}"
 site_author: Created with EduFlow
@@ -120,34 +139,74 @@ site_author: Created with EduFlow
 theme:
   name: ${theme}
   language: ko
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: "\uB2E4\uD06C \uBAA8\uB4DC\uB85C \uC804\uD658"
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: "\uB77C\uC774\uD2B8 \uBAA8\uB4DC\uB85C \uC804\uD658"
+  font:
+    text: Pretendard, Noto Sans KR, sans-serif
+    code: JetBrains Mono, monospace
   features:
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.indexes
     - search.suggest
     - search.highlight
     - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
 
 plugins:
-  - search
+  - search:
+      lang:
+        - ko
+        - en
 
 markdown_extensions:
   - admonition
   - codehilite
   - toc:
       permalink: true
-  - pymdownx.highlight
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_div_format
   - pymdownx.details
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - attr_list
   - md_in_html
+  - def_list
 
 extra_javascript:
   - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - javascripts/title-link.js
+
+extra_css:
+  - stylesheets/custom.css
 
 docs_dir: docs
 site_dir: site

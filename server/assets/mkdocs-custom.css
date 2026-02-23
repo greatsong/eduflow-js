@@ -1,0 +1,322 @@
+/* ============================================================
+   EduFlow - MkDocs Material Custom Theme
+   깔끔하고 모던한 교육자료 스타일
+   ============================================================ */
+
+/* --- 전체 레이아웃 --- */
+:root {
+  --ef-primary: #4f46e5;
+  --ef-primary-light: #e0e7ff;
+  --ef-accent: #7c3aed;
+  --ef-bg: #fafafa;
+  --ef-card-bg: #ffffff;
+  --ef-border: #e5e7eb;
+  --ef-text: #1f2937;
+  --ef-text-muted: #6b7280;
+  --ef-radius: 12px;
+}
+
+/* 본문 최대 너비 확장 */
+.md-content__inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+/* --- 타이포그래피 --- */
+.md-typeset h1 {
+  font-weight: 800;
+  color: var(--ef-text);
+  margin-top: 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 3px solid var(--ef-primary);
+  display: inline-block;
+}
+
+.md-typeset h2 {
+  font-weight: 700;
+  color: var(--ef-text);
+  margin-top: 2.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--ef-border);
+}
+
+.md-typeset h3 {
+  font-weight: 600;
+  color: #374151;
+  margin-top: 1.8rem;
+}
+
+.md-typeset p {
+  line-height: 1.85;
+  color: #374151;
+}
+
+/* 이모지 헤딩 간격 */
+.md-typeset h1 .twemoji,
+.md-typeset h2 .twemoji,
+.md-typeset h3 .twemoji {
+  margin-right: 0.3rem;
+}
+
+/* --- 네비게이션 --- */
+.md-header {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+}
+
+/* 헤더 제목 클릭 가능하게 */
+.md-header__title {
+  cursor: pointer;
+}
+.md-header__title:hover .md-header__topic {
+  opacity: 0.85;
+}
+
+.md-tabs {
+  background: rgba(79, 70, 229, 0.95) !important;
+}
+
+/* 사이드바 활성 항목 */
+.md-nav__link--active {
+  color: var(--ef-primary) !important;
+  font-weight: 600;
+}
+
+/* --- 코드 블록 --- */
+.md-typeset pre {
+  border-radius: var(--ef-radius);
+  border: 1px solid var(--ef-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  margin: 1.2rem 0;
+}
+
+.md-typeset code {
+  border-radius: 6px;
+  padding: 0.15em 0.4em;
+  font-size: 0.88em;
+  background: #f3f4f6;
+  color: #be185d;
+  border: 1px solid #e5e7eb;
+}
+
+.md-typeset pre code {
+  background: none;
+  color: inherit;
+  border: none;
+  padding: 0;
+}
+
+/* 코드 복사 버튼 */
+.md-clipboard {
+  color: #9ca3af !important;
+}
+.md-clipboard:hover {
+  color: var(--ef-primary) !important;
+}
+
+/* --- 인용문 (blockquote) --- */
+.md-typeset blockquote {
+  border-left: 4px solid var(--ef-primary);
+  background: var(--ef-primary-light);
+  padding: 1rem 1.2rem;
+  border-radius: 0 var(--ef-radius) var(--ef-radius) 0;
+  margin: 1.5rem 0;
+  color: #312e81;
+}
+
+.md-typeset blockquote p {
+  color: #312e81;
+}
+
+/* --- 테이블 --- */
+.md-typeset table:not([class]) {
+  border-radius: var(--ef-radius);
+  overflow: hidden;
+  border: 1px solid var(--ef-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin: 1.5rem 0;
+  width: 100%;
+}
+
+.md-typeset table:not([class]) thead {
+  background: linear-gradient(135deg, #f0f0ff, #ede9fe);
+}
+
+.md-typeset table:not([class]) th {
+  color: #312e81;
+  font-weight: 600;
+  padding: 0.8rem 1rem;
+  border-bottom: 2px solid #c7d2fe;
+}
+
+.md-typeset table:not([class]) td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.md-typeset table:not([class]) tbody tr:hover {
+  background: #fafafa;
+}
+
+.md-typeset table:not([class]) tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* --- 체크리스트 --- */
+.md-typeset .task-list-item {
+  list-style: none;
+  padding-left: 0;
+}
+
+.md-typeset [type="checkbox"] {
+  accent-color: var(--ef-primary);
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.4em;
+  vertical-align: -0.15em;
+}
+
+/* --- 어드모니션 (admonition) --- */
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: var(--ef-radius) !important;
+  border: 1px solid var(--ef-border) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  margin: 1.5rem 0;
+  overflow: hidden;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  font-weight: 600;
+  border-radius: 0 !important;
+}
+
+/* --- details/summary (접기/펼치기) --- */
+.md-typeset details {
+  background: var(--ef-card-bg);
+}
+
+.md-typeset details summary {
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+  background: #f9fafb;
+  border-bottom: 1px solid var(--ef-border);
+  font-weight: 600;
+  color: var(--ef-text);
+}
+
+.md-typeset details summary:hover {
+  background: #f3f4f6;
+}
+
+.md-typeset details[open] summary {
+  background: var(--ef-primary-light);
+  color: var(--ef-primary);
+}
+
+.md-typeset details > *:not(summary) {
+  padding: 0 1rem;
+}
+
+/* --- 목록 --- */
+.md-typeset ul li,
+.md-typeset ol li {
+  margin-bottom: 0.3rem;
+  line-height: 1.75;
+}
+
+/* --- 구분선 --- */
+.md-typeset hr {
+  border: none;
+  border-top: 2px solid var(--ef-border);
+  margin: 2.5rem 0;
+}
+
+/* --- Mermaid 다이어그램 --- */
+.mermaid {
+  background: #fafafa;
+  border-radius: var(--ef-radius);
+  padding: 1.5rem;
+  border: 1px solid var(--ef-border);
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+/* --- Part 헤더 카드 스타일 (nav sections) --- */
+.md-nav__item--nested > .md-nav__link {
+  font-weight: 600;
+  color: var(--ef-primary) !important;
+}
+
+/* --- 검색 --- */
+.md-search__input {
+  border-radius: 8px !important;
+}
+
+/* --- 하단 네비게이션 (이전/다음) --- */
+.md-footer-nav__link {
+  transition: all 0.2s;
+}
+.md-footer-nav__link:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* --- 스크롤바 --- */
+.md-sidebar__scrollwrap::-webkit-scrollbar {
+  width: 4px;
+}
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* --- 이미지 --- */
+.md-typeset img {
+  border-radius: var(--ef-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin: 1rem 0;
+}
+
+/* --- 강조 텍스트 --- */
+.md-typeset strong {
+  color: #111827;
+}
+
+.md-typeset mark,
+.md-typeset .highlight {
+  background: linear-gradient(120deg, #fef08a 0%, #fde68a 100%);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+}
+
+/* --- 인쇄 최적화 --- */
+@media print {
+  .md-header,
+  .md-tabs,
+  .md-sidebar,
+  .md-footer {
+    display: none !important;
+  }
+  .md-content__inner {
+    max-width: 100%;
+  }
+}
+
+/* --- 모바일 최적화 --- */
+@media (max-width: 768px) {
+  .md-content__inner {
+    padding: 1rem;
+  }
+  .md-typeset h1 {
+    font-size: 1.6rem;
+  }
+  .md-typeset h2 {
+    font-size: 1.3rem;
+  }
+}
