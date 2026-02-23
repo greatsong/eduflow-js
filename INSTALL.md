@@ -79,8 +79,8 @@
 # Mac: brew install git
 # Windows: https://git-scm.com/download/win
 
-git clone https://github.com/greatsong/eduflow.git
-cd eduflow
+git clone https://github.com/greatsong/eduflow-js.git
+cd eduflow-js
 ```
 
 ---
@@ -90,7 +90,7 @@ cd eduflow
 터미널에서 에듀플로 폴더로 이동한 후:
 
 ```bash
-cd /path/to/eduflow  # 실제 폴더 경로로 변경
+cd /path/to/eduflow-js  # 실제 폴더 경로로 변경
 
 # 모든 패키지 한 번에 설치
 npm install
@@ -133,20 +133,28 @@ API 키는 AI를 사용하기 위한 "비밀번호" 같은 것입니다.
 
 ## 5단계: API 키 설정하기
 
+두 가지 방법 중 하나를 선택하세요.
+
+### 방법 A: 브라우저에서 입력 (가장 쉬움, 권장)
+
+파일을 만들 필요 없이, 에듀플로 실행 후 **좌측 사이드바의 API 키 버튼**을 클릭하고 키를 붙여넣으면 됩니다. 다음에 접속해도 자동으로 기억됩니다.
+
+> 이 방법이 가장 간단합니다. 아래 6단계로 바로 넘어가세요.
+
+### 방법 B: `.env` 파일 사용
+
 에듀플로 **루트 폴더**에 `.env` 파일을 만듭니다.
 
-### 가장 쉬운 방법
-
 ```bash
-cd /path/to/eduflow  # 에듀플로 폴더로 이동
+cd /path/to/eduflow-js  # 에듀플로 폴더로 이동
 cp .env.example .env
 ```
 
 그리고 `.env` 파일을 열어서 `sk-ant-xxx` 부분을 실제 API 키로 교체합니다.
 
-### 또는 직접 파일 만들기
+#### 또는 직접 파일 만들기
 
-1. `eduflow` 루트 폴더 열기
+1. `eduflow-js` 루트 폴더 열기
 2. 새 텍스트 파일 만들기
 3. 아래 내용 입력:
    ```
@@ -235,7 +243,7 @@ npm install
 
 ```bash
 # 매번 실행할 때
-cd /path/to/eduflow
+cd /path/to/eduflow-js
 npm run dev
 ```
 
