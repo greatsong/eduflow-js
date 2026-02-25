@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>에듀플로 매뉴얼 3: 활용 가이드</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --primary: #059669;
+    --primary-light: #d1fae5;
+    --primary-dark: #047857;
+    --secondary: #7c3aed;
+    --secondary-light: #ede9fe;
+    --success: #16a34a;
+    --success-light: #dcfce7;
+    --warning: #f59e0b;
+    --warning-light: #fef3c7;
+    --danger: #dc2626;
+    --danger-light: #fee2e2;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--gray-800);
+    line-height: 1.8;
+    font-size: 10.5pt;
+    background: #fff;
+  }
+
+  @media print {
+    body { font-size: 10pt; }
+    .page-break { page-break-before: always; }
+    .no-break { page-break-inside: avoid; }
+    @page { margin: 15mm 18mm; size: A4; }
+    .cover { height: 100vh; }
+  }
+
+  .cover {
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    min-height: 95vh; text-align: center;
+    background: linear-gradient(135deg, #064e3b 0%, #059669 50%, #2563eb 100%);
+    color: white; padding: 60px 40px;
+  }
+  .cover-icon { font-size: 80px; margin-bottom: 20px; }
+  .cover h1 { font-size: 34pt; font-weight: 900; margin-bottom: 8px; letter-spacing: -1px; }
+  .cover .subtitle { font-size: 16pt; font-weight: 300; opacity: 0.9; margin-bottom: 40px; }
+  .cover .tagline { font-size: 12pt; font-weight: 400; opacity: 0.8; line-height: 1.6; max-width: 520px; }
+  .cover .prereq { margin-top: 30px; background: rgba(255,255,255,0.15); padding: 16px 28px; border-radius: 12px; font-size: 10pt; }
+  .cover .version { margin-top: 40px; font-size: 10pt; opacity: 0.6; }
+
+  .content { max-width: 680px; margin: 0 auto; padding: 40px 20px; }
+
+  h2 {
+    font-size: 18pt; font-weight: 900; color: var(--primary);
+    margin-top: 48px; margin-bottom: 16px; padding-bottom: 8px;
+    border-bottom: 3px solid var(--primary);
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .step-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; background: var(--primary); color: white;
+    border-radius: 50%; font-size: 14pt; font-weight: 700; flex-shrink: 0;
+  }
+  h3 { font-size: 12pt; font-weight: 700; color: var(--gray-800); margin-top: 28px; margin-bottom: 10px; }
+  h4 { font-size: 11pt; font-weight: 700; color: var(--gray-700); margin-top: 20px; margin-bottom: 8px; }
+  p { margin-bottom: 10px; }
+
+  .summary-box {
+    background: var(--gray-50); border: 2px solid var(--primary);
+    border-radius: 12px; padding: 24px; margin: 20px 0;
+  }
+  .summary-box h3 { margin-top: 0; color: var(--primary); font-size: 13pt; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 10pt; }
+  th { background: var(--primary); color: white; padding: 10px 14px; text-align: left; font-weight: 500; font-size: 9.5pt; }
+  th:first-child { border-radius: 8px 0 0 0; }
+  th:last-child { border-radius: 0 8px 0 0; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--gray-200); }
+  tr:nth-child(even) td { background: var(--gray-50); }
+  tr:last-child td:first-child { border-radius: 0 0 0 8px; }
+  tr:last-child td:last-child { border-radius: 0 0 8px 0; }
+
+  code {
+    font-family: 'Consolas', 'Courier New', monospace;
+    background: var(--gray-100); padding: 2px 6px; border-radius: 4px;
+    font-size: 9.5pt; color: var(--danger);
+  }
+  pre {
+    background: var(--gray-900); color: #e5e7eb;
+    padding: 16px 20px; border-radius: 10px; margin: 12px 0;
+    overflow-x: auto; font-size: 10pt; line-height: 1.6;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: 10pt; }
+  .cmd-label {
+    display: inline-block; background: var(--primary); color: white;
+    font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 4px 4px 0 0; margin-bottom: -2px;
+  }
+
+  .info-box {
+    border-radius: 10px; padding: 16px 20px; margin: 16px 0;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .info-box .icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+  .info-box p { margin: 0; font-size: 9.5pt; }
+  .info-box strong { font-weight: 700; }
+  .info-box.tip { background: var(--primary-light); border-left: 4px solid var(--primary); }
+  .info-box.warning { background: var(--warning-light); border-left: 4px solid var(--warning); }
+  .info-box.danger { background: var(--danger-light); border-left: 4px solid var(--danger); }
+  .info-box.success { background: var(--success-light); border-left: 4px solid var(--success); }
+
+  ol { padding-left: 24px; margin: 10px 0; }
+  ol li { margin-bottom: 8px; padding-left: 4px; }
+  ul { padding-left: 24px; margin: 8px 0; }
+  ul li { margin-bottom: 4px; }
+
+  a { color: var(--primary); text-decoration: none; font-weight: 500; }
+
+  .url-box {
+    display: inline-block; background: var(--primary-light); color: var(--primary-dark);
+    padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 11pt;
+    margin: 8px 0; word-break: break-all;
+  }
+
+  .step-instruction {
+    background: white; border: 1px solid var(--gray-200); border-radius: 10px;
+    padding: 20px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .step-instruction h4 { margin-top: 0; display: flex; align-items: center; gap: 8px; }
+  .mini-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; background: var(--primary); color: white;
+    border-radius: 50%; font-size: 9pt; font-weight: 700;
+  }
+
+  .divider { border: none; border-top: 2px solid var(--gray-200); margin: 40px 0; }
+  .highlight { background: linear-gradient(transparent 60%, #a7f3d0 60%); font-weight: 700; }
+
+  .flow-diagram {
+    background: var(--gray-50); border: 2px solid var(--gray-200);
+    border-radius: 12px; padding: 24px; margin: 20px 0; text-align: center;
+  }
+  .flow-row {
+    display: flex; justify-content: center; gap: 8px; align-items: center;
+    margin: 8px 0; flex-wrap: wrap;
+  }
+  .flow-step {
+    background: var(--primary); color: white; padding: 8px 14px; border-radius: 8px;
+    font-size: 9.5pt; font-weight: 500; white-space: nowrap;
+  }
+  .flow-arrow { color: var(--gray-500); font-size: 16px; font-weight: bold; }
+
+  .faq-item { background: var(--gray-50); border-radius: 10px; padding: 16px 20px; margin: 12px 0; }
+  .faq-item h4 { color: var(--primary); margin-top: 0; font-size: 10.5pt; }
+  .faq-item p { font-size: 9.5pt; }
+
+  .screenshot-box {
+    background: var(--gray-50); border: 2px solid var(--gray-200);
+    border-radius: 12px; padding: 20px; margin: 16px 0;
+  }
+  .screenshot-box .label {
+    display: inline-block; background: var(--primary); color: white;
+    font-size: 8pt; font-weight: 700; padding: 3px 10px; border-radius: 6px;
+    margin-bottom: 8px;
+  }
+
+  .concept-box {
+    background: linear-gradient(135deg, var(--primary-light) 0%, #dbeafe 100%);
+    border: 2px solid var(--primary); border-radius: 12px; padding: 24px;
+    margin: 20px 0;
+  }
+  .concept-box h4 { margin-top: 0; color: var(--primary-dark); }
+
+  .footer {
+    text-align: center; color: var(--gray-500); font-size: 9pt;
+    margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--gray-200);
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-icon">🌱</div>
+  <h1>에듀플로 매뉴얼 3</h1>
+  <div class="subtitle">활용 가이드</div>
+  <div class="tagline">
+    업데이트 받기, 포트폴리오 활용하기,<br>
+    다른 선생님의 교재 프로젝트에 기여하기
+  </div>
+  <div class="prereq">
+    <strong>사전 조건:</strong> 매뉴얼 1, 2 완료 상태<br>
+    (에듀플로 설치 + GitHub 계정 + 배포 도구 설치 완료)
+  </div>
+  <div class="version">2026년 2월 | 온라인 세션용</div>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<!-- OVERVIEW -->
+<div class="summary-box">
+  <h3>📋 이 매뉴얼에서 다루는 것</h3>
+  <table>
+    <tr><th>주제</th><th>내용</th><th>언제 필요한가</th></tr>
+    <tr><td><strong>1. 업데이트</strong></td><td>에듀플로 최신 버전 받기</td><td>새 기능이 추가됐을 때</td></tr>
+    <tr><td><strong>2. 포트폴리오</strong></td><td>만든 교재들을 한눈에 보기</td><td>교재를 여러 개 만든 후</td></tr>
+    <tr><td><strong>3. 기여하기</strong></td><td>다른 선생님 프로젝트에 참여</td><td>협업하고 싶을 때</td></tr>
+  </table>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 1: UPDATE ==================== -->
+<h2 class="page-break"><span class="step-badge">1</span> 에듀플로 업데이트 받기</h2>
+
+<p>에듀플로에 새로운 기능이 추가되거나 버그가 수정되면, 아래 명령어로 최신 버전을 받을 수 있습니다.</p>
+
+<div class="concept-box">
+  <h4>💡 업데이트의 원리</h4>
+  <p>에듀플로 코드는 GitHub에 저장되어 있습니다. <code>git pull</code> 명령어는 GitHub에서 <strong>변경된 부분만</strong> 내 컴퓨터로 가져옵니다. 내가 만든 교재 데이터(<code>projects/</code> 폴더)는 영향을 받지 않습니다.</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 에듀플로 종료</h4>
+  <p>에듀플로가 실행 중이라면 먼저 종료합니다:</p>
+  <ul>
+    <li>명령 프롬프트(검은 화면)에서 <code>Ctrl + C</code></li>
+    <li>"일괄 작업을 끝내시겠습니까?" → <code>Y</code> 입력 → Enter</li>
+  </ul>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 업데이트 받기</h4>
+  <p>명령 프롬프트에서 아래를 입력합니다:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>cd %USERPROFILE%\Desktop\eduflow-js
+git pull</code></pre>
+  <p>변경사항이 있으면 아래처럼 표시됩니다:</p>
+  <pre><code>remote: Enumerating objects: 5, done.
+Updating 12d048d..88a8de8
+Fast-forward
+ server/services/deployment.js | 15 +++++++++------
+ 2 files changed, 10 insertions(+), 5 deletions(-)</code></pre>
+  <p>이미 최신이면:</p>
+  <pre><code>Already up to date.</code></pre>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 패키지 업데이트 (필요한 경우)</h4>
+  <p>새로운 기능이 추가되면 패키지도 업데이트해야 할 수 있습니다:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>npm install</code></pre>
+  <p><strong>"warn"</strong> 경고는 무시해도 됩니다. <strong>"error"</strong>만 아니면 괜찮습니다.</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">d</span> 다시 실행</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>npm run dev</code></pre>
+  <p>브라우저에서 <code>http://localhost:7830</code> 접속하면 업데이트된 에듀플로를 사용할 수 있습니다.</p>
+</div>
+
+<div class="info-box tip">
+  <div class="icon">💡</div>
+  <div>
+    <strong>한 줄 요약:</strong> 업데이트는 <code>git pull</code> → <code>npm install</code> → <code>npm run dev</code> 세 줄이면 끝!
+  </div>
+</div>
+
+<div class="info-box warning">
+  <div class="icon">⚠️</div>
+  <div>
+    <strong>"merge conflict" 오류가 나오면?</strong><br>
+    에듀플로 코드를 직접 수정한 경우 충돌이 발생할 수 있습니다.<br>
+    가장 간단한 해결법:<br>
+    <code>git stash</code> → <code>git pull</code> → <code>git stash pop</code><br>
+    그래도 안 되면 세션 시간에 질문해주세요.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 2: PORTFOLIO ==================== -->
+<h2 class="page-break"><span class="step-badge">2</span> 포트폴리오 활용하기</h2>
+
+<p>포트폴리오는 에듀플로로 만든 <strong>모든 교재 프로젝트를 한눈에</strong> 볼 수 있는 대시보드입니다.</p>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 포트폴리오 열기</h4>
+  <ol>
+    <li>에듀플로가 실행 중인 상태에서</li>
+    <li>왼쪽 사이드바 맨 아래에 있는 <strong>"📊 포트폴리오"</strong> 클릭</li>
+  </ol>
+</div>
+
+<h3>포트폴리오에서 볼 수 있는 것</h3>
+
+<div class="step-instruction no-break">
+  <h4>📊 통계 대시보드</h4>
+  <p>화면 상단에 전체 현황이 카드로 표시됩니다:</p>
+  <table>
+    <tr><th>카드</th><th>내용</th></tr>
+    <tr><td>총 프로젝트</td><td>만든 교재 프로젝트의 총 개수</td></tr>
+    <tr><td>완료</td><td>챕터 생성까지 끝난 프로젝트 수</td></tr>
+    <tr><td>총 챕터</td><td>생성된 챕터의 총 개수</td></tr>
+    <tr><td>총 분량</td><td>A4 페이지 기준 환산 분량</td></tr>
+    <tr><td>총 생성 비용</td><td>AI 사용에 든 예상 비용</td></tr>
+  </table>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>📁 프로젝트 카드</h4>
+  <p>각 프로젝트가 카드 형태로 표시됩니다. 카드에서 볼 수 있는 정보:</p>
+  <ul>
+    <li><strong>진행 상태</strong> — 완료(초록), 진행중(노랑), 미시작(회색)</li>
+    <li><strong>파트/챕터 수</strong>, 분량, 비용, 소요 시간</li>
+    <li><strong>"상세 보기"</strong> 버튼 — 목차와 생성 리포트 확인</li>
+    <li><strong>"🌐 사이트"</strong> 버튼 — 배포된 웹사이트로 바로 이동 (배포한 경우에만)</li>
+  </ul>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>🔍 필터와 정렬</h4>
+  <p>프로젝트가 많아지면 필터와 정렬로 원하는 것을 찾을 수 있습니다:</p>
+  <table>
+    <tr><th>기능</th><th>옵션</th></tr>
+    <tr><td>정렬</td><td>최신순 / 오래된순 / 이름순</td></tr>
+    <tr><td>필터</td><td>전체 / 완료 / 진행중 / 미시작</td></tr>
+  </table>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>📋 상세 보기 패널</h4>
+  <p><strong>"상세 보기"</strong>를 클릭하면 오른쪽에 상세 패널이 열립니다:</p>
+  <ul>
+    <li><strong>목차 트리</strong> — 파트별 챕터 목록, 완료 여부 체크(✅)</li>
+    <li><strong>생성 리포트</strong> — 완료/전체 챕터 수, 토큰 사용량, 비용, 사용 모델, 생성 날짜</li>
+    <li><strong>GitHub 저장소</strong> — 배포한 경우 저장소 링크</li>
+  </ul>
+</div>
+
+<div class="info-box tip">
+  <div class="icon">💡</div>
+  <div>
+    <strong>포트폴리오 활용 팁:</strong><br>
+    세션이 끝난 후 <strong>"몇 개의 교재를 만들었고, 총 몇 페이지인지"</strong> 한눈에 확인할 수 있어서<br>
+    성과를 정리할 때 유용합니다.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 3: CONTRIBUTE ==================== -->
+<h2 class="page-break"><span class="step-badge">3</span> 다른 선생님 프로젝트에 기여하기</h2>
+
+<p>GitHub를 통해 다른 선생님이 만든 교재를 <strong>보고, 의견을 남기고, 직접 수정 제안</strong>을 할 수 있습니다.</p>
+
+<div class="concept-box">
+  <h4>🤝 GitHub에서 기여하는 3가지 방법</h4>
+  <div class="flow-diagram" style="margin-top:12px; border:none; background:transparent; padding:8px;">
+    <div class="flow-row">
+      <div class="flow-step">⭐ Star<br><span style="font-size:8pt;">(좋아요)</span></div>
+      <div class="flow-step">💬 Issue<br><span style="font-size:8pt;">(의견/제안)</span></div>
+      <div class="flow-step">🔀 Fork & PR<br><span style="font-size:8pt;">(직접 수정)</span></div>
+    </div>
+  </div>
+  <p style="font-size:9.5pt; margin-bottom:0;">쉬운 것부터 순서대로 설명합니다. Star만 해도 큰 응원이 됩니다!</p>
+</div>
+
+<!-- 3-1: Star -->
+<h3>방법 1: ⭐ Star (좋아요) 누르기</h3>
+
+<p>가장 간단한 기여 방법입니다. "이 프로젝트가 좋아요!"라는 뜻입니다.</p>
+
+<div class="step-instruction no-break">
+  <h4>하는 방법</h4>
+  <ol>
+    <li>브라우저에서 다른 선생님의 <strong>GitHub 저장소 주소</strong>로 이동합니다<br>
+      <span style="font-size:9.5pt; color:var(--gray-500);">예: <code>https://github.com/hong-teacher/python-intro</code></span>
+    </li>
+    <li>페이지 오른쪽 위에 있는 <strong>⭐ Star</strong> 버튼을 클릭합니다</li>
+  </ol>
+  <p>끝! 별이 채워지면 완료입니다.</p>
+</div>
+
+<!-- 3-2: Issue -->
+<h3>방법 2: 💬 Issue (의견/제안) 남기기</h3>
+
+<p>"이 부분이 좋았어요", "이런 내용도 추가하면 좋겠어요" 같은 의견을 남길 수 있습니다.</p>
+
+<div class="step-instruction no-break">
+  <h4>하는 방법</h4>
+  <ol>
+    <li>다른 선생님의 GitHub 저장소 페이지에서 상단 메뉴의 <strong>"Issues"</strong> 탭 클릭</li>
+    <li>오른쪽의 <strong>"New issue"</strong> 초록색 버튼 클릭</li>
+    <li><strong>제목</strong>과 <strong>내용</strong>을 작성합니다</li>
+  </ol>
+
+  <div class="screenshot-box">
+    <div class="label">작성 예시</div>
+    <div style="font-size:9.5pt; line-height:1.8;">
+      <strong>제목:</strong> Chapter 3의 예제 코드가 정말 좋아요! + 제안<br><br>
+      <strong>내용:</strong><br>
+      파이썬 반복문 챕터의 게임 예제가 학생들이 정말 좋아할 것 같습니다.<br>
+      혹시 "조건문 + 반복문" 을 결합한 심화 예제도 추가하면 어떨까요?<br>
+      예를 들어 숫자 맞추기 게임 같은 것이요!
+    </div>
+  </div>
+
+  <ol start="4">
+    <li><strong>"Submit new issue"</strong> 버튼 클릭</li>
+  </ol>
+</div>
+
+<div class="info-box tip">
+  <div class="icon">💡</div>
+  <div>
+    <strong>좋은 Issue 작성 팁:</strong><br>
+    • 구체적으로 어떤 챕터/부분에 대한 의견인지 적기<br>
+    • 칭찬 + 제안을 함께 적으면 받는 분이 기분 좋습니다 😊<br>
+    • 오타나 잘못된 내용을 발견했다면 알려주는 것도 큰 도움!
+  </div>
+</div>
+
+<!-- 3-3: Fork & PR -->
+<h3>방법 3: 🔀 Fork & Pull Request (직접 수정 제안)</h3>
+
+<p>다른 선생님의 교재를 <strong>직접 수정해서 제안</strong>하는 방법입니다. 가장 적극적인 기여 방식입니다.</p>
+
+<div class="concept-box">
+  <h4>🔀 Fork와 Pull Request란?</h4>
+  <table style="margin-top:8px;">
+    <tr><th>용어</th><th>뜻</th><th>비유</th></tr>
+    <tr><td><strong>Fork</strong></td><td>다른 사람의 프로젝트를 <strong>내 계정으로 복사</strong></td><td>남의 문서를 복사해서 내 폴더에 넣기</td></tr>
+    <tr><td><strong>Pull Request (PR)</strong></td><td>내가 수정한 것을 <strong>원본에 반영해달라고 요청</strong></td><td>"이렇게 고쳤는데 반영해주실래요?"</td></tr>
+  </table>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> Fork하기 (내 계정으로 복사)</h4>
+  <ol>
+    <li>다른 선생님의 GitHub 저장소 페이지에 접속</li>
+    <li>오른쪽 위 <strong>"Fork"</strong> 버튼 클릭</li>
+    <li>"Create fork" 페이지에서 그대로 <strong>"Create fork"</strong> 클릭</li>
+    <li>잠시 기다리면 <strong>내 계정</strong>에 같은 이름의 저장소가 생깁니다<br>
+      <span style="font-size:9.5pt; color:var(--gray-500);">예: <code>https://github.com/내아이디/python-intro</code></span>
+    </li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 내 컴퓨터에 다운로드</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>cd %USERPROFILE%\Desktop
+git clone https://github.com/내아이디/python-intro.git
+cd python-intro</code></pre>
+  <p><code>내아이디</code> 부분을 <strong>본인의 GitHub 사용자명</strong>으로 바꿔주세요.</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 파일 수정하기</h4>
+  <p>원하는 파일을 수정합니다. 교재 내용은 <code>docs/</code> 폴더 안의 <code>.md</code> 파일입니다.</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>notepad docs\chapter_0.md</code></pre>
+  <p>메모장에서 내용을 수정하고 저장(<code>Ctrl + S</code>)합니다.</p>
+
+  <div class="info-box tip">
+    <div class="icon">💡</div>
+    <div>
+      <strong>마크다운(.md) 파일이란?</strong><br>
+      일반 텍스트에 간단한 기호로 서식을 넣는 방식입니다.<br>
+      <code># 제목</code>, <code>**굵게**</code>, <code>- 목록</code> 등. 메모장으로도 편집 가능합니다.
+    </div>
+  </div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">d</span> 수정한 내용 업로드</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>git add .
+git commit -m "Chapter 0 오타 수정 및 예제 추가"
+git push</code></pre>
+
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>커밋 메시지 작성 팁:</strong><br>
+      <code>git commit -m "수정 메시지"</code>에서 <strong>따옴표 안에 무엇을 수정했는지</strong> 간단히 적으세요.<br>
+      예: <code>"Chapter 3 파이썬 예제 코드 오류 수정"</code>
+    </div>
+  </div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">e</span> Pull Request 보내기</h4>
+  <ol>
+    <li>브라우저에서 <strong>내 Fork 저장소</strong>로 이동합니다<br>
+      <span style="font-size:9.5pt; color:var(--gray-500);">예: <code>https://github.com/내아이디/python-intro</code></span>
+    </li>
+    <li>상단에 <strong>"Contribute"</strong> 버튼 → <strong>"Open pull request"</strong> 클릭</li>
+    <li>제목과 설명을 작성합니다</li>
+  </ol>
+
+  <div class="screenshot-box">
+    <div class="label">PR 작성 예시</div>
+    <div style="font-size:9.5pt; line-height:1.8;">
+      <strong>제목:</strong> Chapter 3 예제 코드 오타 수정<br><br>
+      <strong>설명:</strong><br>
+      • print("Hello Wrold") → print("Hello World") 오타 수정<br>
+      • for 반복문 예제에 주석 추가
+    </div>
+  </div>
+
+  <ol start="4">
+    <li><strong>"Create pull request"</strong> 초록색 버튼 클릭</li>
+  </ol>
+  <p>원본 저장소의 선생님이 검토한 후 반영 여부를 결정합니다.</p>
+</div>
+
+<div class="info-box success">
+  <div class="icon">🎉</div>
+  <div>
+    <strong>Pull Request가 반영("Merge")되면 기여 완료!</strong><br>
+    내 GitHub 프로필에 기여 기록이 남습니다.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== SUMMARY ==================== -->
+<h2><span class="step-badge">📝</span> 기여 방법 요약</h2>
+
+<table>
+  <tr><th>방법</th><th>난이도</th><th>할 수 있는 것</th><th>소요 시간</th></tr>
+  <tr><td>⭐ Star</td><td>매우 쉬움</td><td>응원하기</td><td>5초</td></tr>
+  <tr><td>💬 Issue</td><td>쉬움</td><td>의견/제안/오류 신고</td><td>3분</td></tr>
+  <tr><td>🔀 Fork & PR</td><td>보통</td><td>직접 수정 제안</td><td>10~30분</td></tr>
+</table>
+
+<div class="info-box tip">
+  <div class="icon">💡</div>
+  <div>
+    <strong>처음이라면 Star → Issue 순서로 시작하세요!</strong><br>
+    Fork & PR은 GitHub에 익숙해진 후에 도전하면 됩니다.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== FAQ ==================== -->
+<h2 class="page-break"><span class="step-badge">?</span> 자주 묻는 질문</h2>
+
+<div class="faq-item no-break">
+  <h4>Q1. git pull에서 "conflict" 오류가 나요</h4>
+  <p>에듀플로 코드를 직접 수정한 적이 있으면 발생합니다.</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>git stash
+git pull
+git stash pop</code></pre>
+  <p><code>git stash</code>는 내 변경사항을 임시 저장하고, pull 후 다시 적용합니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q2. 업데이트하면 내가 만든 교재가 사라지나요?</h4>
+  <p><strong>아닙니다!</strong> 교재 데이터는 <code>projects/</code> 폴더에 저장되어 있고, 이 폴더는 <code>.gitignore</code>에 등록되어 있어서 <code>git pull</code>의 영향을 받지 않습니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q3. Fork한 프로젝트를 삭제하고 싶어요</h4>
+  <ol>
+    <li><code>https://github.com/내아이디/저장소이름</code> 접속</li>
+    <li>Settings → 맨 아래 Danger Zone → <strong>"Delete this repository"</strong></li>
+    <li>저장소 이름을 입력하고 확인</li>
+  </ol>
+  <p>Fork를 삭제해도 원본 저장소에는 영향이 없습니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q4. 다른 선생님의 저장소 주소는 어떻게 알 수 있나요?</h4>
+  <p>세션 시간에 공유하거나, 배포된 교재 웹사이트 주소에서 유추할 수 있습니다.</p>
+  <ul>
+    <li>교재 주소: <code>https://<strong>hong-teacher</strong>.github.io/<strong>python-intro</strong>/</code></li>
+    <li>저장소 주소: <code>https://github.com/<strong>hong-teacher</strong>/<strong>python-intro</strong></code></li>
+  </ul>
+  <p>교재 주소에서 <code>.github.io</code>를 <code>github.com</code>으로 바꾸면 됩니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q5. Pull Request를 보냈는데 응답이 없어요</h4>
+  <p>원본 저장소의 선생님이 확인해야 하므로 시간이 걸릴 수 있습니다. 급하면 세션 채팅에서 직접 알려주세요!</p>
+</div>
+
+<hr class="divider">
+
+<div class="info-box tip">
+  <div class="icon">🆘</div>
+  <div>
+    <strong>문제가 해결되지 않으면</strong><br>
+    세션 시간에는 채팅으로 질문해주세요!<br>
+    세션 외: <a href="https://github.com/greatsong/eduflow-js/issues">github.com/greatsong/eduflow-js/issues</a>
+  </div>
+</div>
+
+<div class="footer">
+  <p>에듀플로(EduFlow) 매뉴얼 3: 활용 가이드 | 2026년 2월</p>
+</div>
+
+</div>
+</body>
+</html>
