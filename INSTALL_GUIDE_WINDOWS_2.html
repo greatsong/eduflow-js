@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>에듀플로 매뉴얼 2: 배포 준비 가이드</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --primary: #7c3aed;
+    --primary-light: #ede9fe;
+    --primary-dark: #6d28d9;
+    --success: #16a34a;
+    --success-light: #dcfce7;
+    --warning: #f59e0b;
+    --warning-light: #fef3c7;
+    --danger: #dc2626;
+    --danger-light: #fee2e2;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--gray-800);
+    line-height: 1.8;
+    font-size: 10.5pt;
+    background: #fff;
+  }
+
+  @media print {
+    body { font-size: 10pt; }
+    .page-break { page-break-before: always; }
+    .no-break { page-break-inside: avoid; }
+    @page { margin: 15mm 18mm; size: A4; }
+    .cover { height: 100vh; }
+  }
+
+  .cover {
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    min-height: 95vh; text-align: center;
+    background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 50%, #2563eb 100%);
+    color: white; padding: 60px 40px;
+  }
+  .cover-icon { font-size: 80px; margin-bottom: 20px; }
+  .cover h1 { font-size: 34pt; font-weight: 900; margin-bottom: 8px; letter-spacing: -1px; }
+  .cover .subtitle { font-size: 16pt; font-weight: 300; opacity: 0.9; margin-bottom: 40px; }
+  .cover .tagline { font-size: 12pt; font-weight: 400; opacity: 0.8; line-height: 1.6; max-width: 520px; }
+  .cover .prereq { margin-top: 30px; background: rgba(255,255,255,0.15); padding: 16px 28px; border-radius: 12px; font-size: 10pt; }
+  .cover .version { margin-top: 40px; font-size: 10pt; opacity: 0.6; }
+
+  .content { max-width: 680px; margin: 0 auto; padding: 40px 20px; }
+
+  h2 {
+    font-size: 18pt; font-weight: 900; color: var(--primary);
+    margin-top: 48px; margin-bottom: 16px; padding-bottom: 8px;
+    border-bottom: 3px solid var(--primary);
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .step-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; background: var(--primary); color: white;
+    border-radius: 50%; font-size: 14pt; font-weight: 700; flex-shrink: 0;
+  }
+  h3 { font-size: 12pt; font-weight: 700; color: var(--gray-800); margin-top: 28px; margin-bottom: 10px; }
+  h4 { font-size: 11pt; font-weight: 700; color: var(--gray-700); margin-top: 20px; margin-bottom: 8px; }
+  p { margin-bottom: 10px; }
+
+  .summary-box {
+    background: var(--gray-50); border: 2px solid var(--primary);
+    border-radius: 12px; padding: 24px; margin: 20px 0;
+  }
+  .summary-box h3 { margin-top: 0; color: var(--primary); font-size: 13pt; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 10pt; }
+  th { background: var(--primary); color: white; padding: 10px 14px; text-align: left; font-weight: 500; font-size: 9.5pt; }
+  th:first-child { border-radius: 8px 0 0 0; }
+  th:last-child { border-radius: 0 8px 0 0; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--gray-200); }
+  tr:nth-child(even) td { background: var(--gray-50); }
+  tr:last-child td:first-child { border-radius: 0 0 0 8px; }
+  tr:last-child td:last-child { border-radius: 0 0 8px 0; }
+
+  code {
+    font-family: 'Consolas', 'Courier New', monospace;
+    background: var(--gray-100); padding: 2px 6px; border-radius: 4px;
+    font-size: 9.5pt; color: var(--danger);
+  }
+  pre {
+    background: var(--gray-900); color: #e5e7eb;
+    padding: 16px 20px; border-radius: 10px; margin: 12px 0;
+    overflow-x: auto; font-size: 10pt; line-height: 1.6;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: 10pt; }
+  .cmd-label {
+    display: inline-block; background: var(--primary); color: white;
+    font-size: 8pt; font-weight: 700; padding: 2px 8px; border-radius: 4px 4px 0 0; margin-bottom: -2px;
+  }
+
+  .info-box {
+    border-radius: 10px; padding: 16px 20px; margin: 16px 0;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .info-box .icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+  .info-box p { margin: 0; font-size: 9.5pt; }
+  .info-box strong { font-weight: 700; }
+  .info-box.tip { background: var(--primary-light); border-left: 4px solid var(--primary); }
+  .info-box.warning { background: var(--warning-light); border-left: 4px solid var(--warning); }
+  .info-box.danger { background: var(--danger-light); border-left: 4px solid var(--danger); }
+  .info-box.success { background: var(--success-light); border-left: 4px solid var(--success); }
+
+  ol { padding-left: 24px; margin: 10px 0; }
+  ol li { margin-bottom: 8px; padding-left: 4px; }
+  ul { padding-left: 24px; margin: 8px 0; }
+  ul li { margin-bottom: 4px; }
+
+  a { color: var(--primary); text-decoration: none; font-weight: 500; }
+
+  .url-box {
+    display: inline-block; background: var(--primary-light); color: var(--primary-dark);
+    padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 11pt;
+    margin: 8px 0; word-break: break-all;
+  }
+
+  .step-instruction {
+    background: white; border: 1px solid var(--gray-200); border-radius: 10px;
+    padding: 20px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .step-instruction h4 { margin-top: 0; display: flex; align-items: center; gap: 8px; }
+  .mini-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; background: var(--primary); color: white;
+    border-radius: 50%; font-size: 9pt; font-weight: 700;
+  }
+
+  .divider { border: none; border-top: 2px solid var(--gray-200); margin: 40px 0; }
+  .highlight { background: linear-gradient(transparent 60%, #c4b5fd 60%); font-weight: 700; }
+
+  .skip-box {
+    background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%);
+    border: 2px solid #93c5fd;
+    border-radius: 12px; padding: 20px 24px; margin: 20px 0;
+    text-align: center;
+  }
+  .skip-box .skip-title {
+    font-size: 13pt; font-weight: 700; color: #1d4ed8; margin-bottom: 8px;
+  }
+  .skip-box p { font-size: 10pt; color: var(--gray-700); margin: 0; }
+  .skip-box .skip-arrow {
+    display: inline-block; background: #2563eb; color: white;
+    padding: 8px 20px; border-radius: 8px; font-weight: 700; margin-top: 12px; font-size: 10pt;
+  }
+
+  .session-marker {
+    background: linear-gradient(135deg, var(--success) 0%, #15803d 100%);
+    color: white; text-align: center; padding: 16px 24px; border-radius: 12px;
+    margin: 32px 0; font-size: 12pt; font-weight: 700;
+  }
+
+  .flow-diagram {
+    background: var(--gray-50); border: 2px solid var(--gray-200);
+    border-radius: 12px; padding: 24px; margin: 20px 0; text-align: center;
+  }
+  .flow-row {
+    display: flex; justify-content: center; gap: 8px; align-items: center;
+    margin: 8px 0; flex-wrap: wrap;
+  }
+  .flow-step {
+    background: var(--primary); color: white; padding: 8px 14px; border-radius: 8px;
+    font-size: 9.5pt; font-weight: 500; white-space: nowrap;
+  }
+  .flow-step.highlight-step { background: var(--success); }
+  .flow-step.optional { background: #93c5fd; color: #1e3a5f; }
+  .flow-arrow { color: var(--gray-500); font-size: 16px; font-weight: bold; }
+
+  .result-box {
+    background: linear-gradient(135deg, var(--primary-light) 0%, #dbeafe 100%);
+    border: 2px solid var(--primary); border-radius: 12px; padding: 24px;
+    margin: 20px 0; text-align: center;
+  }
+  .result-box .url { font-size: 14pt; font-weight: 700; color: var(--primary-dark); margin: 12px 0; word-break: break-all; }
+
+  .faq-item { background: var(--gray-50); border-radius: 10px; padding: 16px 20px; margin: 12px 0; }
+  .faq-item h4 { color: var(--primary); margin-top: 0; font-size: 10.5pt; }
+  .faq-item p { font-size: 9.5pt; }
+
+  .checklist-table td:first-child { text-align: center; width: 40px; }
+
+  .footer {
+    text-align: center; color: var(--gray-500); font-size: 9pt;
+    margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--gray-200);
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-icon">🚀</div>
+  <h1>에듀플로 매뉴얼 2</h1>
+  <div class="subtitle">배포 준비 가이드</div>
+  <div class="tagline">
+    GitHub 계정 만들기부터 배포 도구 설치까지<br>
+    완성된 교재를 웹사이트로 공개하기 위한 준비
+  </div>
+  <div class="prereq">
+    <strong>사전 조건:</strong> 매뉴얼 1 완료 상태<br>
+    (Git, Node.js 설치 + 에듀플로 다운로드 + npm install 완료)
+  </div>
+  <div class="version">2026년 2월 | 온라인 세션용</div>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<!-- OVERVIEW -->
+<div class="summary-box">
+  <h3>📋 이 매뉴얼에서 할 것</h3>
+  <p>에듀플로에서 만든 교재를 인터넷에 <strong>웹사이트로 공개</strong>하기 위한 도구들을 설치합니다.</p>
+
+  <div class="flow-diagram" style="margin-top:16px; margin-bottom:8px;">
+    <div class="flow-row">
+      <div class="flow-step optional">GitHub<br>계정 만들기</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">Python<br>설치</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">MkDocs<br>설치</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">GitHub CLI<br>설치 & 로그인</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>순서</th><th>할 일</th><th>소요 시간</th><th>비고</th></tr>
+    <tr><td><strong>1</strong></td><td>GitHub 계정 만들기</td><td>5분</td><td>이미 있으면 건너뛰기</td></tr>
+    <tr><td><strong>2</strong></td><td>Python 설치</td><td>3분</td><td></td></tr>
+    <tr><td><strong>3</strong></td><td>MkDocs 설치</td><td>2분</td><td></td></tr>
+    <tr><td><strong>4</strong></td><td>GitHub CLI 설치 & 로그인</td><td>5분</td><td></td></tr>
+  </table>
+
+  <p style="text-align:center; font-weight:700; color:var(--primary); margin-bottom:0;">
+    1~4단계를 세션 전에 미리 완료해주세요! (약 15분)
+  </p>
+</div>
+
+<div class="info-box tip">
+  <div class="icon">🌐</div>
+  <div>
+    <strong>이 과정을 마치면 이런 일이 가능합니다:</strong><br>
+    에듀플로에서 만든 교재가 <code>https://내아이디.github.io/교재이름/</code> 주소로 공개됩니다.<br>
+    이 주소를 학생이나 동료에게 공유하면 누구나 교재를 볼 수 있습니다.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 1: GitHub Account ==================== -->
+<h2 class="page-break"><span class="step-badge">1</span> GitHub 계정 만들기</h2>
+
+<div class="skip-box">
+  <div class="skip-title">이미 GitHub 계정이 있으신가요?</div>
+  <p><a href="https://github.com" style="color:#1d4ed8;">github.com</a>에 로그인이 되면 계정이 있는 것입니다.</p>
+  <div class="skip-arrow">➡️ 계정이 있으면 2단계로 바로 이동하세요</div>
+</div>
+
+<p>GitHub는 만든 교재를 인터넷에 무료로 올릴 수 있는 서비스입니다.</p>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> GitHub 가입 페이지 열기</h4>
+  <p>웹 브라우저에서 아래 주소로 이동합니다:</p>
+  <div class="url-box">https://github.com/signup</div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 이메일 입력</h4>
+  <ol>
+    <li><strong>이메일 주소</strong>를 입력합니다 (평소 쓰는 이메일)</li>
+    <li><strong>"Continue"</strong> 클릭</li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 비밀번호 설정</h4>
+  <ol>
+    <li><strong>비밀번호</strong>를 입력합니다 (15자 이상, 또는 숫자+소문자 포함 8자 이상)</li>
+    <li><strong>"Continue"</strong> 클릭</li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">d</span> 사용자명(Username) 정하기</h4>
+  <p><strong>사용자명</strong>을 입력합니다. 이 이름이 교재 웹사이트 주소에 들어갑니다!</p>
+
+  <table>
+    <tr><th>규칙</th><th>설명</th></tr>
+    <tr><td>사용 가능</td><td>영어 소문자, 숫자, 하이픈(<code>-</code>)</td></tr>
+    <tr><td>사용 불가</td><td>한국어, 공백, 특수문자</td></tr>
+    <tr><td>추천 형식</td><td><code>hong-teacher</code>, <code>kimcs2026</code>, <code>edu-park</code></td></tr>
+  </table>
+
+  <div class="info-box tip">
+    <div class="icon">💡</div>
+    <div>
+      <strong>사용자명이 곧 주소입니다!</strong><br>
+      사용자명이 <code>hong-teacher</code>이면 교재 주소는<br>
+      <code>https://<strong>hong-teacher</strong>.github.io/교재이름/</code> 이 됩니다.<br>
+      깔끔하고 기억하기 쉬운 이름을 추천합니다.
+    </div>
+  </div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">e</span> 이메일 인증</h4>
+  <ol>
+    <li>화면에 퍼즐이 나타나면 풀어주세요 (로봇 방지)</li>
+    <li><strong>"Create account"</strong> 클릭</li>
+    <li>입력한 이메일로 <strong>인증 코드</strong>(숫자 8자리)가 옵니다</li>
+    <li>이메일을 확인하고, 코드를 화면에 입력합니다</li>
+  </ol>
+
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>이메일이 안 오면?</strong><br>
+      → 스팸/정크 메일함을 확인하세요<br>
+      → 1~2분 기다려도 안 오면 "Resend" 버튼을 클릭하세요
+    </div>
+  </div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">f</span> 설정 완료</h4>
+  <ol>
+    <li>몇 가지 질문이 나올 수 있습니다 (팀 규모, 관심사 등)</li>
+    <li>대충 선택하거나 <strong>"Skip"</strong> 을 눌러도 됩니다</li>
+    <li>플랜 선택 화면이 나오면 <strong>"Continue for free"</strong> (무료) 선택</li>
+  </ol>
+</div>
+
+<div class="info-box success">
+  <div class="icon">✅</div>
+  <div>
+    <strong>GitHub 계정이 만들어졌습니다!</strong><br>
+    <code>https://github.com/내사용자명</code> 이 나의 GitHub 주소입니다.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 2: Python ==================== -->
+<h2 class="page-break"><span class="step-badge">2</span> Python 설치하기</h2>
+
+<p>Python은 교재를 웹사이트로 변환해주는 도구(MkDocs)를 실행하기 위해 필요합니다.</p>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 다운로드</h4>
+  <p>웹 브라우저에서 아래 주소로 이동합니다:</p>
+  <div class="url-box">https://www.python.org/downloads/</div>
+  <p>큰 노란색 버튼 <strong>"Download Python 3.x.x"</strong> 를 클릭합니다.</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 설치 (주의사항 있음!)</h4>
+  <ol>
+    <li>다운로드된 파일(예: <code>python-3.13.2-amd64.exe</code>)을 <strong>더블클릭</strong></li>
+    <li>첫 화면이 나타나면 <span class="highlight">맨 아래 "Add python.exe to PATH"를 반드시 체크 ☑</span></li>
+    <li>그 다음 <strong>"Install Now"</strong> 클릭</li>
+    <li>설치 완료되면 <strong>"Close"</strong></li>
+  </ol>
+</div>
+
+<div class="info-box danger">
+  <div class="icon">🚨</div>
+  <div>
+    <strong>"Add python.exe to PATH" 체크는 필수입니다!</strong><br>
+    이걸 안 하면 이후 모든 명령어가 안 됩니다.<br>
+    실수로 체크 안 하고 설치했다면: Python 삭제 → 다시 설치 (이번엔 꼭 체크!)
+  </div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 설치 확인</h4>
+  <p><strong>명령 프롬프트를 새로 엽니다</strong> (기존 것 닫고 새로! 이게 중요합니다)</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>python --version</code></pre>
+  <p>결과 예시: <code>Python 3.13.2</code> → 숫자가 나오면 성공!</p>
+
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>"python을 찾을 수 없습니다"</strong> 라고 나오면?<br>
+      → <code>python3 --version</code> 으로 해보세요<br>
+      → 그래도 안 되면 명령 프롬프트를 닫고 <strong>새로 열어서</strong> 다시<br>
+      → 그래도 안 되면 컴퓨터 <strong>재시작</strong> 후 다시<br>
+      → 그래도 안 되면 Python 삭제 → <strong>"Add to PATH" 체크</strong>하고 재설치
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 3: MkDocs ==================== -->
+<h2><span class="step-badge">3</span> MkDocs 설치하기</h2>
+
+<p>MkDocs는 마크다운 파일을 <strong>예쁜 웹사이트</strong>로 바꿔주는 도구입니다.<br>
+Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 설치</h4>
+  <p>명령 프롬프트에서 아래를 입력하고 Enter:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>pip install mkdocs mkdocs-material</code></pre>
+  <p>여러 줄이 흘러가며 설치됩니다. <strong>1~2분</strong> 정도 걸립니다.</p>
+  <p>마지막에 아래처럼 나오면 성공:</p>
+  <pre><code>Successfully installed ... mkdocs-1.6.x ... mkdocs-material-9.x.x ...</code></pre>
+</div>
+
+<div class="info-box tip">
+  <div class="icon">💡</div>
+  <div><strong>"pip"이 안 되면?</strong> <code>pip3 install mkdocs mkdocs-material</code> 로 해보세요.</div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 설치 확인</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>mkdocs --version</code></pre>
+  <p>결과 예시: <code>mkdocs, version 1.6.1</code> → 숫자가 나오면 성공!</p>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 4: GitHub CLI ==================== -->
+<h2 class="page-break"><span class="step-badge">4</span> GitHub CLI 설치 & 로그인</h2>
+
+<p>GitHub CLI는 명령 프롬프트에서 바로 GitHub에 파일을 올릴 수 있게 해주는 도구입니다.</p>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 다운로드</h4>
+  <p>웹 브라우저에서 아래 주소로 이동합니다:</p>
+  <div class="url-box">https://cli.github.com</div>
+  <p><strong>"Download for Windows"</strong> 버튼을 클릭합니다.</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 설치</h4>
+  <ol>
+    <li>다운로드된 파일(예: <code>gh_2.67.0_windows_amd64.msi</code>)을 <strong>더블클릭</strong></li>
+    <li><span class="highlight">모든 화면에서 "Next"만 계속 누릅니다</span></li>
+    <li>마지막에 <strong>"Install"</strong> → <strong>"Finish"</strong></li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> GitHub에 로그인하기</h4>
+  <p><strong>명령 프롬프트를 새로 엽니다</strong> (기존 것 닫고 새로!)</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>gh auth login</code></pre>
+
+  <p>질문이 하나씩 나옵니다. <strong>아래 표 순서대로 선택</strong>하세요:</p>
+
+  <table>
+    <tr><th>#</th><th>화면에 나오는 질문</th><th>이렇게 하세요</th></tr>
+    <tr><td>1</td><td>Where do you use GitHub?</td><td><strong>GitHub.com</strong> 선택 → Enter</td></tr>
+    <tr><td>2</td><td>What is your preferred protocol for Git?</td><td><strong>HTTPS</strong> 선택 → Enter</td></tr>
+    <tr><td>3</td><td>Authenticate Git with your GitHub credentials?</td><td><strong>Y</strong> 입력 → Enter</td></tr>
+    <tr><td>4</td><td>How would you like to authenticate?</td><td><strong>Login with a web browser</strong> 선택 → Enter</td></tr>
+  </table>
+
+  <div class="info-box tip">
+    <div class="icon">💡</div>
+    <div>
+      <strong>선택 방법:</strong> 키보드 <strong>↑ ↓ 화살표 키</strong>로 이동하고, <strong>Enter</strong>로 선택합니다.
+    </div>
+  </div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">d</span> 브라우저에서 인증하기</h4>
+  <p>명령 프롬프트에 <strong>8자리 코드</strong>가 나타납니다 (예: <code>AB12-CD34</code>).</p>
+  <p>Enter를 누르면 브라우저가 자동으로 열립니다.</p>
+
+  <ol>
+    <li>브라우저에서 GitHub 로그인 화면이 나오면 <strong>로그인</strong>합니다</li>
+    <li>명령 프롬프트에 나온 <strong>8자리 코드</strong>를 입력합니다</li>
+    <li><strong>"Authorize github"</strong> 초록색 버튼을 클릭합니다</li>
+    <li>"Congratulations!" 화면이 나오면 완료!</li>
+  </ol>
+
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>브라우저가 안 열리면?</strong><br>
+      직접 브라우저를 열고 아래 주소로 이동하세요:<br>
+      <code>https://github.com/login/device</code><br>
+      그리고 8자리 코드를 입력하면 됩니다.
+    </div>
+  </div>
+
+  <p>명령 프롬프트로 돌아오면 아래처럼 표시됩니다:</p>
+  <pre><code>✓ Authentication complete.
+✓ Logged in as 내사용자명</code></pre>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">e</span> 로그인 확인</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>gh auth status</code></pre>
+  <p>아래처럼 나오면 성공:</p>
+  <pre><code>github.com
+  ✓ Logged in to github.com account 내사용자명</code></pre>
+</div>
+
+<div class="session-marker">
+  ✅ 여기까지 세션 전에 완료해주세요!<br>
+  세션 당일에는 API 키만 입력하면 바로 시작합니다.
+</div>
+
+<hr class="divider">
+
+<!-- ==================== CHECKLIST ==================== -->
+<h2><span class="step-badge">✓</span> 세션 전 최종 체크리스트</h2>
+
+<p>아래 명령어를 <strong>명령 프롬프트</strong>에서 하나씩 실행해보세요.<br>
+모두 숫자나 ✓ 표시가 나오면 <strong>세션 준비 완료</strong>입니다!</p>
+
+<h3>매뉴얼 1에서 설치한 것</h3>
+<table>
+  <tr><th>확인 항목</th><th>명령어</th><th>정상 결과</th></tr>
+  <tr><td>Git</td><td><code>git --version</code></td><td><code>git version 2.x.x</code></td></tr>
+  <tr><td>Node.js</td><td><code>node --version</code></td><td><code>v22.x.x</code></td></tr>
+  <tr><td>에듀플로 다운로드</td><td><code>dir %USERPROFILE%\Desktop\eduflow-js</code></td><td>파일 목록이 나옴</td></tr>
+</table>
+
+<h3>매뉴얼 2에서 설치한 것</h3>
+<table>
+  <tr><th>확인 항목</th><th>명령어</th><th>정상 결과</th></tr>
+  <tr><td>Python</td><td><code>python --version</code></td><td><code>Python 3.x.x</code></td></tr>
+  <tr><td>MkDocs</td><td><code>mkdocs --version</code></td><td><code>mkdocs, version 1.x.x</code></td></tr>
+  <tr><td>GitHub CLI</td><td><code>gh --version</code></td><td><code>gh version 2.x.x</code></td></tr>
+  <tr><td>GitHub 로그인</td><td><code>gh auth status</code></td><td><code>✓ Logged in as 내아이디</code></td></tr>
+</table>
+
+<div class="info-box success">
+  <div class="icon">🎉</div>
+  <div>
+    <strong>7개 모두 통과하면 세션 준비 완료!</strong><br>
+    세션 당일에는 API 키 입력 → <code>npm run dev</code> → 교재 만들기 → 배포까지 바로 진행합니다.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ==================== STEP 5: Deploy (세션 시간) ==================== -->
+<h2 class="page-break"><span class="step-badge">5</span> 에듀플로에서 배포하기 (세션 시간)</h2>
+
+<div class="info-box tip">
+  <div class="icon">📌</div>
+  <div><strong>이 단계는 세션 시간에 진행합니다.</strong> 교재 생성(Step 4: 챕터 제작)이 완료된 후에 할 수 있습니다.</div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 배포 관리 페이지로 이동</h4>
+  <ol>
+    <li>에듀플로 왼쪽 사이드바에서 완성된 <strong>프로젝트를 선택</strong></li>
+    <li><strong>"배포 관리"</strong> (🚀) 클릭</li>
+    <li><strong>"MkDocs 웹사이트"</strong> 탭 선택</li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> MkDocs 설정 생성</h4>
+  <ol>
+    <li><strong>사이트 제목</strong> 입력 (예: "파이썬 입문 교재")</li>
+    <li>테마는 기본값(<strong>Material</strong>)으로 두면 됩니다</li>
+    <li><strong>"설정 생성"</strong> 버튼 클릭</li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 빌드 & 미리보기</h4>
+  <ol>
+    <li><strong>"빌드"</strong> 버튼 클릭 → "빌드 완료" 확인</li>
+    <li><strong>"프리뷰"</strong> 버튼으로 웹사이트 미리보기 (선택사항)</li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">d</span> GitHub Pages 배포!</h4>
+  <ol>
+    <li><strong>저장소 이름</strong> 입력
+      <ul>
+        <li>영어 소문자와 하이픈(-) 사용 (예: <code>python-intro</code>)</li>
+        <li>에듀플로가 자동으로 이름을 제안해줍니다</li>
+      </ul>
+    </li>
+    <li>배포될 URL이 미리보기됩니다:
+      <pre><code>https://내아이디.github.io/python-intro/</code></pre>
+    </li>
+    <li><strong>"GitHub Pages 배포"</strong> 버튼 클릭!</li>
+    <li>1~2분 기다리면...</li>
+  </ol>
+</div>
+
+<div class="result-box">
+  <p style="font-size:12pt; margin-bottom:4px;">🎉 배포 완료!</p>
+  <div class="url">https://내아이디.github.io/python-intro/</div>
+  <p style="font-size:10pt; color:var(--gray-700); margin-bottom:0;">
+    이 주소를 학생, 동료, 누구에게나 공유하면 교재를 볼 수 있습니다!
+  </p>
+</div>
+
+<div class="info-box warning">
+  <div class="icon">⏰</div>
+  <div>
+    <strong>배포 직후 접속이 안 될 수 있습니다.</strong><br>
+    GitHub Pages 활성화에 <strong>1~5분</strong> 걸립니다. 잠시 기다린 후 새로고침하세요.
+  </div>
+</div>
+
+<h3>내 교재 웹사이트에 포함된 기능</h3>
+
+<table>
+  <tr><th>기능</th><th>설명</th></tr>
+  <tr><td>반응형 디자인</td><td>PC, 태블릿, 스마트폰 모두 OK</td></tr>
+  <tr><td>왼쪽 목차 메뉴</td><td>Part/Chapter 구조 자동 생성</td></tr>
+  <tr><td>검색</td><td>교재 내용 전체 검색</td></tr>
+  <tr><td>코드 하이라이팅</td><td>프로그래밍 코드가 예쁘게 표시</td></tr>
+  <tr><td>다크 모드</td><td>밝은/어두운 테마 전환</td></tr>
+  <tr><td>무료 호스팅</td><td>GitHub Pages는 완전 무료</td></tr>
+</table>
+
+<h3>교재를 수정 후 다시 배포하려면?</h3>
+
+<p>에듀플로에서 챕터를 수정한 뒤, 같은 과정을 반복하면 됩니다:</p>
+<ol>
+  <li>배포 관리 → "빌드"</li>
+  <li>"GitHub Pages 배포" (같은 저장소 이름 입력)</li>
+  <li>기존 사이트가 <strong>자동으로 업데이트</strong>됩니다</li>
+</ol>
+
+<hr class="divider">
+
+<!-- ==================== FAQ ==================== -->
+<h2 class="page-break"><span class="step-badge">?</span> 자주 묻는 질문</h2>
+
+<div class="faq-item no-break">
+  <h4>Q1. GitHub 가입할 때 사용자명을 뭘로 하면 좋을까요?</h4>
+  <p>교재 웹사이트 주소에 들어가므로 <strong>짧고 깔끔한 영어</strong>가 좋습니다.</p>
+  <ul>
+    <li>좋은 예: <code>hong-teacher</code>, <code>kimcs</code>, <code>edu-park</code></li>
+    <li>피할 것: 너무 긴 이름, 의미 없는 숫자 나열</li>
+  </ul>
+  <p>나중에 Settings → Account → Change username에서 변경 가능하지만, 변경하면 기존 URL도 바뀝니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q2. "python을 찾을 수 없습니다" 오류</h4>
+  <p>Python 설치 시 <strong>"Add python.exe to PATH"</strong>를 체크하지 않은 것입니다.</p>
+  <ol>
+    <li>설정 → 앱 → "Python" 검색 → <strong>제거</strong></li>
+    <li>다시 python.org에서 다운로드</li>
+    <li>이번에는 <strong>"Add python.exe to PATH" 꼭 체크</strong> ☑</li>
+    <li>"Install Now" 클릭</li>
+    <li>명령 프롬프트를 <strong>새로 열고</strong> <code>python --version</code> 확인</li>
+  </ol>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q3. "mkdocs를 찾을 수 없습니다" 오류</h4>
+  <p>Python PATH 문제이거나 설치가 안 된 것입니다.</p>
+  <ol>
+    <li>먼저 <code>python --version</code>이 되는지 확인</li>
+    <li>명령 프롬프트를 <strong>새로 열고</strong> <code>pip install mkdocs mkdocs-material</code> 재실행</li>
+  </ol>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q4. "gh auth login"에서 브라우저가 안 열려요</h4>
+  <p>직접 브라우저를 열고 아래 주소로 이동하세요:</p>
+  <div class="cmd-label">브라우저 주소창</div>
+  <pre><code>https://github.com/login/device</code></pre>
+  <p>명령 프롬프트에 나온 <strong>8자리 코드</strong>를 입력하면 됩니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q5. 배포 버튼 눌렀는데 오류가 나요</h4>
+  <p>아래 순서로 확인하세요:</p>
+  <ol>
+    <li><code>gh auth status</code> → GitHub 로그인 되어 있는지</li>
+    <li><code>mkdocs --version</code> → MkDocs 설치되어 있는지</li>
+    <li>에듀플로에서 "빌드"가 먼저 성공했는지</li>
+    <li>저장소 이름에 한국어, 공백이 없는지 (영어 소문자 + 하이픈만!)</li>
+  </ol>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q6. 배포된 사이트가 404 에러</h4>
+  <ul>
+    <li><strong>5분</strong> 정도 기다린 후 새로고침 (<code>Ctrl + Shift + R</code>)</li>
+    <li>그래도 안 되면: <code>https://github.com/내아이디/저장소이름</code> → Settings → Pages 확인</li>
+  </ul>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q7. 사이트를 삭제하고 싶어요</h4>
+  <ol>
+    <li><code>https://github.com/내아이디/저장소이름</code> 접속</li>
+    <li>Settings → 맨 아래 Danger Zone → "Delete this repository"</li>
+  </ol>
+</div>
+
+<hr class="divider">
+
+<div class="info-box tip">
+  <div class="icon">🆘</div>
+  <div>
+    <strong>문제가 해결되지 않으면</strong><br>
+    세션 시간에는 채팅으로 질문해주세요!<br>
+    세션 외: <a href="https://github.com/greatsong/eduflow-js/issues">github.com/greatsong/eduflow-js/issues</a>
+  </div>
+</div>
+
+<div class="footer">
+  <p>에듀플로(EduFlow) 매뉴얼 2: 배포 준비 가이드 | 2026년 2월</p>
+</div>
+
+</div>
+</body>
+</html>
