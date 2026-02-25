@@ -130,8 +130,20 @@
   .url-box {
     display: inline-block; background: var(--primary-light); color: var(--primary-dark);
     padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 11pt;
-    margin: 8px 0; word-break: break-all;
+    margin: 8px 0; word-break: break-all; text-decoration: none;
   }
+  .url-box:hover { text-decoration: underline; }
+
+  pre { position: relative; }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(255,255,255,0.15); color: #e5e7eb; border: 1px solid rgba(255,255,255,0.2);
+    padding: 3px 10px; border-radius: 6px; cursor: pointer;
+    font-size: 8pt; font-family: 'Noto Sans KR', sans-serif; font-weight: 500;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.25); }
+  .copy-btn.copied { background: #16a34a; color: white; border-color: #16a34a; }
 
   .step-instruction {
     background: white; border: 1px solid var(--gray-200); border-radius: 10px;
@@ -625,5 +637,21 @@ git stash pop</code></pre>
 </div>
 
 </div>
+<script>
+document.querySelectorAll('pre').forEach(pre => {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = '복사';
+  btn.addEventListener('click', () => {
+    const code = pre.querySelector('code');
+    navigator.clipboard.writeText(code ? code.textContent : pre.textContent).then(() => {
+      btn.textContent = '복사됨!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('copied'); }, 1500);
+    });
+  });
+  pre.appendChild(btn);
+});
+</script>
 </body>
 </html>

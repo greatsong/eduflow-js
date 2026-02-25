@@ -128,8 +128,20 @@
   .url-box {
     display: inline-block; background: var(--primary-light); color: var(--primary-dark);
     padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 11pt;
-    margin: 8px 0; word-break: break-all;
+    margin: 8px 0; word-break: break-all; text-decoration: none;
   }
+  .url-box:hover { text-decoration: underline; }
+
+  pre { position: relative; }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(255,255,255,0.15); color: #e5e7eb; border: 1px solid rgba(255,255,255,0.2);
+    padding: 3px 10px; border-radius: 6px; cursor: pointer;
+    font-size: 8pt; font-family: 'Noto Sans KR', sans-serif; font-weight: 500;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.25); }
+  .copy-btn.copied { background: #16a34a; color: white; border-color: #16a34a; }
 
   .step-instruction {
     background: white; border: 1px solid var(--gray-200); border-radius: 10px;
@@ -284,7 +296,7 @@
 <div class="step-instruction no-break">
   <h4><span class="mini-badge">a</span> GitHub 가입 페이지 열기</h4>
   <p>웹 브라우저에서 아래 주소로 이동합니다:</p>
-  <div class="url-box">https://github.com/signup</div>
+  <a href="https://github.com/signup" target="_blank" class="url-box">https://github.com/signup</a>
 </div>
 
 <div class="step-instruction no-break">
@@ -371,7 +383,7 @@
 <div class="step-instruction no-break">
   <h4><span class="mini-badge">a</span> 다운로드</h4>
   <p>웹 브라우저에서 아래 주소로 이동합니다:</p>
-  <div class="url-box">https://www.python.org/downloads/</div>
+  <a href="https://www.python.org/downloads/" target="_blank" class="url-box">https://www.python.org/downloads/</a>
   <p>큰 노란색 버튼 <strong>"Download Python 3.x.x"</strong> 를 클릭합니다.</p>
 </div>
 
@@ -500,7 +512,7 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
 <div class="step-instruction no-break">
   <h4><span class="mini-badge">a</span> 다운로드</h4>
   <p>웹 브라우저에서 아래 주소로 이동합니다:</p>
-  <div class="url-box">https://cli.github.com</div>
+  <a href="https://cli.github.com" target="_blank" class="url-box">https://cli.github.com</a>
   <p><strong>"Download for Windows"</strong> 버튼을 클릭합니다.</p>
 </div>
 
@@ -610,7 +622,7 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
     <div>
       <strong>브라우저가 안 열리면?</strong><br>
       직접 브라우저를 열고 주소창에 아래를 입력하세요:<br>
-      <div class="url-box" style="margin-top:4px;">https://github.com/login/device</div>
+      <a href="https://github.com/login/device" target="_blank" class="url-box" style="margin-top:4px;">https://github.com/login/device</a>
       <br>그리고 명령 프롬프트에 나온 8자리 코드를 입력하면 됩니다.
     </div>
   </div>
@@ -914,5 +926,21 @@ git config --global user.email "내이메일주소"</code></pre>
 </div>
 
 </div>
+<script>
+document.querySelectorAll('pre').forEach(pre => {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = '복사';
+  btn.addEventListener('click', () => {
+    const code = pre.querySelector('code');
+    navigator.clipboard.writeText(code ? code.textContent : pre.textContent).then(() => {
+      btn.textContent = '복사됨!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('copied'); }, 1500);
+    });
+  });
+  pre.appendChild(btn);
+});
+</script>
 </body>
 </html>
