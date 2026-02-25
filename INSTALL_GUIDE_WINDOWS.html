@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>에듀플로(EduFlow) 윈도우 설치 가이드</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --primary: #2563eb;
+    --primary-light: #dbeafe;
+    --primary-dark: #1d4ed8;
+    --success: #16a34a;
+    --success-light: #dcfce7;
+    --warning: #f59e0b;
+    --warning-light: #fef3c7;
+    --danger: #dc2626;
+    --danger-light: #fee2e2;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--gray-800);
+    line-height: 1.8;
+    font-size: 10.5pt;
+    background: #fff;
+  }
+
+  @media print {
+    body { font-size: 10pt; }
+    .page-break { page-break-before: always; }
+    .no-break { page-break-inside: avoid; }
+    @page { margin: 15mm 18mm; size: A4; }
+    .cover { height: 100vh; }
+  }
+
+  /* Cover Page */
+  .cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 95vh;
+    text-align: center;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #7c3aed 100%);
+    color: white;
+    padding: 60px 40px;
+    border-radius: 0;
+  }
+
+  .cover-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+  }
+
+  .cover h1 {
+    font-size: 36pt;
+    font-weight: 900;
+    margin-bottom: 8px;
+    letter-spacing: -1px;
+  }
+
+  .cover .subtitle {
+    font-size: 16pt;
+    font-weight: 300;
+    opacity: 0.9;
+    margin-bottom: 40px;
+  }
+
+  .cover .tagline {
+    font-size: 12pt;
+    font-weight: 400;
+    opacity: 0.8;
+    line-height: 1.6;
+    max-width: 500px;
+  }
+
+  .cover .version {
+    margin-top: 60px;
+    font-size: 10pt;
+    opacity: 0.6;
+  }
+
+  /* Main Content */
+  .content {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+
+  /* Section Headers */
+  h2 {
+    font-size: 18pt;
+    font-weight: 900;
+    color: var(--primary);
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 3px solid var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  h2 .step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    font-size: 14pt;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  h3 {
+    font-size: 12pt;
+    font-weight: 700;
+    color: var(--gray-800);
+    margin-top: 28px;
+    margin-bottom: 10px;
+  }
+
+  h4 {
+    font-size: 11pt;
+    font-weight: 700;
+    color: var(--gray-700);
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+
+  p { margin-bottom: 10px; }
+
+  /* Summary Box */
+  .summary-box {
+    background: var(--gray-50);
+    border: 2px solid var(--primary);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+
+  .summary-box h3 {
+    margin-top: 0;
+    color: var(--primary);
+    font-size: 13pt;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 10pt;
+  }
+
+  th {
+    background: var(--primary);
+    color: white;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 500;
+    font-size: 9.5pt;
+  }
+
+  th:first-child { border-radius: 8px 0 0 0; }
+  th:last-child { border-radius: 0 8px 0 0; }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  tr:nth-child(even) td { background: var(--gray-50); }
+  tr:last-child td:first-child { border-radius: 0 0 0 8px; }
+  tr:last-child td:last-child { border-radius: 0 0 8px 0; }
+
+  /* Code Blocks */
+  code {
+    font-family: 'Consolas', 'Courier New', monospace;
+    background: var(--gray-100);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9.5pt;
+    color: var(--danger);
+  }
+
+  pre {
+    background: var(--gray-900);
+    color: #e5e7eb;
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin: 12px 0;
+    overflow-x: auto;
+    font-size: 10pt;
+    line-height: 1.6;
+  }
+
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-size: 10pt;
+  }
+
+  .cmd-label {
+    display: inline-block;
+    background: var(--primary);
+    color: white;
+    font-size: 8pt;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px 4px 0 0;
+    margin-bottom: -2px;
+  }
+
+  /* Info Boxes */
+  .info-box {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .info-box .icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .info-box.tip {
+    background: var(--primary-light);
+    border-left: 4px solid var(--primary);
+  }
+
+  .info-box.warning {
+    background: var(--warning-light);
+    border-left: 4px solid var(--warning);
+  }
+
+  .info-box.danger {
+    background: var(--danger-light);
+    border-left: 4px solid var(--danger);
+  }
+
+  .info-box.success {
+    background: var(--success-light);
+    border-left: 4px solid var(--success);
+  }
+
+  .info-box p { margin: 0; font-size: 9.5pt; }
+  .info-box strong { font-weight: 700; }
+
+  /* Ordered List Styling */
+  ol {
+    padding-left: 24px;
+    margin: 10px 0;
+  }
+
+  ol li {
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+
+  ul {
+    padding-left: 24px;
+    margin: 8px 0;
+  }
+
+  ul li { margin-bottom: 4px; }
+
+  /* Link */
+  a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .url-box {
+    display: inline-block;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 11pt;
+    margin: 8px 0;
+    word-break: break-all;
+  }
+
+  /* Flow Diagram */
+  .flow-diagram {
+    background: var(--gray-50);
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+    text-align: center;
+  }
+
+  .flow-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    align-items: center;
+    margin: 8px 0;
+    flex-wrap: wrap;
+  }
+
+  .flow-step {
+    background: var(--primary);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 9.5pt;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .flow-arrow {
+    color: var(--gray-500);
+    font-size: 16px;
+    font-weight: bold;
+  }
+
+  /* Divider */
+  .divider {
+    border: none;
+    border-top: 2px solid var(--gray-200);
+    margin: 40px 0;
+  }
+
+  /* Highlight */
+  .highlight {
+    background: linear-gradient(transparent 60%, #fef08a 60%);
+    font-weight: 700;
+  }
+
+  /* Before Session / During Session */
+  .session-marker {
+    background: linear-gradient(135deg, var(--success) 0%, #15803d 100%);
+    color: white;
+    text-align: center;
+    padding: 16px 24px;
+    border-radius: 12px;
+    margin: 32px 0;
+    font-size: 12pt;
+    font-weight: 700;
+  }
+
+  /* File Structure */
+  .file-tree {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-family: 'Consolas', monospace;
+    font-size: 9.5pt;
+    line-height: 1.8;
+    margin: 12px 0;
+  }
+
+  .file-tree .comment {
+    color: var(--gray-500);
+  }
+
+  /* FAQ */
+  .faq-item {
+    background: var(--gray-50);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 12px 0;
+  }
+
+  .faq-item h4 {
+    color: var(--primary);
+    margin-top: 0;
+    font-size: 10.5pt;
+  }
+
+  .faq-item p { font-size: 9.5pt; }
+
+  /* Term Table */
+  .term-table td:first-child {
+    font-weight: 700;
+    color: var(--primary);
+    white-space: nowrap;
+    width: 120px;
+  }
+
+  /* Step Instruction */
+  .step-instruction {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .step-instruction h4 {
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mini-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    font-size: 9pt;
+    font-weight: 700;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 9pt;
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-200);
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <div class="cover-icon">📚</div>
+  <h1>에듀플로</h1>
+  <div class="subtitle">EduFlow 윈도우 설치 가이드</div>
+  <div class="tagline">
+    AI가 교육자료를 자동으로 만들어주는 시스템<br>
+    주제만 입력하면 교재 목차 → 챕터 본문 → 웹사이트까지 자동 생성
+  </div>
+  <div class="version">2026년 2월 | 온라인 세션용</div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="content">
+
+<!-- OVERVIEW -->
+<div class="summary-box">
+  <h3>📋 전체 과정 요약</h3>
+  <table>
+    <tr><th>순서</th><th>할 일</th><th>소요 시간</th><th>비고</th></tr>
+    <tr><td><strong>1</strong></td><td>Git 설치</td><td>3분</td><td rowspan="3" style="background:#dcfce7; color:#166534; font-weight:600; text-align:center; vertical-align:middle;">세션 전에<br>미리!</td></tr>
+    <tr><td><strong>2</strong></td><td>Node.js 설치</td><td>3분</td></tr>
+    <tr><td><strong>3</strong></td><td>에듀플로 다운로드</td><td>5분</td></tr>
+    <tr><td><strong>4</strong></td><td>API 키 설정</td><td>2분</td><td rowspan="2" style="background:#dbeafe; color:#1e40af; font-weight:600; text-align:center; vertical-align:middle;">세션 시간에<br>함께</td></tr>
+    <tr><td><strong>5</strong></td><td>실행하기</td><td>1분</td></tr>
+  </table>
+  <p style="text-align:center; font-weight:700; color:var(--primary); font-size:11pt; margin-bottom:0;">
+    총 약 10분이면 시작할 수 있습니다!
+  </p>
+</div>
+
+<div class="info-box tip">
+  <div class="icon">🔑</div>
+  <div>
+    <strong>API 키는 온라인 세션에서 제공해드립니다.</strong><br>
+    별도로 발급받거나 비용을 내실 필요 없습니다.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- STEP 1 -->
+<h2 class="page-break"><span class="step-badge">1</span> Git 설치하기</h2>
+
+<p>Git은 에듀플로 코드를 다운로드하기 위해 필요합니다.</p>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 다운로드</h4>
+  <p>웹 브라우저(Chrome, Edge 등)에서 아래 주소로 이동합니다:</p>
+  <div class="url-box">https://git-scm.com/download/win</div>
+  <p>페이지가 열리면 <strong>자동으로 다운로드</strong>가 시작됩니다.</p>
+  <ul>
+    <li>시작되지 않으면 <strong>"Click here to download manually"</strong> 클릭</li>
+    <li><strong>64-bit Git for Windows Setup</strong> 선택</li>
+  </ul>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 설치</h4>
+  <ol>
+    <li>다운로드된 파일(예: <code>Git-2.47.1-64-bit.exe</code>)을 <strong>더블클릭</strong></li>
+    <li>설치 화면에서 <span class="highlight">모든 화면에서 "Next"만 계속 누릅니다</span></li>
+    <li>아무 설정도 바꿀 필요 없습니다. Next, Next, Next...</li>
+    <li>마지막에 <strong>"Install"</strong> → <strong>"Finish"</strong></li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 설치 확인</h4>
+  <ol>
+    <li>키보드에서 <code>Windows 키</code>를 누릅니다 (화면 왼쪽 아래 ⊞ 버튼)</li>
+    <li><strong>cmd</strong> 라고 입력합니다</li>
+    <li><strong>"명령 프롬프트"</strong> 가 나타나면 클릭하여 엽니다</li>
+  </ol>
+
+  <div class="info-box tip">
+    <div class="icon">💡</div>
+    <div><strong>명령 프롬프트란?</strong> 글자로 컴퓨터에 명령을 내리는 검은 화면입니다. 무서워 보이지만, 아래 명령어만 복사-붙여넣기 하면 됩니다!</div>
+  </div>
+
+  <p>검은 화면에 아래를 입력하고 Enter:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>git --version</code></pre>
+  <p>아래처럼 나오면 성공:</p>
+  <pre><code>git version 2.47.1.windows.1</code></pre>
+</div>
+
+<div class="info-box warning">
+  <div class="icon">⚠️</div>
+  <div><strong>"git을 찾을 수 없습니다"</strong> 라고 나오면? → 명령 프롬프트를 닫고 <strong>새로 열어서</strong> 다시 해보세요. 그래도 안 되면 <strong>컴퓨터를 재시작</strong>하세요.</div>
+</div>
+
+<hr class="divider">
+
+<!-- STEP 2 -->
+<h2 class="page-break"><span class="step-badge">2</span> Node.js 설치하기</h2>
+
+<p>Node.js는 에듀플로를 실행하기 위해 필요한 프로그램입니다.</p>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 다운로드</h4>
+  <p>웹 브라우저에서 아래 주소로 이동합니다:</p>
+  <div class="url-box">https://nodejs.org</div>
+  <p>큰 초록색 버튼이 보입니다. <span class="highlight">"LTS"라고 적힌 버튼</span>을 클릭합니다.</p>
+  <ul>
+    <li>LTS = 안정적인 버전이라는 뜻</li>
+    <li>버전 숫자는 달라도 괜찮습니다 (20, 22 등)</li>
+  </ul>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 설치</h4>
+  <ol>
+    <li>다운로드된 파일(예: <code>node-v22.13.0-x64.msi</code>)을 <strong>더블클릭</strong></li>
+    <li><span class="highlight">모든 화면에서 "Next"만 계속 누릅니다</span></li>
+    <li>"I accept the terms" 체크박스가 있으면 <strong>체크 ☑</strong> 하고 Next</li>
+    <li>마지막에 <strong>"Install"</strong> → <strong>"Finish"</strong></li>
+  </ol>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 설치 확인</h4>
+  <p><strong>명령 프롬프트를 새로 엽니다</strong> (이전 것은 닫고 새로 열어야 합니다!)</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>node --version</code></pre>
+  <p>결과 예시: <code>v22.13.0</code></p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>npm --version</code></pre>
+  <p>결과 예시: <code>10.9.2</code></p>
+  <p>두 개 다 숫자가 나오면 성공! 숫자가 조금 달라도 괜찮습니다.</p>
+</div>
+
+<hr class="divider">
+
+<!-- STEP 3 -->
+<h2 class="page-break"><span class="step-badge">3</span> 에듀플로 다운로드하기</h2>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 바탕화면으로 이동</h4>
+  <p>명령 프롬프트에서 아래를 입력하고 Enter:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>cd %USERPROFILE%\Desktop</code></pre>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 다운로드</h4>
+  <p>아래 명령어를 <strong>그대로</strong> 입력하고 Enter:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>git clone https://github.com/greatsong/eduflow-js.git</code></pre>
+  <p>진행 상황이 표시됩니다:</p>
+  <pre><code>Cloning into 'eduflow-js'...
+Receiving objects: 100% ...
+done.</code></pre>
+  <p>완료되면 바탕화면에 <strong><code>eduflow-js</code></strong> 폴더가 생깁니다!</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> 폴더 이동 & 패키지 설치</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>cd eduflow-js
+npm install</code></pre>
+  <p>처음 실행하면 <strong>1~3분</strong> 정도 걸립니다. 많은 텍스트가 주르르 흘러갑니다. 정상입니다!</p>
+  <pre><code>added 300 packages in 45s</code></pre>
+</div>
+
+<div class="info-box tip">
+  <div class="icon">💡</div>
+  <div><strong>"warn"</strong> 이라는 노란 경고는 무시해도 됩니다. <strong>"error"</strong> 라는 빨간 오류만 아니면 괜찮습니다.</div>
+</div>
+
+<div class="session-marker">
+  ✅ 여기까지 세션 전에 미리 해두시면 좋습니다!<br>
+  아래 4~5단계는 세션 시간에 함께 진행합니다.
+</div>
+
+<hr class="divider">
+
+<!-- STEP 4 -->
+<h2 class="page-break"><span class="step-badge">4</span> API 키 설정하기</h2>
+
+<div class="info-box tip">
+  <div class="icon">🔑</div>
+  <div>세션에서 공유드리는 API 키를 준비해주세요.</div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 설정 파일 만들기</h4>
+  <p>명령 프롬프트에서 (<code>eduflow-js</code> 폴더 안에 있어야 합니다):</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>copy .env.example .env</code></pre>
+  <p>"1개 파일이 복사되었습니다" 라고 나오면 됩니다.</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> API 키 입력하기</h4>
+  <ol>
+    <li>설정 파일을 메모장으로 엽니다:
+      <div class="cmd-label">명령 프롬프트</div>
+      <pre><code>notepad .env</code></pre>
+    </li>
+    <li>메모장에서 아래 부분을 찾습니다:
+      <pre><code>ANTHROPIC_API_KEY=sk-ant-xxx</code></pre>
+    </li>
+    <li><code>sk-ant-xxx</code> 부분을 <strong>마우스로 드래그</strong>해서 선택 → <strong>삭제</strong> → 세션에서 받은 <strong>API 키를 붙여넣기</strong> (<code>Ctrl + V</code>)</li>
+    <li>나머지 줄은 건드리지 않습니다</li>
+    <li><code>Ctrl + S</code>로 <strong>저장</strong> → 메모장 닫기</li>
+  </ol>
+</div>
+
+<div class="info-box warning">
+  <div class="icon">⚠️</div>
+  <div>
+    <strong>자주 하는 실수 3가지:</strong><br>
+    ❌ <code>ANTHROPIC_API_KEY= sk-ant...</code> → <code>=</code> 뒤에 공백이 있으면 안 됨<br>
+    ❌ <code>ANTHROPIC_API_KEY="sk-ant..."</code> → 따옴표로 감싸면 안 됨<br>
+    ❌ 키 끝에 보이지 않는 빈칸이 있으면 안 됨
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- STEP 5 -->
+<h2><span class="step-badge">5</span> 실행하기</h2>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">a</span> 에듀플로 시작</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>npm run dev</code></pre>
+  <p>아래와 같은 메시지가 나오면 성공:</p>
+  <pre><code>[server]   에듀플로 서버가 포트 7829에서 실행 중입니다
+[client]   VITE v6.x.x ready in xxx ms
+[client]   ➜  Local:   http://localhost:7830/</code></pre>
+</div>
+
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">b</span> 브라우저에서 열기</h4>
+  <p>웹 브라우저(Chrome, Edge 등)를 열고, <strong>주소창</strong>에 입력:</p>
+  <div class="url-box">http://localhost:7830</div>
+
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div><strong>주소창</strong>에 입력하세요! 구글 <strong>검색창</strong>이 아닙니다!<br>주소창은 브라우저 맨 위에 있는 긴 입력 칸입니다.</div>
+  </div>
+</div>
+
+<div class="info-box success">
+  <div class="icon">🎉</div>
+  <div><strong>에듀플로 메인 화면이 나타나면 설치 완료입니다!</strong></div>
+</div>
+
+<hr class="divider">
+
+<!-- HOW TO USE -->
+<h2 class="page-break"><span class="step-badge">✍️</span> 에듀플로 사용법</h2>
+
+<p>에듀플로는 <strong>6단계</strong>를 따라가며 교재를 만듭니다:</p>
+
+<div class="flow-diagram">
+  <div class="flow-row">
+    <div class="flow-step">📁 프로젝트 관리</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">💬 방향성 논의</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">📋 목차 작성</div>
+  </div>
+  <div style="text-align:right; padding-right:30px; color:var(--gray-500);">↓</div>
+  <div class="flow-row">
+    <div class="flow-step">🚀 배포 관리</div>
+    <div class="flow-arrow">←</div>
+    <div class="flow-step">✍️ 챕터 제작</div>
+    <div class="flow-arrow">←</div>
+    <div class="flow-step">✅ 피드백 컨펌</div>
+  </div>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>1) 프로젝트 만들기</h4>
+  <p><strong>"프로젝트 관리"</strong>를 클릭하고 정보를 입력합니다:</p>
+  <table>
+    <tr><th>입력 항목</th><th>예시</th></tr>
+    <tr><td>프로젝트 이름</td><td><code>파이썬-입문</code> (공백 대신 <code>-</code> 사용)</td></tr>
+    <tr><td>저자</td><td><code>홍길동</code></td></tr>
+    <tr><td>설명</td><td><code>초등학생을 위한 파이썬 기초 교재</code></td></tr>
+  </table>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>2) AI와 방향 논의</h4>
+  <p><strong>"방향성 논의"</strong> → AI와 채팅으로 교재 방향을 정합니다</p>
+  <p>예: <em>"초등학교 5~6학년 대상으로 파이썬 기초를 재미있게 가르치는 교재를 만들고 싶어요"</em></p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>3) 목차 자동 생성</h4>
+  <p><strong>"목차 작성"</strong> → <strong>"생성"</strong> 버튼 → AI가 Part > Chapter 구조를 자동으로 만들어줍니다</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>4) 피드백 & 확정</h4>
+  <p><strong>"피드백 컨펌"</strong> → 목차를 검토하고 <strong>"목차 확정"</strong> 클릭</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>5) 챕터 본문 생성</h4>
+  <p><strong>"챕터 제작"</strong> → <strong>"배치 자동화"</strong> 탭 → <strong>"생성 시작"</strong></p>
+  <p>AI가 모든 챕터를 자동으로 작성합니다 (진행률 실시간 표시)</p>
+</div>
+
+<div class="step-instruction no-break">
+  <h4>6) 완성!</h4>
+  <p><strong>"배포 관리"</strong>에서 결과를 확인합니다</p>
+</div>
+
+<h3>AI 모델 선택 가이드</h3>
+
+<table>
+  <tr><th>모델</th><th>속도</th><th>품질</th><th>10챕터 비용</th><th>추천</th></tr>
+  <tr><td><strong>Haiku 4.5</strong></td><td>⚡⚡⚡ 매우 빠름</td><td>★★★☆</td><td>~300원</td><td>빠른 테스트</td></tr>
+  <tr><td><strong>Sonnet 4.6</strong></td><td>⚡⚡ 빠름</td><td>★★★★</td><td>~2,000원</td><td>일반 추천</td></tr>
+  <tr><td><strong>Opus 4.6</strong></td><td>⚡ 느림</td><td>★★★★★</td><td>~7,000원</td><td>중요 교재</td></tr>
+</table>
+
+<div class="info-box tip">
+  <div class="icon">💡</div>
+  <div><strong>팁:</strong> 처음에는 <strong>Haiku</strong>로 빠르게 테스트해보고, 만족스러우면 <strong>Sonnet</strong>이나 <strong>Opus</strong>로 다시 만드는 것을 추천합니다.</div>
+</div>
+
+<hr class="divider">
+
+<!-- RESTART -->
+<h2 class="page-break"><span class="step-badge">🔄</span> 다음에 다시 시작하기</h2>
+
+<h3>방법 1: 명령 프롬프트에서</h3>
+<div class="cmd-label">명령 프롬프트</div>
+<pre><code>cd %USERPROFILE%\Desktop\eduflow-js
+npm run dev</code></pre>
+<p>그 다음 브라우저에서 <code>http://localhost:7830</code> 접속</p>
+
+<h3>방법 2: 바로가기 만들기 (추천!)</h3>
+
+<p>한 번만 만들어두면 다음부터 <strong>더블클릭 한 번</strong>으로 시작!</p>
+
+<ol>
+  <li>바탕화면에서 <strong>마우스 우클릭</strong> → <strong>새로 만들기</strong> → <strong>바로 가기</strong></li>
+  <li>"항목 위치 입력"란에 아래를 <strong>그대로</strong> 붙여넣습니다:</li>
+</ol>
+<pre><code>cmd /k "cd %USERPROFILE%\Desktop\eduflow-js && npm run dev"</code></pre>
+<ol start="3">
+  <li><strong>"다음"</strong> → 이름을 <strong>"에듀플로 실행"</strong>으로 입력 → <strong>"마침"</strong></li>
+</ol>
+
+<div class="info-box success">
+  <div class="icon">✅</div>
+  <div>이제 바탕화면의 <strong>"에듀플로 실행"</strong> 아이콘을 더블클릭하면 자동 시작됩니다!<br>(시작 후 브라우저에서 <code>http://localhost:7830</code>을 열면 됩니다)</div>
+</div>
+
+<h3>종료 방법</h3>
+<p>명령 프롬프트(검은 화면)에서 <code>Ctrl + C</code> → "일괄 작업을 끝내시겠습니까?"에 <code>Y</code> 입력 → Enter</p>
+
+<hr class="divider">
+
+<!-- FAQ -->
+<h2 class="page-break"><span class="step-badge">?</span> 자주 묻는 질문</h2>
+
+<div class="faq-item no-break">
+  <h4>Q1. "ANTHROPIC_API_KEY is not set" 오류가 나요</h4>
+  <p><code>.env</code> 파일에 API 키가 제대로 입력되지 않은 것입니다.</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>notepad %USERPROFILE%\Desktop\eduflow-js\.env</code></pre>
+  <p><code>ANTHROPIC_API_KEY=</code> 뒤에 키가 정확히 있는지 확인 → 저장 → 에듀플로 재시작</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q2. "port already in use" 오류가 나요</h4>
+  <p>이전에 실행한 에듀플로가 아직 남아있는 것입니다.</p>
+  <div class="cmd-label">명령 프롬프트 (새로 열기)</div>
+  <pre><code>taskkill /F /IM node.exe</code></pre>
+  <p>그 다음 <code>npm run dev</code>로 다시 실행합니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q3. npm install에서 오류가 나요</h4>
+  <p>먼저 <code>node --version</code>으로 Node.js 설치를 확인하세요. 설치가 되어 있다면:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>npm cache clean --force
+npm install</code></pre>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q4. 브라우저에서 화면이 안 나와요</h4>
+  <ul>
+    <li>명령 프롬프트에 <code>http://localhost:7830</code>이 표시될 때까지 <strong>30초</strong> 기다리기</li>
+    <li>주소를 <strong>주소창</strong>에 입력 (검색창 아님!)</li>
+    <li>방화벽 팝업이 나오면 <strong>"허용"</strong> 클릭</li>
+  </ul>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q5. 만든 교재는 어디에 저장되나요?</h4>
+  <div class="file-tree">
+    바탕화면/<br>
+    &nbsp;&nbsp;└── eduflow-js/<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── projects/<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 파이썬-입문/ <span class="comment">← 내 프로젝트</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── config.json <span class="comment">(설정)</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── toc.json <span class="comment">(목차)</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── docs/ <span class="comment">(챕터 내용)</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── discussions/ <span class="comment">(AI 대화 기록)</span>
+  </div>
+  <p><code>projects</code> 폴더를 USB에 복사하면 백업할 수 있습니다.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q6. 업데이트하고 싶어요</h4>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>cd %USERPROFILE%\Desktop\eduflow-js
+git pull
+npm install
+npm run dev</code></pre>
+</div>
+
+<hr class="divider">
+
+<!-- TERMINOLOGY -->
+<h2><span class="step-badge">📖</span> 용어 설명</h2>
+
+<table class="term-table">
+  <tr><th>용어</th><th>뜻</th></tr>
+  <tr><td>Git</td><td>코드를 다운로드하는 도구 (1단계에서 설치)</td></tr>
+  <tr><td>Node.js</td><td>에듀플로를 돌리는 엔진 (2단계에서 설치)</td></tr>
+  <tr><td>npm</td><td>Node.js에 딸려오는 설치 도구</td></tr>
+  <tr><td>API 키</td><td>AI를 쓰기 위한 비밀번호 같은 것</td></tr>
+  <tr><td>명령 프롬프트</td><td>글자로 명령을 내리는 검은 화면 (cmd)</td></tr>
+  <tr><td>localhost</td><td>"내 컴퓨터"를 가리키는 주소</td></tr>
+  <tr><td>포트 (7830)</td><td>프로그램이 쓰는 문 번호</td></tr>
+  <tr><td>클론 (clone)</td><td>인터넷에서 코드를 내 컴퓨터로 복사하는 것</td></tr>
+</table>
+
+<hr class="divider">
+
+<div class="info-box tip">
+  <div class="icon">🆘</div>
+  <div>
+    <strong>문제가 해결되지 않으면</strong><br>
+    세션 시간에는 채팅으로 질문해주세요!<br>
+    세션 외 시간: <a href="https://github.com/greatsong/eduflow-js/issues">github.com/greatsong/eduflow-js/issues</a>
+  </div>
+</div>
+
+<div class="footer">
+  <p>에듀플로(EduFlow) 윈도우 설치 가이드 | 2026년 2월</p>
+</div>
+
+</div>
+</body>
+</html>
