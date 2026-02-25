@@ -641,6 +641,36 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
   ✓ Logged in to github.com account 내사용자명</code></pre>
 </div>
 
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">f</span> Git 사용자 정보 설정하기</h4>
+  <p>교재를 배포할 때 Git이 사용자 정보를 필요로 합니다. 아래 두 줄을 <strong>각각</strong> 입력하고 Enter:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>git config --global user.name "내GitHub사용자명"</code></pre>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>git config --global user.email "내이메일주소"</code></pre>
+  <p>예시:</p>
+  <pre><code>git config --global user.name "hong-teacher"
+git config --global user.email "hong@gmail.com"</code></pre>
+
+  <div class="info-box tip">
+    <div class="icon">💡</div>
+    <div>
+      <strong>따옴표(" ")까지 포함해서 입력하세요!</strong><br>
+      사용자명은 1단계에서 정한 <strong>GitHub 사용자명</strong>,<br>
+      이메일은 GitHub 가입할 때 쓴 <strong>이메일 주소</strong>를 넣으면 됩니다.
+    </div>
+  </div>
+
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>이 설정을 안 하면?</strong><br>
+      나중에 교재를 배포할 때 <code>"Author identity unknown"</code> 오류가 발생합니다.<br>
+      지금 한 번만 해두면 다시 할 필요 없습니다.
+    </div>
+  </div>
+</div>
+
 <div class="session-marker">
   ✅ 여기까지 세션 전에 완료해주세요!<br>
   세션 당일에는 API 키만 입력하면 바로 시작합니다.
@@ -669,12 +699,13 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
   <tr><td>MkDocs</td><td><code>mkdocs --version</code></td><td><code>mkdocs, version 1.x.x</code></td></tr>
   <tr><td>GitHub CLI</td><td><code>gh --version</code></td><td><code>gh version 2.x.x</code></td></tr>
   <tr><td>GitHub 로그인</td><td><code>gh auth status</code></td><td><code>✓ Logged in as 내아이디</code></td></tr>
+  <tr><td>Git 사용자 설정</td><td><code>git config --global user.name</code></td><td>내 사용자명이 나옴</td></tr>
 </table>
 
 <div class="info-box success">
   <div class="icon">🎉</div>
   <div>
-    <strong>7개 모두 통과하면 세션 준비 완료!</strong><br>
+    <strong>8개 모두 통과하면 세션 준비 완료!</strong><br>
     세션 당일에는 API 키 입력 → <code>npm run dev</code> → 교재 만들기 → 배포까지 바로 진행합니다.
   </div>
 </div>
@@ -814,7 +845,16 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
 </div>
 
 <div class="faq-item no-break">
-  <h4>Q5. 배포 버튼 눌렀는데 오류가 나요</h4>
+  <h4>Q5. "Author identity unknown" 오류가 나요</h4>
+  <p>Git 사용자 정보가 설정되지 않은 것입니다. 아래 두 줄을 입력하세요:</p>
+  <div class="cmd-label">명령 프롬프트</div>
+  <pre><code>git config --global user.name "내GitHub사용자명"
+git config --global user.email "내이메일주소"</code></pre>
+  <p>설정 후 에듀플로에서 <strong>배포 버튼을 다시</strong> 눌러보세요.</p>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q6. 배포 버튼 눌렀는데 오류가 나요</h4>
   <p>아래 순서로 확인하세요:</p>
   <ol>
     <li><code>gh auth status</code> → GitHub 로그인 되어 있는지</li>
@@ -825,7 +865,7 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
 </div>
 
 <div class="faq-item no-break">
-  <h4>Q6. 배포된 사이트가 404 에러</h4>
+  <h4>Q7. 배포된 사이트가 404 에러</h4>
   <ul>
     <li><strong>5분</strong> 정도 기다린 후 새로고침 (<code>Ctrl + Shift + R</code>)</li>
     <li>그래도 안 되면: <code>https://github.com/내아이디/저장소이름</code> → Settings → Pages 확인</li>
@@ -833,7 +873,7 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
 </div>
 
 <div class="faq-item no-break">
-  <h4>Q7. 사이트를 삭제하고 싶어요</h4>
+  <h4>Q8. 사이트를 삭제하고 싶어요</h4>
   <ol>
     <li><code>https://github.com/내아이디/저장소이름</code> 접속</li>
     <li>Settings → 맨 아래 Danger Zone → "Delete this repository"</li>

@@ -251,9 +251,9 @@ npm run dev
 아래와 같은 메시지가 나오면 성공입니다:
 
 ```
-[server]   에듀플로 서버가 포트 7829에서 실행 중입니다
-[client]   VITE v6.x.x ready in xxx ms
-[client]   ➜  Local:   http://localhost:7830/
+[0] [EduFlow] 서버 실행 중: http://localhost:7829
+[1]   VITE v6.x.x ready in xxx ms
+[1]   ➜  Local:   http://localhost:7830/
 ```
 
 ### 5-2. 브라우저에서 열기
