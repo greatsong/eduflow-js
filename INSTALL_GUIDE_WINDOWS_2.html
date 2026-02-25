@@ -372,18 +372,49 @@
   <h4><span class="mini-badge">b</span> 설치 (주의사항 있음!)</h4>
   <ol>
     <li>다운로드된 파일(예: <code>python-3.13.2-amd64.exe</code>)을 <strong>더블클릭</strong></li>
-    <li>첫 화면이 나타나면 <span class="highlight">맨 아래 "Add python.exe to PATH"를 반드시 체크 ☑</span></li>
-    <li>그 다음 <strong>"Install Now"</strong> 클릭</li>
-    <li>설치 완료되면 <strong>"Close"</strong></li>
+    <li>설치 첫 화면이 나타납니다. 아래 그림처럼 생겼습니다:</li>
+  </ol>
+
+  <div style="background: #f1f5f9; border: 2px solid #94a3b8; border-radius: 10px; padding: 20px; margin: 12px 0; font-family: Consolas, monospace; font-size: 9.5pt; line-height: 2;">
+    <div style="text-align:center; font-weight:bold; margin-bottom:12px; font-family: 'Noto Sans KR', sans-serif; color: #334155;">
+      ── Python 설치 첫 화면 ──
+    </div>
+    <div style="padding: 8px 16px;">
+      &nbsp;&nbsp;🔘 Install Now<br>
+      &nbsp;&nbsp;🔘 Customize installation<br>
+      <br>
+      &nbsp;&nbsp;☐ Use admin privileges when installing py.exe<br>
+      &nbsp;&nbsp;<span style="background:#fde047; padding:2px 6px; border-radius:4px; font-weight:bold; color:#92400e;">☑ Add python.exe to PATH</span> &nbsp;← <strong style="color:#dc2626; font-family: 'Noto Sans KR', sans-serif;">이것을 반드시 체크!</strong>
+    </div>
+  </div>
+
+  <ol start="3">
+    <li><span class="highlight">맨 아래 "Add python.exe to PATH" 체크박스를 클릭하여 체크 ☑</span></li>
+    <li>그 다음 위에 있는 <strong>"Install Now"</strong> 클릭</li>
+    <li>설치 진행 → 완료되면 <strong>"Close"</strong></li>
   </ol>
 </div>
 
 <div class="info-box danger">
   <div class="icon">🚨</div>
   <div>
-    <strong>"Add python.exe to PATH" 체크는 필수입니다!</strong><br>
-    이걸 안 하면 이후 모든 명령어가 안 됩니다.<br>
-    실수로 체크 안 하고 설치했다면: Python 삭제 → 다시 설치 (이번엔 꼭 체크!)
+    <strong>이 체크를 안 하면 이후 모든 것이 안 됩니다!</strong><br>
+    <br>
+    <strong>PATH란?</strong> 컴퓨터가 프로그램을 찾는 "주소 목록"입니다.<br>
+    체크하지 않으면 컴퓨터가 Python을 어디서 찾아야 하는지 몰라서<br>
+    <code>python</code>, <code>pip</code>, <code>mkdocs</code> 명령어가 전부 안 됩니다.
+  </div>
+</div>
+
+<div class="info-box warning">
+  <div class="icon">⚠️</div>
+  <div>
+    <strong>실수로 체크 안 하고 설치했다면?</strong> 아래 순서로 삭제 후 재설치하세요:<br>
+    <br>
+    1. <code>Windows 키</code> → <strong>"프로그램 추가/제거"</strong> 검색 → 클릭<br>
+    2. 목록에서 <strong>"Python 3.x.x"</strong> 를 찾아 클릭 → <strong>"제거"</strong><br>
+    3. 다시 python.org에서 다운로드<br>
+    4. 이번에는 <strong>"Add python.exe to PATH" 꼭 체크 ☑</strong> 한 뒤 Install Now
   </div>
 </div>
 
@@ -398,10 +429,18 @@
     <div class="icon">⚠️</div>
     <div>
       <strong>"python을 찾을 수 없습니다"</strong> 라고 나오면?<br>
-      → <code>python3 --version</code> 으로 해보세요<br>
-      → 그래도 안 되면 명령 프롬프트를 닫고 <strong>새로 열어서</strong> 다시<br>
+      → 명령 프롬프트를 <strong>닫고 새로 열어서</strong> 다시 시도<br>
       → 그래도 안 되면 컴퓨터 <strong>재시작</strong> 후 다시<br>
       → 그래도 안 되면 Python 삭제 → <strong>"Add to PATH" 체크</strong>하고 재설치
+    </div>
+  </div>
+
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>Microsoft Store가 열리면?</strong><br>
+      Windows 10/11에서 <code>python</code>을 치면 Microsoft Store 앱 화면이 뜨는 경우가 있습니다.<br>
+      이것은 Python이 아직 설치 안 된 것입니다. Store를 닫고 위의 방법대로 python.org에서 직접 설치하세요.
     </div>
   </div>
 </div>
@@ -424,9 +463,17 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
   <pre><code>Successfully installed ... mkdocs-1.6.x ... mkdocs-material-9.x.x ...</code></pre>
 </div>
 
-<div class="info-box tip">
-  <div class="icon">💡</div>
-  <div><strong>"pip"이 안 되면?</strong> <code>pip3 install mkdocs mkdocs-material</code> 로 해보세요.</div>
+<div class="info-box warning">
+  <div class="icon">⚠️</div>
+  <div>
+    <strong>"pip을 찾을 수 없습니다" 오류가 나오면?</strong><br>
+    이것은 Python PATH 설정이 안 된 것입니다. 아래 순서로 해결하세요:<br>
+    <br>
+    1. 먼저 <code>python --version</code>이 되는지 확인<br>
+    2. 안 되면 → Python을 삭제하고 <strong>"Add to PATH" 체크</strong> 후 재설치 (2단계 b 참고)<br>
+    3. 되는데 pip만 안 되면 → <code>python -m pip install mkdocs mkdocs-material</code> 로 시도<br>
+    4. 그래도 안 되면 → 명령 프롬프트를 <strong>닫고 새로 열어서</strong> 다시 시도
+  </div>
 </div>
 
 <div class="step-instruction no-break">
@@ -465,49 +512,124 @@ Python이 설치되어 있으면 명령어 한 줄로 설치됩니다.</p>
   <div class="cmd-label">명령 프롬프트</div>
   <pre><code>gh auth login</code></pre>
 
-  <p>질문이 하나씩 나옵니다. <strong>아래 표 순서대로 선택</strong>하세요:</p>
-
-  <table>
-    <tr><th>#</th><th>화면에 나오는 질문</th><th>이렇게 하세요</th></tr>
-    <tr><td>1</td><td>Where do you use GitHub?</td><td><strong>GitHub.com</strong> 선택 → Enter</td></tr>
-    <tr><td>2</td><td>What is your preferred protocol for Git?</td><td><strong>HTTPS</strong> 선택 → Enter</td></tr>
-    <tr><td>3</td><td>Authenticate Git with your GitHub credentials?</td><td><strong>Y</strong> 입력 → Enter</td></tr>
-    <tr><td>4</td><td>How would you like to authenticate?</td><td><strong>Login with a web browser</strong> 선택 → Enter</td></tr>
-  </table>
+  <p>질문이 하나씩 나옵니다. 총 4개입니다. <strong>아래 순서대로 천천히</strong> 따라하세요.</p>
 
   <div class="info-box tip">
-    <div class="icon">💡</div>
+    <div class="icon">🎮</div>
     <div>
-      <strong>선택 방법:</strong> 키보드 <strong>↑ ↓ 화살표 키</strong>로 이동하고, <strong>Enter</strong>로 선택합니다.
+      <strong>조작 방법 (일반 메뉴와 다릅니다!):</strong><br>
+      • 마우스는 사용할 수 없습니다. <strong>키보드만</strong> 사용합니다<br>
+      • <strong>↑ ↓ 화살표 키</strong>로 원하는 항목으로 이동합니다<br>
+      • <strong>Enter 키</strong>를 누르면 선택됩니다<br>
+      • 현재 선택된 항목 앞에 <strong>&gt;</strong> 표시가 있습니다
     </div>
+  </div>
+
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:20px; margin:16px 0;">
+    <p style="font-weight:700; color:var(--primary); margin-bottom:12px;">질문 1: Where do you use GitHub?</p>
+    <div style="background:#1e293b; color:#e2e8f0; padding:12px 16px; border-radius:8px; font-family:Consolas,monospace; font-size:9.5pt; line-height:1.8;">
+      ? Where do you use GitHub?<br>
+      &nbsp;&nbsp;<span style="color:#22d3ee;">&gt; GitHub.com</span> &nbsp;&nbsp;← <span style="color:#fde047;">이것이 선택된 상태. 바로 Enter!</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;GitHub Enterprise Server
+    </div>
+    <p style="font-size:9.5pt; margin-top:8px; margin-bottom:0;"><strong>GitHub.com</strong>이 이미 선택되어 있으니 그냥 <strong>Enter</strong>만 누르세요.</p>
+  </div>
+
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:20px; margin:16px 0;">
+    <p style="font-weight:700; color:var(--primary); margin-bottom:12px;">질문 2: What is your preferred protocol for Git operations?</p>
+    <div style="background:#1e293b; color:#e2e8f0; padding:12px 16px; border-radius:8px; font-family:Consolas,monospace; font-size:9.5pt; line-height:1.8;">
+      ? What is your preferred protocol for Git operations on this host?<br>
+      &nbsp;&nbsp;<span style="color:#22d3ee;">&gt; HTTPS</span> &nbsp;&nbsp;← <span style="color:#fde047;">이것이 선택된 상태. 바로 Enter!</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;SSH
+    </div>
+    <p style="font-size:9.5pt; margin-top:8px; margin-bottom:0;"><strong>HTTPS</strong>가 이미 선택되어 있으니 그냥 <strong>Enter</strong>만 누르세요.</p>
+  </div>
+
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:20px; margin:16px 0;">
+    <p style="font-weight:700; color:var(--primary); margin-bottom:12px;">질문 3: Authenticate Git with your GitHub credentials?</p>
+    <div style="background:#1e293b; color:#e2e8f0; padding:12px 16px; border-radius:8px; font-family:Consolas,monospace; font-size:9.5pt; line-height:1.8;">
+      ? Authenticate Git with your GitHub credentials? (Y/n)<br>
+      <span style="color:#fde047;">→ 키보드로 Y를 누르고 Enter</span>
+    </div>
+    <p style="font-size:9.5pt; margin-top:8px; margin-bottom:0;">키보드에서 <strong>Y</strong>를 누르고 <strong>Enter</strong>를 누르세요.</p>
+  </div>
+
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:20px; margin:16px 0;">
+    <p style="font-weight:700; color:var(--primary); margin-bottom:12px;">질문 4: How would you like to authenticate GitHub CLI?</p>
+    <div style="background:#1e293b; color:#e2e8f0; padding:12px 16px; border-radius:8px; font-family:Consolas,monospace; font-size:9.5pt; line-height:1.8;">
+      ? How would you like to authenticate GitHub CLI?<br>
+      &nbsp;&nbsp;<span style="color:#22d3ee;">&gt; Login with a web browser</span> &nbsp;&nbsp;← <span style="color:#fde047;">Enter!</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;Paste an authentication token
+    </div>
+    <p style="font-size:9.5pt; margin-top:8px; margin-bottom:0;"><strong>Login with a web browser</strong>가 이미 선택되어 있으니 <strong>Enter</strong>만 누르세요.</p>
   </div>
 </div>
 
 <div class="step-instruction no-break">
-  <h4><span class="mini-badge">d</span> 브라우저에서 인증하기</h4>
-  <p>명령 프롬프트에 <strong>8자리 코드</strong>가 나타납니다 (예: <code>AB12-CD34</code>).</p>
-  <p>Enter를 누르면 브라우저가 자동으로 열립니다.</p>
+  <h4><span class="mini-badge">d</span> 브라우저에서 인증하기 (가장 중요!)</h4>
+
+  <p>4번째 질문에 답하면, 명령 프롬프트에 아래처럼 나타납니다:</p>
+
+  <div style="background:#1e293b; color:#e2e8f0; padding:16px 20px; border-radius:10px; font-family:Consolas,monospace; font-size:10pt; line-height:1.8; margin:12px 0;">
+    ! First copy your one-time code: <span style="color:#fde047; font-weight:bold; font-size:13pt;">AB12-CD34</span><br>
+    Press Enter to open github.com in your browser...
+  </div>
+
+  <div class="info-box danger">
+    <div class="icon">📋</div>
+    <div>
+      <strong>8자리 코드를 메모하세요!</strong><br>
+      화면에 나온 코드 (예: <code>AB12-CD34</code>)를 <strong>종이에 적거나 기억</strong>해두세요.<br>
+      이 코드를 곧 브라우저에서 입력해야 합니다.<br>
+      (코드는 매번 달라집니다. 위 예시는 실제 코드가 아닙니다)
+    </div>
+  </div>
 
   <ol>
-    <li>브라우저에서 GitHub 로그인 화면이 나오면 <strong>로그인</strong>합니다</li>
-    <li>명령 프롬프트에 나온 <strong>8자리 코드</strong>를 입력합니다</li>
-    <li><strong>"Authorize github"</strong> 초록색 버튼을 클릭합니다</li>
-    <li>"Congratulations!" 화면이 나오면 완료!</li>
+    <li><strong>Enter</strong>를 누릅니다 → 브라우저가 자동으로 열립니다</li>
+    <li>GitHub 로그인이 안 되어 있으면 <strong>로그인</strong>합니다</li>
+    <li>코드 입력 화면이 나오면 아까 메모한 <strong>8자리 코드를 입력</strong>합니다
+      <ul>
+        <li>첫 4자리 입력 → 자동으로 두 번째 칸으로 이동 → 나머지 4자리 입력</li>
+      </ul>
+    </li>
+    <li><strong>"Continue"</strong> 클릭</li>
+    <li><strong>"Authorize github"</strong> 초록색 버튼 클릭</li>
+    <li>"Congratulations!" 또는 체크 표시가 나오면 완료!</li>
   </ol>
 
   <div class="info-box warning">
     <div class="icon">⚠️</div>
     <div>
       <strong>브라우저가 안 열리면?</strong><br>
-      직접 브라우저를 열고 아래 주소로 이동하세요:<br>
-      <code>https://github.com/login/device</code><br>
-      그리고 8자리 코드를 입력하면 됩니다.
+      직접 브라우저를 열고 주소창에 아래를 입력하세요:<br>
+      <div class="url-box" style="margin-top:4px;">https://github.com/login/device</div>
+      <br>그리고 명령 프롬프트에 나온 8자리 코드를 입력하면 됩니다.
     </div>
   </div>
 
-  <p>명령 프롬프트로 돌아오면 아래처럼 표시됩니다:</p>
+  <div class="info-box warning">
+    <div class="icon">⚠️</div>
+    <div>
+      <strong>코드를 못 봤거나 시간이 지났다면?</strong><br>
+      코드는 약 15분 후 만료됩니다. 만료되면:<br>
+      1. 명령 프롬프트에서 <code>Ctrl + C</code>를 눌러 취소<br>
+      2. <code>gh auth login</code>을 다시 입력하면 새 코드가 나옵니다
+    </div>
+  </div>
+
+  <p>인증이 완료되면, <strong>명령 프롬프트로 돌아가세요.</strong> 아래 메시지가 보입니다:</p>
   <pre><code>✓ Authentication complete.
 ✓ Logged in as 내사용자명</code></pre>
+
+  <div class="info-box tip">
+    <div class="icon">💡</div>
+    <div>
+      <strong>"명령 프롬프트에 아무것도 안 나와요"</strong><br>
+      브라우저에서 인증을 마치면 명령 프롬프트에 자동으로 결과가 나타납니다.<br>
+      브라우저에서 "Congratulations!" 화면이 나온 후 명령 프롬프트 창을 클릭해보세요.
+    </div>
+  </div>
 </div>
 
 <div class="step-instruction no-break">
