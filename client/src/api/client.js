@@ -104,6 +104,27 @@ export async function apiStreamPost(path, body, { onText, onProgress, onError, o
   const decoder = new TextDecoder();
   let buffer = '';
 
+  let doneReceived = false;
+
+  const processLine = (line) => {
+    if (!line.startsWith('data: ')) return;
+    const raw = line.slice(6);
+    if (raw === '[DONE]') { doneReceived = true; onDone?.(); return; }
+
+    try {
+      const data = JSON.parse(raw);
+      switch (data.type) {
+        case 'text': onText?.(data.content); break;
+        case 'progress': onProgress?.(data); break;
+        case 'report': onProgress?.(data); break;
+        case 'error': onError?.(new Error(data.message)); doneReceived = true; return;
+        case 'done': doneReceived = true; onDone?.(data); return;
+      }
+    } catch (e) {
+      // 파싱 실패 무시
+    }
+  };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -113,22 +134,21 @@ export async function apiStreamPost(path, body, { onText, onProgress, onError, o
     buffer = lines.pop() || '';
 
     for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const raw = line.slice(6);
-      if (raw === '[DONE]') { onDone?.(); return; }
-
-      try {
-        const data = JSON.parse(raw);
-        switch (data.type) {
-          case 'text': onText?.(data.content); break;
-          case 'progress': onProgress?.(data); break;
-          case 'report': onProgress?.(data); break;
-          case 'error': onError?.(new Error(data.message)); return;
-          case 'done': onDone?.(data); return;
-        }
-      } catch (e) {
-        // 파싱 실패 무시
-      }
+      processLine(line);
+      if (doneReceived) return;
     }
+  }
+
+  // 스트림 종료 후 버퍼에 남은 데이터 처리 (마지막 줄이 \n 없이 끝난 경우)
+  if (buffer.trim()) {
+    for (const line of buffer.split('\n')) {
+      processLine(line);
+      if (doneReceived) return;
+    }
+  }
+
+  // 스트림이 종료됐지만 done 이벤트를 못 받은 경우 — UI가 멈추지 않도록 호출
+  if (!doneReceived) {
+    onDone?.();
   }
 }

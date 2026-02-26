@@ -11,30 +11,35 @@ const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'pr
 const router = Router();
 
 // 프로젝트 데이터 로드 헬퍼
+function safeParseJson(text) {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 async function loadProjectData(projectPath, projectName) {
   const data = { name: projectName };
 
   // config.json
   const configPath = join(projectPath, 'config.json');
   if (!existsSync(configPath)) return null;
-  data.config = JSON.parse(await readFile(configPath, 'utf-8'));
+  data.config = safeParseJson(await readFile(configPath, 'utf-8'));
+  if (!data.config) return null;
 
   // toc.json
   const tocPath = join(projectPath, 'toc.json');
   if (existsSync(tocPath)) {
-    data.toc = JSON.parse(await readFile(tocPath, 'utf-8'));
+    data.toc = safeParseJson(await readFile(tocPath, 'utf-8'));
   }
 
   // progress.json
   const progressPath = join(projectPath, 'progress.json');
   if (existsSync(progressPath)) {
-    data.progress = JSON.parse(await readFile(progressPath, 'utf-8'));
+    data.progress = safeParseJson(await readFile(progressPath, 'utf-8'));
   }
 
   // generation_report.json
   const reportPath = join(projectPath, 'generation_report.json');
   if (existsSync(reportPath)) {
-    data.report = JSON.parse(await readFile(reportPath, 'utf-8'));
+    data.report = safeParseJson(await readFile(reportPath, 'utf-8'));
   }
 
   // docs/ 챕터 파일
@@ -248,6 +253,9 @@ router.get('/:id/report', asyncHandler(async (req, res) => {
 
 // GET /api/portfolio/:id/chapter/:chapterId - 챕터 미리보기
 router.get('/:id/chapter/:chapterId', asyncHandler(async (req, res) => {
+  if (!/^[a-zA-Z0-9가-힣_\-]+$/.test(req.params.chapterId)) {
+    return res.status(400).json({ message: '잘못된 챕터 ID입니다' });
+  }
   const docsPath = join(PROJECTS_DIR, req.params.id, 'docs');
   const filePath = join(docsPath, `${req.params.chapterId}.md`);
 

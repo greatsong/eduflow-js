@@ -203,6 +203,17 @@ router.post('/push', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: '먼저 저장소를 생성하세요' });
   }
 
+  // .gitignore에 .env가 포함되어 있는지 확인 — API 키 유출 방지
+  const gitignorePath = join(PROJECT_ROOT, '.gitignore');
+  if (existsSync(gitignorePath)) {
+    const gitignoreContent = await readFile(gitignorePath, 'utf-8');
+    if (!gitignoreContent.includes('.env')) {
+      await writeFile(gitignorePath, gitignoreContent.trimEnd() + '\n.env\n', 'utf-8');
+    }
+  } else {
+    await writeFile(gitignorePath, 'node_modules/\n.env\ndist/\n.DS_Store\n', 'utf-8');
+  }
+
   // git add
   await exec('git', ['add', '.'], { cwd: PROJECT_ROOT });
 

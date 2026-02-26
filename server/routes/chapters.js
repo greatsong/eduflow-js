@@ -16,6 +16,10 @@ function projectPath(id) {
   return join(PROJECTS_DIR, id);
 }
 
+function validateChapterId(id) {
+  return /^[a-zA-Z0-9가-힣_\-]+$/.test(id);
+}
+
 function sseHeaders(res) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -63,6 +67,9 @@ router.post('/generation-cancel', asyncHandler(async (req, res) => {
 
 // GET /api/projects/:id/chapters/:chapterId - 챕터 내용 읽기
 router.get('/:chapterId', asyncHandler(async (req, res) => {
+  if (!validateChapterId(req.params.chapterId)) {
+    return res.status(400).json({ message: '잘못된 챕터 ID입니다' });
+  }
   const gen = new ChapterGenerator(projectPath(req.params.id));
   await gen.init();
   const content = await gen.readChapter(req.params.chapterId);
@@ -76,6 +83,9 @@ router.get('/:chapterId', asyncHandler(async (req, res) => {
 
 // PUT /api/projects/:id/chapters/:chapterId - 챕터 내용 수정
 router.put('/:chapterId', asyncHandler(async (req, res) => {
+  if (!validateChapterId(req.params.chapterId)) {
+    return res.status(400).json({ message: '잘못된 챕터 ID입니다' });
+  }
   const { content } = req.body;
   if (content === undefined) {
     return res.status(400).json({ message: 'content가 필요합니다' });
@@ -139,6 +149,9 @@ router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
 
 // POST /api/projects/:id/chapters/:chapterId/generate - 단일 챕터 생성
 router.post('/:chapterId/generate', requireApiKey, asyncHandler(async (req, res) => {
+  if (!validateChapterId(req.params.chapterId)) {
+    return res.status(400).json({ message: '잘못된 챕터 ID입니다' });
+  }
   const { model, maxTokens } = req.body;
   const projPath = projectPath(req.params.id);
   const chapterId = req.params.chapterId;
@@ -171,6 +184,9 @@ router.post('/:chapterId/generate', requireApiKey, asyncHandler(async (req, res)
 
 // POST /api/projects/:id/chapters/:chapterId/chat - 인터랙티브 채팅 (SSE)
 router.post('/:chapterId/chat', requireApiKey, asyncHandler(async (req, res) => {
+  if (!validateChapterId(req.params.chapterId)) {
+    return res.status(400).json({ message: '잘못된 챕터 ID입니다' });
+  }
   const { message, model, messages: chatHistory } = req.body;
   const projPath = projectPath(req.params.id);
   const chapterId = req.params.chapterId;

@@ -60,11 +60,20 @@ app.post('/api/auth/verify', async (req, res) => {
 // 라우트
 app.use('/api/models', modelsRouter);
 
+// 프로젝트 ID 경로탐색(Path Traversal) 방어
+const validateProjectId = (req, res, next) => {
+  const id = req.params.id;
+  if (id && !/^[a-zA-Z0-9가-힣_\-. ]+$/.test(id)) {
+    return res.status(400).json({ message: '잘못된 프로젝트 ID입니다' });
+  }
+  next();
+};
+
 // 더 구체적인 프로젝트 서브라우트를 먼저 등록
-app.use('/api/projects/:id/discussions', discussionsRouter);
-app.use('/api/projects/:id/toc', tocRouter);
-app.use('/api/projects/:id/chapters', chaptersRouter);
-app.use('/api/projects/:id/deploy', deployRouter);
+app.use('/api/projects/:id/discussions', validateProjectId, discussionsRouter);
+app.use('/api/projects/:id/toc', validateProjectId, tocRouter);
+app.use('/api/projects/:id/chapters', validateProjectId, chaptersRouter);
+app.use('/api/projects/:id/deploy', validateProjectId, deployRouter);
 
 // 기본 프로젝트 라우트 (context, template-info, references 등 포함)
 app.use('/api/projects', projectsRouter);

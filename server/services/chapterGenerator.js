@@ -37,10 +37,15 @@ class TokenBudgetManager {
   }
 
   // 예상 출력 토큰만큼 예산이 있는지 확인하고, 없으면 대기 → 통과 시 예약
+  // while 루프로 구현 (재귀 호출은 장시간 대기 시 스택 오버플로우 위험)
   async waitForBudget(estimatedOutputTokens, progressCallback = null) {
-    this._cleanupOldRequests();
+    while (true) {
+      this._cleanupOldRequests();
 
-    if (this._totalUsage() + estimatedOutputTokens > this.outputTpmLimit) {
+      if (this._totalUsage() + estimatedOutputTokens <= this.outputTpmLimit) {
+        break; // 예산 충분 → 루프 탈출
+      }
+
       // 가장 오래된 완료 기록 기준으로 대기 시간 계산
       const oldestRequest = this.requestHistory[0];
       if (oldestRequest) {
@@ -51,16 +56,20 @@ class TokenBudgetManager {
           progressCallback(`⏳ 출력 TPM 예산 대기 중... ${usage}/${limit} (${Math.ceil(waitTime / 1000)}초)`);
         }
         await this._sleep(waitTime);
-        return this.waitForBudget(estimatedOutputTokens, progressCallback);
+        continue;
       }
+
       // 기록은 없지만 예약만 있는 경우 — 짧게 대기 후 재확인
       if (this.reservedTokens > 0) {
         if (progressCallback) {
           progressCallback(`⏳ 인플라이트 요청 완료 대기 중... (예약: ${this.reservedTokens.toLocaleString()})`);
         }
         await this._sleep(5000);
-        return this.waitForBudget(estimatedOutputTokens, progressCallback);
+        continue;
       }
+
+      // 기록도 없고 예약도 없는데 예산 초과 — 비정상 상태, 탈출
+      break;
     }
 
     // 예산 통과 → 즉시 예약하여 다른 동시 요청이 같은 예산을 쓰지 못하게 함
@@ -1018,7 +1027,12 @@ ${templateAddition}
     const tocFile = join(this.projectPath, 'toc.json');
     if (!existsSync(tocFile)) return [];
 
-    const tocData = JSON.parse(await readFile(tocFile, 'utf-8'));
+    let tocData;
+    try {
+      tocData = JSON.parse(await readFile(tocFile, 'utf-8'));
+    } catch {
+      return [];
+    }
     const chapters = [];
 
     for (const part of tocData.parts || []) {
@@ -1058,6 +1072,10 @@ ${templateAddition}
   async loadReport() {
     const file = join(this.projectPath, 'generation_report.json');
     if (!existsSync(file)) return null;
-    return JSON.parse(await readFile(file, 'utf-8'));
+    try {
+      return JSON.parse(await readFile(file, 'utf-8'));
+    } catch {
+      return null;
+    }
   }
 }

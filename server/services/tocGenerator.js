@@ -120,16 +120,16 @@ ${templateAddition}
       );
     }
 
-    // JSON 추출
+    // JSON 추출 (닫는 ``` 가 없는 경우에도 안전하게 처리)
     let jsonText = responseText;
     if (jsonText.includes('```json')) {
       const start = jsonText.indexOf('```json') + 7;
       const end = jsonText.indexOf('```', start);
-      jsonText = jsonText.slice(start, end).trim();
+      jsonText = (end === -1 ? jsonText.slice(start) : jsonText.slice(start, end)).trim();
     } else if (jsonText.includes('```')) {
       const start = jsonText.indexOf('```') + 3;
       const end = jsonText.indexOf('```', start);
-      jsonText = jsonText.slice(start, end).trim();
+      jsonText = (end === -1 ? jsonText.slice(start) : jsonText.slice(start, end)).trim();
     }
 
     let tocData;

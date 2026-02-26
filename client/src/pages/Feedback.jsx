@@ -24,10 +24,16 @@ export default function Feedback() {
     }).catch(() => {});
   }, []);
 
+  // 마운트 시 공유 chatStore 초기화 (Discussion↔Feedback 간 데이터 오염 방지)
+  useEffect(() => {
+    clearMessages();
+  }, []);
+
   // 프로젝트 변경 시 데이터 로드
   useEffect(() => {
     if (!currentProject || currentProject.name === loadedProject) return;
     setLoadedProject(currentProject.name);
+    clearMessages();
 
     // TOC 로드
     apiFetch(`/api/projects/${currentProject.name}/toc`)
