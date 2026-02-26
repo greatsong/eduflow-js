@@ -155,8 +155,8 @@ theme:
         icon: material/brightness-4
         name: "\uB77C\uC774\uD2B8 \uBAA8\uB4DC\uB85C \uC804\uD658"
   font:
-    text: Pretendard, Noto Sans KR, sans-serif
-    code: JetBrains Mono, monospace
+    text: Noto Sans KR
+    code: JetBrains Mono
   features:
     - navigation.tabs
     - navigation.sections

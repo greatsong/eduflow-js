@@ -267,9 +267,9 @@ export class ChapterGenerator {
   _calcMaxTokensForTime(timeMinutes, userMaxTokens) {
     // estimated_time이 없으면 기본 1차시(50분) 적용하여 과도한 생성 방지
     const effectiveMinutes = timeMinutes > 0 ? timeMinutes : 50;
-    const targetChars = effectiveMinutes * 100;
+    const targetChars = effectiveMinutes * 120;
     const estimatedTokens = Math.floor(targetChars / 1.5);
-    const timeCap = Math.max(4000, Math.floor(estimatedTokens * 1.4));
+    const timeCap = Math.max(6000, Math.floor(estimatedTokens * 2.0));
     return Math.min(userMaxTokens, timeCap);
   }
 
@@ -391,10 +391,18 @@ export class ChapterGenerator {
     });
 
     const finalMessage = await stream.finalMessage();
+    const stopReason = finalMessage.stop_reason;
+
+    if (stopReason === 'max_tokens') {
+      this._log(`⚠️ ${chapterId} 응답이 max_tokens(${maxTokens})로 잘림 — 마지막 200자: ...${content.slice(-200)}`);
+      if (progressCallback) progressCallback(`⚠️ ${chapterId} 토큰 한도 도달 — 내용이 잘렸을 수 있습니다. max_tokens를 늘려보세요.`);
+    }
+
     return {
       content,
       inputTokens: finalMessage.usage.input_tokens,
       outputTokens: finalMessage.usage.output_tokens,
+      stopReason,
     };
   }
 

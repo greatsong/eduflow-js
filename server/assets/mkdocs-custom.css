@@ -65,12 +65,20 @@
   box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
 }
 
-/* 헤더 제목 클릭 가능하게 */
+/* 헤더 제목: 페이지 제목 숨기고 사이트명만 표시 (한글 겹침 방지) */
 .md-header__title {
   cursor: pointer;
 }
-.md-header__title:hover .md-header__topic {
+.md-header__title:hover .md-header__topic:first-child {
   opacity: 0.85;
+}
+.md-header__topic:first-child {
+  position: static !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+.md-header__topic + .md-header__topic {
+  display: none !important;
 }
 
 .md-tabs {
