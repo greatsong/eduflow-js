@@ -491,8 +491,7 @@
     <tr><td><strong>1</strong></td><td>Git 설치</td><td>3분</td><td rowspan="3" style="background:#dcfce7; color:#166534; font-weight:600; text-align:center; vertical-align:middle;">세션 전에<br>미리!</td></tr>
     <tr><td><strong>2</strong></td><td>Node.js 설치</td><td>3분</td></tr>
     <tr><td><strong>3</strong></td><td>에듀플로 다운로드</td><td>5분</td></tr>
-    <tr><td><strong>4</strong></td><td>API 키 설정</td><td>2분</td><td rowspan="2" style="background:#dbeafe; color:#1e40af; font-weight:600; text-align:center; vertical-align:middle;">세션 시간에<br>함께</td></tr>
-    <tr><td><strong>5</strong></td><td>실행하기</td><td>1분</td></tr>
+    <tr><td><strong>4</strong></td><td>실행 + API 키 입력</td><td>2분</td><td style="background:#dbeafe; color:#1e40af; font-weight:600; text-align:center; vertical-align:middle;">세션 시간에<br>함께</td></tr>
   </table>
   <p style="text-align:center; font-weight:700; color:var(--primary); font-size:11pt; margin-bottom:0;">
     총 약 10분이면 시작할 수 있습니다!
@@ -640,57 +639,13 @@ npm install</code></pre>
 
 <div class="session-marker">
   ✅ 여기까지 세션 전에 미리 해두시면 좋습니다!<br>
-  아래 4~5단계는 세션 시간에 함께 진행합니다.
+  아래 4단계는 세션 시간에 함께 진행합니다.
 </div>
 
 <hr class="divider">
 
 <!-- STEP 4 -->
-<h2 class="page-break"><span class="step-badge">4</span> API 키 설정하기</h2>
-
-<div class="info-box tip">
-  <div class="icon">🔑</div>
-  <div>세션에서 공유드리는 API 키를 준비해주세요.</div>
-</div>
-
-<div class="step-instruction no-break">
-  <h4><span class="mini-badge">a</span> 설정 파일 만들기</h4>
-  <p>명령 프롬프트에서 (<code>eduflow-js</code> 폴더 안에 있어야 합니다):</p>
-  <div class="cmd-label">명령 프롬프트</div>
-  <pre><code>copy .env.example .env</code></pre>
-  <p>"1개 파일이 복사되었습니다" 라고 나오면 됩니다.</p>
-</div>
-
-<div class="step-instruction no-break">
-  <h4><span class="mini-badge">b</span> API 키 입력하기</h4>
-  <ol>
-    <li>설정 파일을 메모장으로 엽니다:
-      <div class="cmd-label">명령 프롬프트</div>
-      <pre><code>notepad .env</code></pre>
-    </li>
-    <li>메모장에서 아래 부분을 찾습니다:
-      <pre><code>ANTHROPIC_API_KEY=sk-ant-xxx</code></pre>
-    </li>
-    <li><code>sk-ant-xxx</code> 부분을 <strong>마우스로 드래그</strong>해서 선택 → <strong>삭제</strong> → 세션에서 받은 <strong>API 키를 붙여넣기</strong> (<code>Ctrl + V</code>)</li>
-    <li>나머지 줄은 건드리지 않습니다</li>
-    <li><code>Ctrl + S</code>로 <strong>저장</strong> → 메모장 닫기</li>
-  </ol>
-</div>
-
-<div class="info-box warning">
-  <div class="icon">⚠️</div>
-  <div>
-    <strong>자주 하는 실수 3가지:</strong><br>
-    ❌ <code>ANTHROPIC_API_KEY= sk-ant...</code> → <code>=</code> 뒤에 공백이 있으면 안 됨<br>
-    ❌ <code>ANTHROPIC_API_KEY="sk-ant..."</code> → 따옴표로 감싸면 안 됨<br>
-    ❌ 키 끝에 보이지 않는 빈칸이 있으면 안 됨
-  </div>
-</div>
-
-<hr class="divider">
-
-<!-- STEP 5 -->
-<h2><span class="step-badge">5</span> 실행하기</h2>
+<h2 class="page-break"><span class="step-badge">4</span> 실행 + API 키 입력</h2>
 
 <div class="step-instruction no-break">
   <h4><span class="mini-badge">a</span> 에듀플로 시작</h4>
@@ -713,9 +668,29 @@ npm install</code></pre>
   </div>
 </div>
 
+<div class="step-instruction no-break">
+  <h4><span class="mini-badge">c</span> API 키 입력하기</h4>
+  <div class="info-box tip">
+    <div class="icon">🔑</div>
+    <div>세션에서 공유드리는 API 키를 준비해주세요.</div>
+  </div>
+  <ol>
+    <li>에듀플로 화면 왼쪽 아래에 <strong style="color:#ea580c;">🔑 API 키 필요</strong> 버튼이 보입니다. 클릭합니다.</li>
+    <li>팝업창에 세션에서 받은 <strong>API 키를 붙여넣기</strong> (<code>Ctrl + V</code>)</li>
+    <li><strong>"저장"</strong> 버튼을 클릭합니다.</li>
+    <li>"검증 중..." 이후 팝업이 닫히면 완료! 버튼이 <strong style="color:#16a34a;">✅ API 키 설정됨</strong>으로 바뀝니다.</li>
+  </ol>
+
+  <div class="info-box success">
+    <div class="icon">💡</div>
+    <div>API 키는 <strong>브라우저에 자동 저장</strong>됩니다. 다음에 다시 입력할 필요 없습니다.<br>
+    파일을 편집할 필요 없이 웹 화면에서 바로 설정할 수 있습니다!</div>
+  </div>
+</div>
+
 <div class="info-box success">
   <div class="icon">🎉</div>
-  <div><strong>에듀플로 메인 화면이 나타나면 설치 완료입니다!</strong></div>
+  <div><strong>에듀플로가 정상 작동하면 설치 완료입니다!</strong></div>
 </div>
 
 <hr class="divider">
@@ -833,11 +808,14 @@ npm run dev</code></pre>
 <h2 class="page-break"><span class="step-badge">?</span> 자주 묻는 질문</h2>
 
 <div class="faq-item no-break">
-  <h4>Q1. "ANTHROPIC_API_KEY is not set" 오류가 나요</h4>
-  <p><code>.env</code> 파일에 API 키가 제대로 입력되지 않은 것입니다.</p>
-  <div class="cmd-label">명령 프롬프트</div>
-  <pre><code>notepad %USERPROFILE%\Desktop\eduflow-js\.env</code></pre>
-  <p><code>ANTHROPIC_API_KEY=</code> 뒤에 키가 정확히 있는지 확인 → 저장 → 에듀플로 재시작</p>
+  <h4>Q1. "API 키가 필요합니다" 또는 AI 기능이 안 돼요</h4>
+  <p>API 키가 설정되지 않았거나 만료된 것입니다.</p>
+  <ol>
+    <li>에듀플로 화면 왼쪽 아래 <strong style="color:#ea580c;">🔑 API 키 필요</strong> 버튼 클릭</li>
+    <li>세션에서 받은 API 키를 붙여넣고 <strong>"저장"</strong></li>
+    <li>버튼이 <strong style="color:#16a34a;">✅ API 키 설정됨</strong>으로 바뀌면 정상</li>
+  </ol>
+  <p>"유효하지 않은 API 키" 메시지가 나오면 키를 다시 확인해주세요.</p>
 </div>
 
 <div class="faq-item no-break">
