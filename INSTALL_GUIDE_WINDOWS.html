@@ -609,6 +609,13 @@
   <p>명령 프롬프트에서 아래를 입력하고 Enter:</p>
   <div class="cmd-label">명령 프롬프트</div>
   <pre><code>cd %USERPROFILE%\Desktop</code></pre>
+  <div class="info-box warning" style="margin-top:8px;">
+    <div class="icon">⚠️</div>
+    <div>"<strong>지정된 경로를 찾을 수 없습니다</strong>" 오류가 나면?<br>
+    바탕화면이 OneDrive에 연결되어 있을 수 있습니다. 아래를 대신 입력하세요:<br>
+    <pre style="margin:8px 0 0 0;"><code>cd "%USERPROFILE%\OneDrive\Desktop"</code></pre>
+    그래도 안 되면 FAQ Q7을 참고하세요.</div>
+  </div>
 </div>
 
 <div class="step-instruction no-break">
@@ -780,6 +787,7 @@ npm install</code></pre>
 <pre><code>cd %USERPROFILE%\Desktop\eduflow-js
 npm run dev</code></pre>
 <p>그 다음 브라우저에서 <a href="http://localhost:7830" target="_blank"><code>http://localhost:7830</code></a> 접속</p>
+<p style="font-size:9pt; color:var(--gray-500);">※ 경로 오류 시 <code>cd "%USERPROFILE%\OneDrive\Desktop\eduflow-js"</code> 시도 (FAQ Q6 참고)</p>
 
 <h3>방법 2: 바로가기 만들기 (추천!)</h3>
 
@@ -859,7 +867,25 @@ npm install</code></pre>
 </div>
 
 <div class="faq-item no-break">
-  <h4>Q6. 업데이트하고 싶어요</h4>
+  <h4>Q6. "지정된 경로를 찾을 수 없습니다" 오류가 나요</h4>
+  <p>바탕화면(Desktop) 폴더가 기본 위치가 아닌 경우 발생합니다. 주로 <strong>OneDrive</strong>가 바탕화면을 동기화하고 있을 때 일어납니다.</p>
+  <p><strong>해결 방법:</strong> 아래 중 작동하는 것을 사용하세요.</p>
+  <div class="cmd-label">방법 1: OneDrive 바탕화면</div>
+  <pre><code>cd "%USERPROFILE%\OneDrive\Desktop"</code></pre>
+  <div class="cmd-label">방법 2: OneDrive 한국어 경로</div>
+  <pre><code>cd "%USERPROFILE%\OneDrive\바탕 화면"</code></pre>
+  <div class="cmd-label">방법 3: 직접 확인</div>
+  <pre><code>dir %USERPROFILE%</code></pre>
+  <p>위 명령어로 폴더 목록을 확인 후, <code>Desktop</code> 또는 <code>바탕 화면</code>이 보이는 곳으로 이동하세요.</p>
+  <div class="info-box tip">
+    <div class="icon">💡</div>
+    <div><strong>어디에 설치했는지 모르겠으면:</strong><br>
+    바탕화면의 <code>eduflow-js</code> 폴더를 <strong>마우스 우클릭</strong> → <strong>"속성"</strong> → <strong>"위치"</strong>에 나오는 경로를 그대로 복사해서 <code>cd "복사한경로"</code>로 이동하세요.</div>
+  </div>
+</div>
+
+<div class="faq-item no-break">
+  <h4>Q7. 업데이트하고 싶어요</h4>
   <div class="cmd-label">명령 프롬프트</div>
   <pre><code>cd %USERPROFILE%\Desktop\eduflow-js
 git pull
