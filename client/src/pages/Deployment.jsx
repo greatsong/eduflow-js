@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { apiFetch } from '../api/client';
@@ -144,6 +144,7 @@ function MkDocsTab({ project, status }) {
   const [repoName, setRepoName] = useState('');
   const [deployResult, setDeployResult] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
+  const deployResultRef = useRef(null);
 
   useEffect(() => {
     // TOC에서 제목 가져오기
@@ -221,8 +222,10 @@ function MkDocsTab({ project, status }) {
         body: JSON.stringify({ repoName: repoName.trim() }),
       });
       setDeployResult(result);
+      setTimeout(() => deployResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
     } catch (e) {
       setDeployResult({ success: false, message: e.message });
+      setTimeout(() => deployResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
     }
     setLoading(false);
   };
@@ -362,16 +365,26 @@ function MkDocsTab({ project, status }) {
                 </button>
               </div>
               {deployResult && (
-                <div className={`mt-3 p-3 rounded-lg text-sm ${deployResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                <div ref={deployResultRef} className={`mt-4 p-4 rounded-xl border-2 ${deployResult.success ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
                   {deployResult.success ? (
-                    <>
-                      <p>✅ 배포 완료!</p>
-                      <a href={deployResult.site_url} target="_blank" rel="noopener noreferrer" className="underline font-medium">
-                        🌐 {deployResult.site_url}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-green-800">✅ 배포 완료!</p>
+                        <a href={deployResult.site_url} target="_blank" rel="noopener noreferrer"
+                          className="text-green-700 underline font-medium text-sm">
+                          🌐 {deployResult.site_url}
+                        </a>
+                      </div>
+                      <a href={deployResult.site_url} target="_blank" rel="noopener noreferrer"
+                        className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 whitespace-nowrap">
+                        사이트 열기 →
                       </a>
-                    </>
+                    </div>
                   ) : (
-                    <p>❌ {deployResult.message}</p>
+                    <div>
+                      <p className="font-semibold text-red-800">❌ 배포 실패</p>
+                      <p className="text-sm text-red-700 mt-1">{deployResult.message}</p>
+                    </div>
                   )}
                 </div>
               )}
