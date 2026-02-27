@@ -359,11 +359,27 @@ function MkDocsTab({ project, status }) {
                 <button
                   onClick={handleDeploy}
                   disabled={loading || !repoName.trim()}
-                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 min-w-[100px]"
                 >
-                  🚀 배포
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      배포 중...
+                    </span>
+                  ) : '🚀 배포'}
                 </button>
               </div>
+              {loading && !deployResult && (
+                <div className="mt-4 p-4 rounded-xl border-2 border-blue-200 bg-blue-50">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-block w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <div>
+                      <p className="font-semibold text-blue-800">GitHub Pages 배포 진행 중...</p>
+                      <p className="text-xs text-blue-600 mt-1">리포지토리 생성 → 빌드 → 배포까지 1~2분 정도 걸립니다. 이 화면을 유지해주세요.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               {deployResult && (
                 <div ref={deployResultRef} className={`mt-4 p-4 rounded-xl border-2 ${deployResult.success ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
                   {deployResult.success ? (
