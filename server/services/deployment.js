@@ -61,7 +61,7 @@ export class Deployment {
    */
   async checkTool(name) {
     try {
-      await execa(name, ['--version']);
+      await execa(name, ['--version'], { shell: true });
       return true;
     } catch {
       return false;
@@ -247,6 +247,7 @@ ${navYaml}`;
       const result = await execa('mkdocs', ['build'], {
         cwd: this.projectPath,
         timeout: 120000,
+        shell: true,
       });
       return { success: true, message: '빌드 성공', stdout: result.stdout };
     } catch (e) {
@@ -275,6 +276,7 @@ ${navYaml}`;
         cwd: this.projectPath,
         detached: true,
         stdio: 'ignore',
+        shell: true,
       });
       // 비동기 실패 시 unhandled rejection 방지
       subprocess.catch(() => {});
@@ -322,7 +324,7 @@ ${navYaml}`;
       await execa('pandoc', [
         tempMd, '-o', outputFile,
         '--toc', '--highlight-style', 'tango',
-      ], { timeout: 120000 });
+      ], { timeout: 120000, shell: true });
 
       // 임시 파일 삭제
       try { await unlink(tempMd); } catch { /* skip */ }
@@ -483,7 +485,7 @@ ${navYaml}`;
       } catch { /* 실패해도 배포에 영향 없음 */ }
 
       // mkdocs gh-deploy
-      await execa('mkdocs', ['gh-deploy', '--force'], { cwd: this.projectPath, timeout: 180000 });
+      await execa('mkdocs', ['gh-deploy', '--force'], { cwd: this.projectPath, timeout: 180000, shell: true });
 
       const siteUrl = `https://${username}.github.io/${repoName}/`;
       return {
