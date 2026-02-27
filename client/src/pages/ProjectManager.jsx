@@ -307,7 +307,12 @@ function ProjectSettingsTab({ project, onCreated, onUpdated }) {
         disabled={saving}
         className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
       >
-        {saving ? '저장 중...' : isEditMode ? '💾 프로젝트 업데이트' : '🚀 프로젝트 만들기'}
+        {saving ? (
+          <span className="flex items-center justify-center gap-2">
+            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            {isEditMode ? '업데이트 중...' : '프로젝트 생성 중...'}
+          </span>
+        ) : isEditMode ? '💾 프로젝트 업데이트' : '🚀 프로젝트 만들기'}
       </button>
     </div>
   );
