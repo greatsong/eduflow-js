@@ -21,6 +21,19 @@ export class Deployment {
   }
 
   /**
+   * pip 도구(mkdocs, pandoc) 실행 커맨드 결정
+   * PATH에 없으면 python -m 으로 폴백
+   */
+  async _resolveCmd(name) {
+    try {
+      await execa(name, ['--version'], { shell: true });
+      return { cmd: name, args: [] };
+    } catch {
+      return { cmd: 'python', args: ['-m', name] };
+    }
+  }
+
+  /**
    * 생성된 챕터 파일 목록 (TOC 순서)
    */
   async getChapterFiles() {
@@ -58,12 +71,19 @@ export class Deployment {
 
   /**
    * CLI 도구 설치 여부 확인
+   * pip 도구(mkdocs, pandoc)는 PATH에 없을 수 있어 python -m 으로도 시도
    */
   async checkTool(name) {
     try {
       await execa(name, ['--version'], { shell: true });
       return true;
     } catch {
+      if (name === 'mkdocs' || name === 'pandoc') {
+        try {
+          await execa('python', ['-m', name, '--version'], { shell: true });
+          return true;
+        } catch { /* fallthrough */ }
+      }
       return false;
     }
   }
@@ -244,7 +264,8 @@ ${navYaml}`;
    */
   async buildWebsite() {
     try {
-      const result = await execa('mkdocs', ['build'], {
+      const { cmd, args } = await this._resolveCmd('mkdocs');
+      const result = await execa(cmd, [...args, 'build'], {
         cwd: this.projectPath,
         timeout: 120000,
         shell: true,
@@ -272,7 +293,8 @@ ${navYaml}`;
         }
       } catch { /* 포트 사용 중인 프로세스 없음 */ }
 
-      const subprocess = execa('mkdocs', ['serve', '--dev-addr', `127.0.0.1:${port}`], {
+      const { cmd, args } = await this._resolveCmd('mkdocs');
+      const subprocess = execa(cmd, [...args, 'serve', '--dev-addr', `127.0.0.1:${port}`], {
         cwd: this.projectPath,
         detached: true,
         stdio: 'ignore',
@@ -321,7 +343,8 @@ ${navYaml}`;
     try {
       await writeFile(tempMd, combined, 'utf-8');
 
-      await execa('pandoc', [
+      const { cmd: pCmd, args: pArgs } = await this._resolveCmd('pandoc');
+      await execa(pCmd, [...pArgs,
         tempMd, '-o', outputFile,
         '--toc', '--highlight-style', 'tango',
       ], { timeout: 120000, shell: true });
@@ -485,7 +508,8 @@ ${navYaml}`;
       } catch { /* 실패해도 배포에 영향 없음 */ }
 
       // mkdocs gh-deploy
-      await execa('mkdocs', ['gh-deploy', '--force'], { cwd: this.projectPath, timeout: 180000, shell: true });
+      const { cmd: mkCmd, args: mkArgs } = await this._resolveCmd('mkdocs');
+      await execa(mkCmd, [...mkArgs, 'gh-deploy', '--force'], { cwd: this.projectPath, timeout: 180000, shell: true });
 
       const siteUrl = `https://${username}.github.io/${repoName}/`;
       return {
