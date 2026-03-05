@@ -2,7 +2,7 @@
   "_안내": "=== 모델 설정 파일 === 새 모델이 나오면 이 파일만 수정하세요! 앱 전체에 자동 반영됩니다.",
   "_수정방법": "1) 아래 models에서 id/provider/display_name/pricing 수정  2) defaults에서 기본 모델 변경  3) 앱 새로고침 (60초 캐시)",
   "_가격확인": "anthropic.com/pricing | openai.com/pricing | ai.google.dev/pricing | upstage.ai",
-  "_최종수정일": "2026-03-05",
+  "_최종수정일": "2026-03-06",
 
   "providers": {
     "anthropic": {
@@ -45,14 +45,6 @@
       "recommended_for": ["챕터 생성", "대화", "목차 생성", "피드백"]
     },
     {
-      "id": "claude-sonnet-4-5-20250929",
-      "provider": "anthropic",
-      "display_name": "Claude Sonnet 4.5",
-      "tier": "균형",
-      "pricing": { "input": 3.0, "output": 15.0 },
-      "recommended_for": ["대화", "목차 생성", "피드백"]
-    },
-    {
       "id": "claude-haiku-4-5-20251001",
       "provider": "anthropic",
       "display_name": "Claude Haiku 4.5",
@@ -61,10 +53,26 @@
       "recommended_for": ["대량 생성", "대화", "빠른 피드백"]
     },
     {
-      "id": "gpt-5.2",
+      "id": "gpt-5.4-pro",
       "provider": "openai",
-      "display_name": "GPT-5.2",
-      "tier": "최신 최고급",
+      "display_name": "GPT-5.4 Pro",
+      "tier": "프리미엄 추론",
+      "pricing": { "input": 30.0, "output": 180.0 },
+      "recommended_for": ["복잡한 추론", "고품질 콘텐츠", "코딩"]
+    },
+    {
+      "id": "gpt-5.4",
+      "provider": "openai",
+      "display_name": "GPT-5.4",
+      "tier": "최신 플래그십",
+      "pricing": { "input": 2.50, "output": 15.0 },
+      "recommended_for": ["챕터 생성", "고품질 콘텐츠", "추론", "코딩"]
+    },
+    {
+      "id": "gpt-5.3",
+      "provider": "openai",
+      "display_name": "GPT-5.3",
+      "tier": "고성능",
       "pricing": { "input": 1.75, "output": 14.0 },
       "recommended_for": ["챕터 생성", "고품질 콘텐츠", "추론"]
     },
@@ -72,7 +80,7 @@
       "id": "gpt-5.1",
       "provider": "openai",
       "display_name": "GPT-5.1",
-      "tier": "고품질",
+      "tier": "균형",
       "pricing": { "input": 1.25, "output": 10.0 },
       "recommended_for": ["챕터 생성", "대화", "코딩"]
     },
