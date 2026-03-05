@@ -677,15 +677,6 @@ export default function ModelCompare() {
         </div>
       )}
 
-      {/* AI 자동 평가: 중지됨 (평가 결과 없음) */}
-      {phase === 'auto-done' && !autoEvalResult && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-          <p className="text-amber-700 font-medium mb-2">생성이 중지되었습니다</p>
-          <p className="text-amber-600 text-sm mb-4">아래에서 현재까지 생성된 응답을 확인할 수 있습니다</p>
-          <button onClick={resetAll} className="px-5 py-2.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600">새 비교</button>
-        </div>
-      )}
-
       {/* AI 자동 평가 결과 */}
       {phase === 'auto-done' && autoEvalResult && (
         <div className="bg-white rounded-xl border-2 border-emerald-300 p-6">
@@ -762,7 +753,7 @@ export default function ModelCompare() {
       )}
 
       {/* 카드 그리드 */}
-      {shuffledOrder.length > 0 && phase !== 'done' && !(phase === 'auto-done' && autoEvalResult) && phase !== 'finals-prompt' && (
+      {shuffledOrder.length > 0 && phase !== 'done' && phase !== 'auto-done' && phase !== 'finals-prompt' && (
         <div className={`grid gap-4 ${gridCols}`}>
           {shuffledOrder.map((modelId, idx) => {
             const r = results[modelId] || {};
