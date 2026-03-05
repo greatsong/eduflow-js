@@ -48,7 +48,8 @@ export default function ModelCompare() {
   const [allModels, setAllModels] = useState([]);
   const [prompt, setPrompt] = useState('');
 
-  const [phase, setPhase] = useState('idle'); // idle | prelim | prelim-rank | finals | finals-rank | done
+  // idle | prelim | prelim-rank | finals-prompt | finals | finals-rank | done
+  const [phase, setPhase] = useState('idle');
   const [round, setRound] = useState(0);
   const [results, setResults] = useState({});
   const [running, setRunning] = useState(false);
@@ -57,6 +58,7 @@ export default function ModelCompare() {
   const [top5, setTop5] = useState([]);
   const [roundScores, setRoundScores] = useState({});
   const [roundHistory, setRoundHistory] = useState([]);
+  const [roundPrompts, setRoundPrompts] = useState([]);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -90,7 +92,7 @@ export default function ModelCompare() {
     return h;
   };
 
-  const runModels = useCallback(async (modelIds) => {
+  const runModels = useCallback(async (modelIds, activePrompt) => {
     const shuffled = shuffle(modelIds);
     setShuffledOrder(shuffled);
     setRunning(true);
@@ -105,7 +107,7 @@ export default function ModelCompare() {
       const res = await fetch(`${API_BASE}/api/compare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ models: shuffled, prompt, systemPrompt: '교육 콘텐츠 전문가로서 명확하고 구조화된 답변을 해주세요.' }),
+        body: JSON.stringify({ models: shuffled, prompt: activePrompt, systemPrompt: '교육 콘텐츠 전문가로서 명확하고 구조화된 답변을 해주세요.' }),
         signal: controller.signal,
       });
       const reader = res.body.getReader();
@@ -139,7 +141,7 @@ export default function ModelCompare() {
     } catch (err) {
       if (err.name !== 'AbortError') console.error(err);
     } finally { setRunning(false); abortRef.current = null; }
-  }, [prompt]);
+  }, []);
 
   useEffect(() => {
     if (allDone && !running) {
@@ -151,8 +153,8 @@ export default function ModelCompare() {
   const startTournament = () => {
     if (!prompt.trim() || availableModels.length < 2) return;
     setPhase('prelim');
-    setRound(0); setTop5([]); setRoundScores({}); setRoundHistory([]);
-    runModels(availableModels.map((m) => m.id));
+    setRound(0); setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]);
+    runModels(availableModels.map((m) => m.id), prompt);
   };
 
   const handleRankToggle = (modelId) => {
@@ -171,8 +173,17 @@ export default function ModelCompare() {
     for (const id of selected) init[id] = [];
     setRoundScores(init);
     setRoundHistory([]);
-    setPhase('finals'); setRound(1);
-    runModels(selected);
+    setRoundPrompts([]);
+    setPhase('finals-prompt');
+    setRound(1);
+    setPrompt('');
+  };
+
+  const startFinalsRound = () => {
+    if (!prompt.trim()) return;
+    setRoundPrompts((prev) => [...prev, prompt]);
+    setPhase('finals');
+    runModels(top5, prompt);
   };
 
   const confirmFinalsRanking = () => {
@@ -183,11 +194,12 @@ export default function ModelCompare() {
       top5.forEach((id) => { if (!rankings.includes(id)) { if (!copy[id]) copy[id] = []; copy[id].push(0); } });
       return copy;
     });
-    setRoundHistory((prev) => [...prev, { round, rankings: rankings.map((id, i) => ({ modelId: id, rank: i + 1 })) }]);
+    setRoundHistory((prev) => [...prev, { round, prompt: roundPrompts[round - 1] || prompt, rankings: rankings.map((id, i) => ({ modelId: id, rank: i + 1 })) }]);
 
     if (round < TOTAL_ROUNDS) {
-      setPhase('finals'); setRound((r) => r + 1);
-      runModels(top5);
+      setRound((r) => r + 1);
+      setPhase('finals-prompt');
+      setPrompt('');
     } else {
       setPhase('done');
     }
@@ -195,7 +207,7 @@ export default function ModelCompare() {
 
   const resetAll = () => {
     setPhase('idle'); setRound(0); setResults({}); setShuffledOrder([]);
-    setRankings([]); setTop5([]); setRoundScores({}); setRoundHistory([]);
+    setRankings([]); setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]); setPrompt('');
   };
 
   const getModelInfo = (id) => allModels.find((m) => m.id === id) || { display_name: id, tier: '', provider: '' };
@@ -212,17 +224,22 @@ export default function ModelCompare() {
     : shuffledOrder.length <= 5 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
     : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
+  const canEditPrompt = phase === 'idle' || phase === 'finals-prompt';
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">AI 블라인드 토너먼트</h2>
-          <p className="text-gray-500 mt-1">예선(전체) → Top 5 → 같은 프롬프트 3회 반복 → 합산 순위</p>
+          <p className="text-gray-500 mt-1">예선(전체) → Top 5 선정 → 매 라운드 다른 프롬프트로 3회 결선 → 합산 순위</p>
         </div>
         {phase !== 'idle' && (
           <div className="flex items-center gap-3">
             <span className="px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-lg text-sm font-medium">
-              {phase === 'prelim' || phase === 'prelim-rank' ? '예선' : phase === 'done' ? '최종 결과' : `결선 ${round}/${TOTAL_ROUNDS}회`}
+              {phase === 'prelim' || phase === 'prelim-rank' ? '예선'
+                : phase === 'done' ? '최종 결과'
+                : phase === 'finals-prompt' ? `결선 ${round}회 준비`
+                : `결선 ${round}/${TOTAL_ROUNDS}회`}
             </span>
             <button onClick={resetAll} className="text-sm text-gray-500 hover:text-gray-700">처음부터</button>
           </div>
@@ -235,10 +252,10 @@ export default function ModelCompare() {
           <div className="flex items-center gap-2">
             {['예선', '1회', '2회', '3회', '결과'].map((label, i) => {
               const active = (i === 0 && (phase === 'prelim' || phase === 'prelim-rank'))
-                || (i >= 1 && i <= 3 && (phase === 'finals' || phase === 'finals-rank') && round === i)
+                || (i >= 1 && i <= 3 && ((phase === 'finals-prompt' || phase === 'finals' || phase === 'finals-rank') && round === i))
                 || (i === 4 && phase === 'done');
               const done = (i === 0 && phase !== 'prelim' && phase !== 'prelim-rank')
-                || (i >= 1 && i <= 3 && (((phase === 'finals' || phase === 'finals-rank') && round > i) || phase === 'done'));
+                || (i >= 1 && i <= 3 && (((phase === 'finals-prompt' || phase === 'finals' || phase === 'finals-rank') && round > i) || phase === 'done'));
               return (
                 <div key={label} className="flex-1">
                   <div className={`h-2 rounded-full ${done ? 'bg-indigo-500' : active ? 'bg-indigo-300 animate-pulse' : 'bg-gray-200'}`} />
@@ -251,31 +268,48 @@ export default function ModelCompare() {
       )}
 
       {/* 프롬프트 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-700">프롬프트</h3>
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
-            <button key={p.name} onClick={() => setPrompt(p.prompt)} disabled={phase !== 'idle'}
-              className="px-3 py-1 rounded-full text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-40">{p.name}</button>
-          ))}
-        </div>
-        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} disabled={phase !== 'idle'}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="비교할 프롬프트를 입력하세요..." />
-        {phase === 'idle' && (
-          <div className="flex items-center gap-3">
-            <button onClick={startTournament} disabled={!prompt.trim() || availableModels.length < 2}
-              className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 transition-all">
-              토너먼트 시작 ({availableModels.length}개 모델)
-            </button>
-            {availableModels.length < 2 && <p className="text-xs text-orange-600">2개 이상 프로바이더의 API 키를 설정해주세요</p>}
+      {(phase === 'idle' || phase === 'finals-prompt' || phase === 'prelim' || phase === 'finals') && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700">
+              {phase === 'finals-prompt' ? `결선 ${round}회차 프롬프트` : '프롬프트'}
+            </h3>
+            {phase === 'finals-prompt' && roundPrompts.length > 0 && (
+              <span className="text-xs text-gray-400">이전과 다른 프롬프트를 선택하면 더 공정합니다</span>
+            )}
           </div>
-        )}
-        {running && (
-          <button onClick={() => { abortRef.current?.abort(); setRunning(false); }}
-            className="px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50">중지</button>
-        )}
-      </div>
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((p) => (
+              <button key={p.name} onClick={() => setPrompt(p.prompt)} disabled={!canEditPrompt}
+                className={`px-3 py-1 rounded-full text-xs transition-colors disabled:opacity-40 ${
+                  roundPrompts.includes(p.prompt) ? 'bg-gray-100 text-gray-400 line-through' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                }`}>{p.name}</button>
+            ))}
+          </div>
+          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} disabled={!canEditPrompt}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+            placeholder={phase === 'finals-prompt' ? `${round}회차에 사용할 프롬프트를 입력하세요...` : '비교할 프롬프트를 입력하세요...'} />
+          {phase === 'idle' && (
+            <div className="flex items-center gap-3">
+              <button onClick={startTournament} disabled={!prompt.trim() || availableModels.length < 2}
+                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 transition-all">
+                토너먼트 시작 ({availableModels.length}개 모델)
+              </button>
+              {availableModels.length < 2 && <p className="text-xs text-orange-600">2개 이상 프로바이더의 API 키를 설정해주세요</p>}
+            </div>
+          )}
+          {phase === 'finals-prompt' && (
+            <button onClick={startFinalsRound} disabled={!prompt.trim()}
+              className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 transition-all">
+              {round}회차 시작
+            </button>
+          )}
+          {running && (
+            <button onClick={() => { abortRef.current?.abort(); setRunning(false); }}
+              className="px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50">중지</button>
+          )}
+        </div>
+      )}
 
       {/* 예선 Top 5 선택 */}
       {phase === 'prelim-rank' && (
@@ -323,7 +357,7 @@ export default function ModelCompare() {
           <div className="mt-3 flex justify-center gap-2">
             <button onClick={confirmFinalsRanking} disabled={rankings.length < validModels.length}
               className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
-              {rankings.length < validModels.length ? `${validModels.length - rankings.length}개 남음` : round < TOTAL_ROUNDS ? `확정 → ${round + 1}회차` : '확정 → 최종 결과!'}
+              {rankings.length < validModels.length ? `${validModels.length - rankings.length}개 남음` : round < TOTAL_ROUNDS ? `확정 → ${round + 1}회차 프롬프트 선택` : '확정 → 최종 결과!'}
             </button>
             {rankings.length > 0 && <button onClick={() => setRankings([])} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>}
           </div>
@@ -365,7 +399,8 @@ export default function ModelCompare() {
             <div className="mt-3 space-y-3">
               {roundHistory.map((rh) => (
                 <div key={rh.round} className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs font-medium text-gray-600 mb-2">{rh.round}회차</p>
+                  <p className="text-xs font-medium text-gray-600 mb-1">{rh.round}회차</p>
+                  <p className="text-xs text-gray-400 mb-2 truncate" title={rh.prompt}>{rh.prompt}</p>
                   <div className="flex items-center gap-2 flex-wrap">
                     {rh.rankings.map((r) => {
                       const info = getModelInfo(r.modelId);
@@ -389,7 +424,7 @@ export default function ModelCompare() {
       )}
 
       {/* 카드 그리드 */}
-      {shuffledOrder.length > 0 && phase !== 'done' && (
+      {shuffledOrder.length > 0 && phase !== 'done' && phase !== 'finals-prompt' && (
         <div className={`grid gap-4 ${gridCols}`}>
           {shuffledOrder.map((modelId, idx) => {
             const r = results[modelId] || {};
