@@ -40,6 +40,8 @@ export async function getModelDisplayOptions() {
   return config.models.map((m) => ({
     id: m.id,
     provider: m.provider || 'anthropic',
+    display_name: m.display_name,
+    tier: m.tier,
     label: `${m.display_name} (${m.tier})`,
     pricing: m.pricing,
     recommendedFor: m.recommended_for,
