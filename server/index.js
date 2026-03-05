@@ -76,6 +76,15 @@ app.use('/api/compare', compareRouter);
 // 에러 핸들링
 app.use(errorHandler);
 
+// 전역 예외 처리
+process.on('unhandledRejection', (reason) => {
+  console.error('[EduFlow] Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[EduFlow] Uncaught Exception:', err);
+  process.exit(1);
+});
+
 app.listen(PORT, () => {
   console.log(`[EduFlow] 서버 실행 중: http://localhost:${PORT}`);
   console.log(`[EduFlow] 프로젝트 디렉토리: ${process.env.PROJECTS_DIR || './projects'}`);

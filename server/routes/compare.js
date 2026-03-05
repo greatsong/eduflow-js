@@ -39,7 +39,7 @@ router.post('/', requireApiKey, asyncHandler(async (req, res) => {
   // 각 모델을 병렬로 실행
   const promises = models.map(async (modelId) => {
     const provider = detectProvider(modelId);
-    const apiKey = resolveApiKey(req.apiKeys, provider);
+    const apiKey = resolveApiKey(provider, req.apiKeys);
 
     if (!apiKey) {
       send({ type: 'error', modelId, message: `${provider} API 키가 설정되지 않았습니다.` });

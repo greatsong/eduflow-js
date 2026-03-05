@@ -6,6 +6,7 @@ import { requireApiKey } from '../middleware/apiKey.js';
 import { ChapterGenerator } from '../services/chapterGenerator.js';
 import { ProgressManager } from '../services/progressManager.js';
 import { streamChat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
+import { sanitizeId } from '../middleware/sanitize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -13,7 +14,9 @@ const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'pr
 const router = Router({ mergeParams: true });
 
 function projectPath(id) {
-  return join(PROJECTS_DIR, id);
+  const safe = sanitizeId(id);
+  if (!safe) throw new Error('잘못된 프로젝트 ID입니다.');
+  return join(PROJECTS_DIR, safe);
 }
 
 function sseHeaders(res) {

@@ -8,6 +8,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { ProgressManager } from '../services/progressManager.js';
 import { TemplateManager } from '../services/templateManager.js';
 import { ReferenceManager } from '../services/referenceManager.js';
+import { sanitizeId } from '../middleware/sanitize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -18,9 +19,11 @@ const router = Router();
 // multer 설정: 메모리 저장
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-// 헬퍼: 프로젝트 경로
+// 헬퍼: 프로젝트 경로 (Path Traversal 방어)
 function projectPath(id) {
-  return join(PROJECTS_DIR, id);
+  const safe = sanitizeId(id);
+  if (!safe) throw new Error('잘못된 프로젝트 ID입니다.');
+  return join(PROJECTS_DIR, safe);
 }
 
 // 헬퍼: config.json 로드

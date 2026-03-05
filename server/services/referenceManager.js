@@ -1,9 +1,7 @@
 import { readFile, writeFile, readdir, unlink, stat, mkdir } from 'fs/promises';
 import { join, extname, parse as parsePath } from 'path';
 import { existsSync } from 'fs';
-import { lookup } from 'mime-types';
-
-// mime-types가 없으면 간단한 폴백
+// MIME 타입 매핑
 function getMimeType(filename) {
   const ext = extname(filename).toLowerCase();
   const types = {

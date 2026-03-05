@@ -5,6 +5,7 @@ import { stat } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { Deployment } from '../services/deployment.js';
+import { sanitizeId, sanitizeFilename } from '../middleware/sanitize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -12,7 +13,9 @@ const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'pr
 const router = Router({ mergeParams: true });
 
 function projectPath(id) {
-  return join(PROJECTS_DIR, id);
+  const safe = sanitizeId(id);
+  if (!safe) throw new Error('잘못된 프로젝트 ID입니다.');
+  return join(PROJECTS_DIR, safe);
 }
 
 // GET /api/projects/:id/deploy/status - 배포 도구 상태 확인
@@ -89,7 +92,11 @@ router.get('/docx/download', asyncHandler(async (req, res) => {
   // filename이 있으면 그 파일, 없으면 output/ 안에서 첫 번째 .docx 파일
   let filePath;
   if (filename) {
-    filePath = join(outputDir, filename);
+    const safeFilename = sanitizeFilename(filename);
+    if (!safeFilename) {
+      return res.status(400).json({ message: '잘못된 파일명입니다.' });
+    }
+    filePath = join(outputDir, safeFilename);
   } else {
     const { readdir } = await import('fs/promises');
     if (!existsSync(outputDir)) {
