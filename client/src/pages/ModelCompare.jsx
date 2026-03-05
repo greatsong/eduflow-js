@@ -47,7 +47,9 @@ function shuffle(arr) {
 export default function ModelCompare() {
   const [allModels, setAllModels] = useState([]);
   const [prompt, setPrompt] = useState('');
-  const [blind, setBlind] = useState(true);
+
+  // 모드: 'blind' | 'named' | 'judge'
+  const [mode, setMode] = useState('blind');
   const [selectedModelIds, setSelectedModelIds] = useState([]);
 
   // idle | prelim | prelim-rank | finals-prompt | finals | finals-rank | done
@@ -57,10 +59,14 @@ export default function ModelCompare() {
   const [running, setRunning] = useState(false);
   const [shuffledOrder, setShuffledOrder] = useState([]);
   const [rankings, setRankings] = useState([]);
+  const [worstPicks, setWorstPicks] = useState([]);
+  const [selectionMode, setSelectionMode] = useState('best');
   const [top5, setTop5] = useState([]);
   const [roundScores, setRoundScores] = useState({});
   const [roundHistory, setRoundHistory] = useState([]);
   const [roundPrompts, setRoundPrompts] = useState([]);
+  const [judgeResult, setJudgeResult] = useState(null);
+  const [judging, setJudging] = useState(false);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -77,11 +83,12 @@ export default function ModelCompare() {
     return allModels.filter((m) => keys[m.provider]);
   }, [allModels]);
 
-  // 공개 모드: 체크된 모델들
   const modelsToRun = useMemo(() => {
-    if (blind) return availableModels;
+    if (mode === 'blind') return availableModels;
     return availableModels.filter((m) => selectedModelIds.includes(m.id));
-  }, [blind, availableModels, selectedModelIds]);
+  }, [mode, availableModels, selectedModelIds]);
+
+  const isBlind = mode === 'blind';
 
   const allDone = useMemo(() => {
     const vals = Object.values(results);
@@ -101,10 +108,11 @@ export default function ModelCompare() {
   };
 
   const runModels = useCallback(async (modelIds, activePrompt) => {
-    const ordered = blind ? shuffle(modelIds) : modelIds;
+    const ordered = isBlind ? shuffle(modelIds) : modelIds;
     setShuffledOrder(ordered);
     setRunning(true);
     setRankings([]);
+    setJudgeResult(null);
     const init = {};
     for (const m of ordered) init[m] = { text: '', status: 'waiting', elapsed: null, charCount: null };
     setResults(init);
@@ -149,32 +157,104 @@ export default function ModelCompare() {
     } catch (err) {
       if (err.name !== 'AbortError') console.error(err);
     } finally { setRunning(false); abortRef.current = null; }
-  }, [blind]);
+  }, [isBlind]);
+
+  // AI 심사 호출
+  const runJudge = useCallback(async (currentResults, currentOrder, activePrompt) => {
+    setJudging(true);
+    const outputs = currentOrder
+      .filter((id) => currentResults[id]?.status === 'done' && currentResults[id]?.text)
+      .map((id, idx) => ({ label: `응답 ${LABELS[idx]}`, modelId: id, text: currentResults[id].text }));
+
+    if (outputs.length < 2) { setJudging(false); return; }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/compare/judge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ outputs: outputs.map(({ label, text }) => ({ label, text })), prompt: activePrompt }),
+      });
+      const data = await res.json();
+      if (data.rankings) {
+        const labelMap = {};
+        outputs.forEach((o, i) => { labelMap[`응답 ${LABELS[i]}`] = o.modelId; });
+        const mapped = data.rankings.map((r) => ({ ...r, modelId: labelMap[r.label] }));
+        setJudgeResult({ rankings: mapped, summary: data.summary });
+      }
+    } catch (err) {
+      console.error('Judge error:', err);
+    } finally { setJudging(false); }
+  }, []);
 
   useEffect(() => {
     if (allDone && !running) {
-      if (phase === 'prelim') setPhase('prelim-rank');
-      if (phase === 'finals') setPhase('finals-rank');
+      if (phase === 'prelim') {
+        if (mode === 'judge') runJudge(results, shuffledOrder, prompt);
+        setPhase('prelim-rank');
+      }
+      if (phase === 'finals') {
+        if (mode === 'judge') runJudge(results, shuffledOrder, roundPrompts[round - 1] || prompt);
+        setPhase('finals-rank');
+      }
     }
-  }, [allDone, running, phase]);
+  }, [allDone, running, phase, mode, results, shuffledOrder, roundPrompts, round, prompt, runJudge]);
 
   const startTournament = () => {
     if (!prompt.trim() || modelsToRun.length < 2) return;
     setPhase('prelim');
     setRound(0); setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]);
+    setWorstPicks([]); setSelectionMode('best');
     runModels(modelsToRun.map((m) => m.id), prompt);
   };
 
   const handleRankToggle = (modelId) => {
+    if (mode === 'judge') return; // AI 심사 모드에서는 수동 클릭 불가
+    if (phase === 'prelim-rank') {
+      if (selectionMode === 'best') {
+        setRankings((prev) => {
+          if (prev.includes(modelId)) return prev.filter((id) => id !== modelId);
+          if (prev.length >= Math.min(TOP_N, validModels.length)) return prev;
+          return [...prev, modelId];
+        });
+        setWorstPicks((prev) => prev.filter((id) => id !== modelId));
+      } else {
+        setWorstPicks((prev) => {
+          if (prev.includes(modelId)) return prev.filter((id) => id !== modelId);
+          if (prev.length >= TOP_N) return prev;
+          return [...prev, modelId];
+        });
+        setRankings((prev) => prev.filter((id) => id !== modelId));
+      }
+      return;
+    }
+    // finals-rank
     setRankings((prev) => {
-      if (prev.includes(modelId)) return prev.slice(0, prev.indexOf(modelId));
-      const max = phase === 'prelim-rank' ? Math.min(TOP_N, validModels.length) : validModels.length;
-      if (prev.length >= max) return prev;
+      if (prev.includes(modelId)) return prev.filter((id) => id !== modelId);
+      if (prev.length >= validModels.length) return prev;
       return [...prev, modelId];
     });
   };
 
+  // AI 심사 모드: judge 결과로 자동 Top 5 선정
+  const autoConfirmTop5 = () => {
+    if (!judgeResult) return;
+    const sorted = [...judgeResult.rankings].sort((a, b) => a.rank - b.rank);
+    const bestIds = sorted.slice(0, Math.min(TOP_N, sorted.length)).map((r) => r.modelId).filter(Boolean);
+    const worstIds = sorted.length > TOP_N ? sorted.slice(TOP_N).map((r) => r.modelId).filter(Boolean) : [];
+    setTop5(bestIds);
+    setWorstPicks(worstIds);
+    const init = {};
+    for (const id of bestIds) init[id] = [];
+    setRoundScores(init);
+    setRoundHistory([]);
+    setRoundPrompts([]);
+    setPhase('finals-prompt');
+    setRound(1);
+    setPrompt('');
+  };
+
   const confirmTop5 = () => {
+    if (rankings.length < 2) return;
     const selected = rankings.slice(0, TOP_N);
     setTop5(selected);
     const init = {};
@@ -196,18 +276,36 @@ export default function ModelCompare() {
 
   const confirmFinalsRanking = () => {
     const n = validModels.length;
+    const scoreList = mode === 'judge' && judgeResult ? judgeResult.rankings : null;
+
     setRoundScores((prev) => {
       const copy = { ...prev };
-      rankings.forEach((id, i) => { if (!copy[id]) copy[id] = []; copy[id].push(n - i); });
-      top5.forEach((id) => { if (!rankings.includes(id)) { if (!copy[id]) copy[id] = []; copy[id].push(0); } });
+      if (scoreList) {
+        scoreList.forEach((r) => {
+          if (r.modelId && copy[r.modelId] !== undefined) {
+            copy[r.modelId] = [...(copy[r.modelId] || []), r.score || (n - (r.rank - 1))];
+          }
+        });
+        top5.forEach((id) => {
+          if (!scoreList.find((r) => r.modelId === id)) copy[id] = [...(copy[id] || []), 0];
+        });
+      } else {
+        rankings.forEach((id, i) => { if (!copy[id]) copy[id] = []; copy[id] = [...copy[id], n - i]; });
+        top5.forEach((id) => { if (!rankings.includes(id)) { if (!copy[id]) copy[id] = []; copy[id] = [...copy[id], 0]; } });
+      }
       return copy;
     });
-    setRoundHistory((prev) => [...prev, { round, prompt: roundPrompts[round - 1] || prompt, rankings: rankings.map((id, i) => ({ modelId: id, rank: i + 1 })) }]);
+
+    const roundRankings = scoreList
+      ? [...scoreList].sort((a, b) => a.rank - b.rank).map((r, i) => ({ modelId: r.modelId, rank: i + 1 }))
+      : rankings.map((id, i) => ({ modelId: id, rank: i + 1 }));
+    setRoundHistory((prev) => [...prev, { round, prompt: roundPrompts[round - 1] || prompt, rankings: roundRankings }]);
 
     if (round < TOTAL_ROUNDS) {
       setRound((r) => r + 1);
       setPhase('finals-prompt');
       setPrompt('');
+      setJudgeResult(null);
     } else {
       setPhase('done');
     }
@@ -215,7 +313,9 @@ export default function ModelCompare() {
 
   const resetAll = () => {
     setPhase('idle'); setRound(0); setResults({}); setShuffledOrder([]);
-    setRankings([]); setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]); setPrompt('');
+    setRankings([]); setWorstPicks([]); setSelectionMode('best');
+    setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]); setPrompt('');
+    setJudgeResult(null); setJudging(false);
   };
 
   const toggleModelSelection = (id) => {
@@ -224,9 +324,8 @@ export default function ModelCompare() {
 
   const getModelInfo = (id) => allModels.find((m) => m.id === id) || { display_name: id, tier: '', provider: '' };
   const getCardTitle = (modelId, idx) => {
-    if (blind) return `Model ${LABELS[idx] || `#${idx + 1}`}`;
-    const info = getModelInfo(modelId);
-    return info.display_name;
+    if (isBlind) return `Model ${LABELS[idx] || `#${idx + 1}`}`;
+    return getModelInfo(modelId).display_name;
   };
   const getLabelColor = (idx) => LABEL_COLORS[idx % LABEL_COLORS.length];
   const getRank = (modelId) => { const i = rankings.indexOf(modelId); return i === -1 ? null : i + 1; };
@@ -242,7 +341,6 @@ export default function ModelCompare() {
 
   const canEditPrompt = phase === 'idle' || phase === 'finals-prompt';
 
-  // 프로바이더별 그룹핑 (공개 모드 체크박스용)
   const modelsByProvider = useMemo(() => {
     const groups = {};
     for (const m of availableModels) {
@@ -254,19 +352,24 @@ export default function ModelCompare() {
 
   const providerNames = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google', upstage: 'Upstage' };
 
+  const modeColor = mode === 'blind' ? 'indigo' : mode === 'named' ? 'emerald' : 'purple';
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">AI 모델 비교</h2>
           <p className="text-gray-500 mt-1">
-            {blind ? '블라인드 토너먼트: 익명 비교 → Top 5 → 3회 결선' : '공개 비교: 모델을 직접 선택하고 결과를 나란히 비교'}
+            {mode === 'blind' && '블라인드 토너먼트: 익명 비교 → Top 5 → 3회 결선'}
+            {mode === 'named' && '공개 비교: 모델을 직접 선택하고 나란히 비교'}
+            {mode === 'judge' && 'AI 심사: Claude Sonnet 4.6이 자동으로 평가'}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {phase !== 'idle' && (
             <>
-              <span className="px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-lg text-sm font-medium">
+              <span className={`px-3 py-1.5 bg-${modeColor}-100 text-${modeColor}-800 rounded-lg text-sm font-medium`}>
+                {mode === 'judge' && '🤖 '}
                 {phase === 'prelim' || phase === 'prelim-rank' ? '예선'
                   : phase === 'done' ? '최종 결과'
                   : phase === 'finals-prompt' ? `결선 ${round}회 준비`
@@ -278,29 +381,42 @@ export default function ModelCompare() {
         </div>
       </div>
 
-      {/* 모드 토글 — idle 상태에서만 변경 가능 */}
+      {/* 모드 선택 — idle 상태에서만 */}
       {phase === 'idle' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+          <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">비교 방식</span>
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-              <button onClick={() => setBlind(true)}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${blind ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                블라인드 (익명)
-              </button>
-              <button onClick={() => setBlind(false)}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${!blind ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                공개 (모델 선택)
-              </button>
+              {[
+                { key: 'blind', label: '블라인드', icon: '🎭' },
+                { key: 'named', label: '공개 비교', icon: '📋' },
+                { key: 'judge', label: 'AI 심사', icon: '🤖' },
+              ].map((m) => (
+                <button key={m.key} onClick={() => setMode(m.key)}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    mode === m.key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}>
+                  {m.icon} {m.label}
+                </button>
+              ))}
             </div>
-            <span className="text-xs text-gray-400">
-              {blind ? '모든 모델을 익명으로 비교합니다' : '원하는 모델만 골라서 비교합니다'}
-            </span>
+          </div>
+          <div className="text-xs text-gray-400">
+            {mode === 'blind' && '모든 모델을 익명으로 비교 → 사용자가 직접 투표'}
+            {mode === 'named' && '원하는 모델만 골라서 실명 비교 → 사용자가 직접 투표'}
+            {mode === 'judge' && 'Claude Sonnet 4.6이 모든 모델의 응답을 자동 평가 (Anthropic API 키 필요)'}
           </div>
 
-          {/* 공개 모드: 모델 체크박스 */}
-          {!blind && (
-            <div className="mt-4 space-y-3">
+          {/* 모델 체크박스 (named/judge) */}
+          {mode !== 'blind' && (
+            <div className="space-y-3 border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">비교할 모델 선택</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedModelIds(availableModels.map((m) => m.id))} className="text-xs text-blue-600 hover:text-blue-800">전체 선택</button>
+                  <button onClick={() => setSelectedModelIds([])} className="text-xs text-gray-500 hover:text-gray-700">전체 해제</button>
+                </div>
+              </div>
               {Object.entries(modelsByProvider).map(([provider, models]) => (
                 <div key={provider}>
                   <div className="flex items-center gap-2 mb-1.5">
@@ -389,11 +505,11 @@ export default function ModelCompare() {
             <div className="flex items-center gap-3">
               <button onClick={startTournament} disabled={!prompt.trim() || modelsToRun.length < 2}
                 className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 transition-all">
-                {blind ? `토너먼트 시작 (${modelsToRun.length}개 모델)` : `비교 시작 (${modelsToRun.length}개 모델)`}
+                {mode === 'blind' ? '🎭' : mode === 'named' ? '📋' : '🤖'} 토너먼트 시작 ({modelsToRun.length}개 모델)
               </button>
               {modelsToRun.length < 2 && (
                 <p className="text-xs text-orange-600">
-                  {blind ? '2개 이상 프로바이더의 API 키를 설정해주세요' : '2개 이상 모델을 선택해주세요'}
+                  {mode === 'blind' ? '2개 이상 프로바이더의 API 키를 설정해주세요' : '2개 이상 모델을 선택해주세요'}
                 </p>
               )}
             </div>
@@ -407,10 +523,12 @@ export default function ModelCompare() {
         </div>
       )}
 
-      {/* 중지 -> 바로 투표 */}
+      {/* 중지 -> 바로 투표/심사 */}
       {running && (phase === 'prelim' || phase === 'finals') && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-          <p className="text-red-700 text-sm mb-2">생성이 너무 길면 중지하고 현재까지의 결과로 투표할 수 있습니다</p>
+          <p className="text-red-700 text-sm mb-2">
+            생성이 너무 길면 중지하고 현재까지의 결과로 {mode === 'judge' ? 'AI 심사를' : '투표를'} 진행할 수 있습니다
+          </p>
           <button onClick={() => {
             abortRef.current?.abort();
             setRunning(false);
@@ -427,42 +545,116 @@ export default function ModelCompare() {
             if (phase === 'finals') setPhase('finals-rank');
           }}
             className="px-6 py-2.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
-            중지 → 바로 투표
+            중지 → {mode === 'judge' ? 'AI 심사' : '바로 투표'}
           </button>
         </div>
       )}
 
-      {/* 예선 Top 5 선택 */}
-      {phase === 'prelim-rank' && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center">
-          <p className="text-indigo-800 font-medium">예선 완료! 느낌적으로 좋은 Top {Math.min(TOP_N, validModels.length)}개를 골라주세요</p>
-          <p className="text-indigo-600 text-sm mt-1">{rankings.length}/{Math.min(TOP_N, validModels.length)} 선택</p>
-          {rankings.length > 0 && (
-            <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
-              {rankings.map((mid) => {
-                const idx = shuffledOrder.indexOf(mid);
-                return (
-                  <span key={mid} className={`text-sm font-medium px-2.5 py-1 rounded border ${getLabelColor(idx)}`}>
-                    {blind ? LABELS[idx] : getModelInfo(mid).display_name}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <div className="mt-3 flex justify-center gap-2">
-            <button onClick={confirmTop5} disabled={rankings.length < Math.min(TOP_N, validModels.length)}
-              className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
-              {rankings.length < Math.min(TOP_N, validModels.length) ? `${Math.min(TOP_N, validModels.length) - rankings.length}개 더 선택` : 'Top 5 확정 → 결선 3회전!'}
-            </button>
-            {rankings.length > 0 && <button onClick={() => setRankings([])} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>}
+      {/* AI 심사 중 로딩 */}
+      {judging && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-5 h-5 border-2 border-purple-400 border-t-purple-700 rounded-full animate-spin" />
+            <span className="text-purple-700 font-medium">Claude Sonnet 4.6이 평가 중...</span>
           </div>
         </div>
       )}
 
-      {/* 결선 순위 */}
-      {phase === 'finals-rank' && (
+      {/* 예선 Top 5 선택 (blind/named: 수동) */}
+      {phase === 'prelim-rank' && mode !== 'judge' && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center space-y-3">
+          <p className="text-indigo-800 font-medium">예선 완료! 카드를 클릭해 Best / Worst를 골라주세요</p>
+          <div className="flex justify-center gap-2">
+            <button onClick={() => setSelectionMode('best')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectionMode === 'best' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'}`}>
+              Best 선택 ({rankings.length}/{Math.min(TOP_N, validModels.length)})
+            </button>
+            <button onClick={() => setSelectionMode('worst')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectionMode === 'worst' ? 'bg-red-500 text-white shadow-md' : 'bg-white border border-red-300 text-red-700 hover:bg-red-50'}`}>
+              Worst 선택 ({worstPicks.length}/{TOP_N})
+            </button>
+          </div>
+          {(rankings.length > 0 || worstPicks.length > 0) && (
+            <div className="space-y-2">
+              {rankings.length > 0 && (
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <span className="text-xs text-emerald-600 font-medium">Best:</span>
+                  {rankings.map((mid) => {
+                    const idx = shuffledOrder.indexOf(mid);
+                    return (
+                      <span key={mid} className={`text-sm font-medium px-2.5 py-1 rounded border ${isBlind ? getLabelColor(idx) : 'bg-emerald-50 text-emerald-700 border-emerald-300'}`}>
+                        {getCardTitle(mid, idx)}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {worstPicks.length > 0 && (
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <span className="text-xs text-red-600 font-medium">Worst:</span>
+                  {worstPicks.map((mid) => (
+                    <span key={mid} className="text-sm font-medium px-2.5 py-1 rounded border bg-red-50 text-red-600 border-red-300 line-through">
+                      {getCardTitle(mid, shuffledOrder.indexOf(mid))}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex justify-center gap-2">
+            <button onClick={confirmTop5} disabled={rankings.length < 2}
+              className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
+              {rankings.length < 2 ? '2개 이상 Best를 선택해주세요' : `Top ${rankings.length} 확정 → 결선 3회전!`}
+            </button>
+            {(rankings.length > 0 || worstPicks.length > 0) && (
+              <button onClick={() => { setRankings([]); setWorstPicks([]); }} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 예선 결과 (judge: AI 심사) */}
+      {phase === 'prelim-rank' && mode === 'judge' && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+          <p className="text-purple-800 font-medium text-center">
+            {judgeResult ? '🤖 AI 심사 완료!' : judging ? 'AI가 평가 중입니다...' : '평가 대기 중...'}
+          </p>
+          {judgeResult && (
+            <>
+              <div className="space-y-2 max-w-2xl mx-auto">
+                {[...judgeResult.rankings].sort((a, b) => a.rank - b.rank).map((r, i) => {
+                  const info = getModelInfo(r.modelId);
+                  const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' };
+                  return (
+                    <div key={r.label} className="flex items-center gap-3 bg-white rounded-lg p-2.5 border">
+                      <span className={`w-7 h-7 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-xs font-bold shrink-0`}>{r.rank}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">{r.reasoning}</p>
+                      </div>
+                      <span className="text-lg font-bold text-gray-900 shrink-0">{r.score}점</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {judgeResult.summary && (
+                <p className="text-sm text-gray-600 text-center italic">{judgeResult.summary}</p>
+              )}
+              <div className="text-center">
+                <button onClick={autoConfirmTop5}
+                  className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-bold transition-all">
+                  Top {Math.min(TOP_N, judgeResult.rankings.length)} → 결선 3회전!
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* 결선 순위 (blind/named: 수동) */}
+      {phase === 'finals-rank' && mode !== 'judge' && (
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-          <p className="text-purple-800 font-medium">{round}회차 완료! 순위를 매겨주세요 (느낌적으로)</p>
+          <p className="text-purple-800 font-medium">{round}회차 완료! 순위를 매겨주세요</p>
           <p className="text-purple-600 text-sm mt-1">클릭 순서 = 1등 → 2등 → ... ({rankings.length}/{validModels.length})</p>
           {rankings.length > 0 && (
             <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
@@ -472,8 +664,8 @@ export default function ModelCompare() {
                 return (
                   <div key={mid} className="flex items-center gap-1">
                     <span className={`w-6 h-6 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-xs font-bold`}>{i + 1}</span>
-                    <span className={`text-sm font-medium px-2 py-0.5 rounded border ${getLabelColor(idx)}`}>
-                      {blind ? LABELS[idx] : getModelInfo(mid).display_name}
+                    <span className={`text-sm font-medium px-2 py-0.5 rounded border ${isBlind ? getLabelColor(idx) : 'bg-white border-gray-300'}`}>
+                      {getCardTitle(mid, idx)}
                     </span>
                     {i < rankings.length - 1 && <span className="text-gray-300 mx-1">{'>'}</span>}
                   </div>
@@ -491,14 +683,51 @@ export default function ModelCompare() {
         </div>
       )}
 
+      {/* 결선 순위 (judge: AI 자동) */}
+      {phase === 'finals-rank' && mode === 'judge' && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+          <p className="text-purple-800 font-medium text-center">
+            {judgeResult ? `🤖 ${round}회차 AI 심사 완료!` : judging ? 'AI가 평가 중...' : '평가 대기 중...'}
+          </p>
+          {judgeResult && (
+            <>
+              <div className="space-y-2 max-w-2xl mx-auto">
+                {[...judgeResult.rankings].sort((a, b) => a.rank - b.rank).map((r, i) => {
+                  const info = getModelInfo(r.modelId);
+                  const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' };
+                  return (
+                    <div key={r.label} className="flex items-center gap-3 bg-white rounded-lg p-2.5 border">
+                      <span className={`w-7 h-7 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-xs font-bold shrink-0`}>{r.rank}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span>
+                      <p className="text-xs text-gray-500 flex-1 truncate">{r.reasoning}</p>
+                      <span className="text-lg font-bold text-gray-900 shrink-0">{r.score}점</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="text-center">
+                <button onClick={confirmFinalsRanking}
+                  className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-bold transition-all">
+                  {round < TOTAL_ROUNDS ? `확정 → ${round + 1}회차` : '확정 → 최종 결과!'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* 최종 결과 */}
       {phase === 'done' && (
         <div className="bg-white rounded-xl border-2 border-amber-300 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">최종 결과 (3회 합산)</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-1 text-center">최종 결과 (3회 합산)</h3>
+          <p className="text-sm text-gray-500 text-center mb-4">
+            {mode === 'blind' ? '🎭 블라인드' : mode === 'named' ? '📋 공개 비교' : '🤖 AI 심사'} 모드
+          </p>
           <div className="space-y-3 mb-6">
             {finalResults.map((item, i) => {
               const info = getModelInfo(item.modelId);
               const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' };
+              const maxTotal = mode === 'judge' ? TOTAL_ROUNDS * 100 : TOTAL_ROUNDS * top5.length;
               return (
                 <div key={item.modelId} className={`flex items-center gap-4 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-gray-50'}`}>
                   <span className={`w-10 h-10 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-lg font-bold shrink-0`}>{i + 1}</span>
@@ -514,13 +743,28 @@ export default function ModelCompare() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-xl font-bold text-gray-900">{item.total}점</p>
-                    <p className="text-xs text-gray-400">/ {TOTAL_ROUNDS * top5.length}점</p>
+                    <p className="text-xs text-gray-400">/ {maxTotal}점</p>
                   </div>
                   {info.pricing && <span className="text-xs text-gray-400 shrink-0">${info.pricing.input}/${info.pricing.output}</span>}
                 </div>
               );
             })}
           </div>
+          {worstPicks.length > 0 && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+              <h4 className="text-sm font-bold text-red-700 mb-2">예선 탈락 (Worst)</h4>
+              <div className="flex items-center gap-2 flex-wrap">
+                {worstPicks.map((id) => {
+                  const info = getModelInfo(id);
+                  return (
+                    <span key={id} className={`text-xs px-2 py-1 rounded-full line-through ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>
+                      {info.display_name}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <details className="text-sm">
             <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium">회차별 상세</summary>
             <div className="mt-3 space-y-3">
@@ -545,7 +789,7 @@ export default function ModelCompare() {
             </div>
           </details>
           <div className="text-center mt-4">
-            <button onClick={resetAll} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">새 비교</button>
+            <button onClick={resetAll} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">새 토너먼트</button>
           </div>
         </div>
       )}
@@ -555,36 +799,56 @@ export default function ModelCompare() {
         <div className={`grid gap-4 ${gridCols}`}>
           {shuffledOrder.map((modelId, idx) => {
             const r = results[modelId] || {};
-            const rank = getRank(modelId);
-            const canClick = (phase === 'prelim-rank' || phase === 'finals-rank') && r.status !== 'error';
-            const rankStyle = rank ? (RANK_STYLES[rank - 1] || { bg: 'bg-gray-300', text: 'text-white', border: 'border-gray-400', ring: 'ring-gray-200' }) : null;
             const info = getModelInfo(modelId);
+            const rank = getRank(modelId);
+            const isWorst = worstPicks.includes(modelId);
+            const isBest = phase === 'prelim-rank' && rankings.includes(modelId);
+            const canClick = (phase === 'prelim-rank' || phase === 'finals-rank') && r.status !== 'error' && mode !== 'judge';
+            const rankStyle = rank && phase !== 'prelim-rank' ? (RANK_STYLES[rank - 1] || { bg: 'bg-gray-300', text: 'text-white', border: 'border-gray-400', ring: 'ring-gray-200' }) : null;
+            const judgeRank = judgeResult?.rankings?.find((jr) => jr.modelId === modelId);
 
             return (
               <div key={modelId} onClick={() => canClick && handleRankToggle(modelId)}
                 className={`bg-white rounded-xl border-2 flex flex-col overflow-hidden transition-all ${
-                  rank ? `${rankStyle.border} ring-2 ${rankStyle.ring} shadow-md` : 'border-gray-200'
+                  isWorst ? 'border-red-400 ring-2 ring-red-200 opacity-60'
+                  : isBest ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-md'
+                  : rankStyle ? `${rankStyle.border} ring-2 ${rankStyle.ring} shadow-md`
+                  : judgeRank ? 'border-purple-300 ring-1 ring-purple-200'
+                  : 'border-gray-200'
                 } ${canClick ? 'cursor-pointer hover:border-indigo-300 hover:shadow-md' : ''}`}>
-                <div className={`px-4 py-3 border-b bg-gray-50 flex items-center justify-between ${rank ? rankStyle.border : 'border-gray-200'}`}>
+                <div className={`px-4 py-3 border-b bg-gray-50 flex items-center justify-between ${
+                  isWorst ? 'border-red-300' : isBest ? 'border-emerald-300' : rankStyle ? rankStyle.border : 'border-gray-200'
+                }`}>
                   <div className="flex items-center gap-2">
-                    {rank ? (
+                    {isWorst ? (
+                      <span className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center text-sm font-bold">X</span>
+                    ) : isBest ? (
+                      <span className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-bold">{rankings.indexOf(modelId) + 1}</span>
+                    ) : rankStyle ? (
                       <span className={`w-8 h-8 rounded-full ${rankStyle.bg} ${rankStyle.text} flex items-center justify-center text-sm font-bold`}>{rank}</span>
+                    ) : judgeRank ? (
+                      <span className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center text-sm font-bold">{judgeRank.rank}</span>
                     ) : (
                       <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold border ${getLabelColor(idx)}`}>
-                        {blind ? LABELS[idx] : (info.display_name || '')[0]}
+                        {isBlind ? LABELS[idx] : (info.display_name || '')[0]}
                       </span>
                     )}
                     <div>
-                      <span className="text-sm font-medium text-gray-700">
-                        {getCardTitle(modelId, idx)}
-                      </span>
-                      {!blind && <span className="text-[10px] text-gray-400 ml-1">{info.tier}</span>}
-                      {rank && <span className="text-xs text-gray-400 ml-1">({rank}등)</span>}
+                      <span className="text-sm font-medium text-gray-700">{getCardTitle(modelId, idx)}</span>
+                      {!isBlind && <span className="text-[10px] text-gray-400 ml-1">{info.tier}</span>}
+                      {isWorst && <span className="text-xs ml-1 text-red-500">(Worst)</span>}
+                      {isBest && <span className="text-xs ml-1 text-emerald-500">(Best {rankings.indexOf(modelId) + 1})</span>}
+                      {rank && phase !== 'prelim-rank' && <span className="text-xs ml-1 opacity-60">({rank}등)</span>}
                     </div>
                   </div>
                   <div className="text-right">
                     {r.status === 'streaming' && <span className="inline-flex items-center gap-1 text-xs text-blue-600"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />생성 중</span>}
-                    {r.status === 'done' && <p className="text-xs text-gray-500">{r.charCount?.toLocaleString()}자 / {r.elapsed}s</p>}
+                    {r.status === 'done' && (
+                      <div>
+                        <p className="text-xs text-gray-500">{r.charCount?.toLocaleString()}자 / {r.elapsed}s</p>
+                        {judgeRank && <p className="text-xs text-purple-600 font-medium">{judgeRank.score}점</p>}
+                      </div>
+                    )}
                     {r.status === 'error' && <span className="text-xs text-red-500">오류</span>}
                     {r.status === 'waiting' && <span className="text-xs text-gray-400">대기 중...</span>}
                   </div>
