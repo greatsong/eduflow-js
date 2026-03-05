@@ -93,38 +93,6 @@
       "recommended_for": ["요약", "분류", "대량 생성"]
     },
     {
-      "id": "gpt-4.1",
-      "provider": "openai",
-      "display_name": "GPT-4.1",
-      "tier": "안정적",
-      "pricing": { "input": 2.0, "output": 8.0 },
-      "recommended_for": ["챕터 생성", "대화", "코딩"]
-    },
-    {
-      "id": "gpt-4.1-mini",
-      "provider": "openai",
-      "display_name": "GPT-4.1 Mini",
-      "tier": "경량",
-      "pricing": { "input": 0.4, "output": 1.6 },
-      "recommended_for": ["대화", "빠른 피드백"]
-    },
-    {
-      "id": "o3",
-      "provider": "openai",
-      "display_name": "o3 (추론)",
-      "tier": "추론 특화",
-      "pricing": { "input": 2.0, "output": 8.0 },
-      "recommended_for": ["복잡한 추론", "수학", "코딩"]
-    },
-    {
-      "id": "o4-mini",
-      "provider": "openai",
-      "display_name": "o4-mini (추론)",
-      "tier": "경량 추론",
-      "pricing": { "input": 1.1, "output": 4.4 },
-      "recommended_for": ["추론", "코딩", "수학"]
-    },
-    {
       "id": "gemini-3.1-pro-preview",
       "provider": "google",
       "display_name": "Gemini 3.1 Pro",
@@ -149,44 +117,12 @@
       "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
     },
     {
-      "id": "gemini-2.5-pro",
-      "provider": "google",
-      "display_name": "Gemini 2.5 Pro",
-      "tier": "고급 추론",
-      "pricing": { "input": 1.25, "output": 10.0 },
-      "recommended_for": ["챕터 생성", "고품질 콘텐츠", "복잡한 추론"]
-    },
-    {
-      "id": "gemini-2.5-flash",
-      "provider": "google",
-      "display_name": "Gemini 2.5 Flash",
-      "tier": "빠르고 강력",
-      "pricing": { "input": 0.15, "output": 0.6 },
-      "recommended_for": ["챕터 생성", "대화", "목차 생성"]
-    },
-    {
-      "id": "gemini-2.0-flash",
-      "provider": "google",
-      "display_name": "Gemini 2.0 Flash",
-      "tier": "경제적",
-      "pricing": { "input": 0.1, "output": 0.4 },
-      "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
-    },
-    {
-      "id": "solar-pro-3",
+      "id": "solar-pro3",
       "provider": "upstage",
       "display_name": "Solar Pro 3",
       "tier": "한국어 특화·추론",
       "pricing": { "input": 1.0, "output": 4.0 },
       "recommended_for": ["한국어 콘텐츠", "챕터 생성", "추론"]
-    },
-    {
-      "id": "solar-pro",
-      "provider": "upstage",
-      "display_name": "Solar Pro 2",
-      "tier": "한국어·경제적",
-      "pricing": { "input": 0.5, "output": 2.0 },
-      "recommended_for": ["한국어 콘텐츠", "대화"]
     }
   ],
 
