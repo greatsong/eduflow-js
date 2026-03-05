@@ -46,6 +46,14 @@ const PRESET_CATEGORIES = [
   },
 ];
 
+const ALL_PRESETS = PRESET_CATEGORIES.flatMap((cat) => cat.presets.map((p) => ({ ...p, category: cat.category })));
+const SCORE_KEYS = [
+  { key: 'accuracy', label: '정확성' },
+  { key: 'structure', label: '구조화' },
+  { key: 'educational', label: '교육적 가치' },
+  { key: 'korean', label: '한국어' },
+  { key: 'creativity', label: '창의성' },
+];
 
 const LABELS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T'];
 const LABEL_COLORS = [
@@ -84,12 +92,11 @@ function shuffle(arr) {
 export default function ModelCompare() {
   const [allModels, setAllModels] = useState([]);
   const [prompt, setPrompt] = useState('');
-  // 'blind' | 'open' | 'auto'
   const [mode, setMode] = useState('blind');
   const [selectedModelIds, setSelectedModelIds] = useState([]);
 
   // idle | prelim | prelim-rank | finals-prompt | finals | finals-rank | done
-  // auto 모드: idle | auto-running | auto-evaluating | auto-done
+  // auto: idle | auto-running | auto-evaluating | auto-done | auto-summary
   const [phase, setPhase] = useState('idle');
   const [round, setRound] = useState(0);
   const [results, setResults] = useState({});
@@ -106,6 +113,11 @@ export default function ModelCompare() {
   const [autoEvalResult, setAutoEvalResult] = useState(null);
   const [autoEvalText, setAutoEvalText] = useState('');
   const [autoJudgeModel, setAutoJudgeModel] = useState('claude-sonnet-4-6');
+  const [autoHistory, setAutoHistory] = useState([]);
+  const [batchQueue, setBatchQueue] = useState([]);
+  const [batchIndex, setBatchIndex] = useState(-1);
+  const batchAbortRef = useRef(false);
+  const printRef = useRef(null);
 
   useEffect(() => {
     apiFetch('/api/models').then(({ models }) => setAllModels(models)).catch(() => {});
@@ -122,8 +134,6 @@ export default function ModelCompare() {
   }, [allModels]);
 
   const blind = mode === 'blind';
-
-  // 공개/자동 모드: 체크된 모델들
   const modelsToRun = useMemo(() => {
     if (mode === 'blind') return availableModels;
     return availableModels.filter((m) => selectedModelIds.includes(m.id));
@@ -226,11 +236,8 @@ export default function ModelCompare() {
     const init = {};
     for (const id of selected) init[id] = [];
     setRoundScores(init);
-    setRoundHistory([]);
-    setRoundPrompts([]);
-    setPhase('finals-prompt');
-    setRound(1);
-    setPrompt('');
+    setRoundHistory([]); setRoundPrompts([]);
+    setPhase('finals-prompt'); setRound(1); setPrompt('');
   };
 
   const startFinalsRound = () => {
@@ -249,29 +256,21 @@ export default function ModelCompare() {
       return copy;
     });
     setRoundHistory((prev) => [...prev, { round, prompt: roundPrompts[round - 1] || prompt, rankings: rankings.map((id, i) => ({ modelId: id, rank: i + 1 })) }]);
-
-    if (round < TOTAL_ROUNDS) {
-      setRound((r) => r + 1);
-      setPhase('finals-prompt');
-      setPrompt('');
-    } else {
-      setPhase('done');
-    }
+    if (round < TOTAL_ROUNDS) { setRound((r) => r + 1); setPhase('finals-prompt'); setPrompt(''); }
+    else setPhase('done');
   };
 
   const resetAll = () => {
     setPhase('idle'); setRound(0); setResults({}); setShuffledOrder([]);
     setRankings([]); setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]); setPrompt('');
     setAutoEvalResult(null); setAutoEvalText('');
+    setBatchQueue([]); setBatchIndex(-1); batchAbortRef.current = false;
   };
 
-  // AI 자동 평가 실행
-  const runAutoEvaluate = useCallback(async () => {
-    if (!prompt.trim() || modelsToRun.length < 2) return;
-    const modelIds = modelsToRun.map((m) => m.id);
+  // AI 자동 평가: 단일 프롬프트 실행
+  const runSingleAutoEval = useCallback(async (evalPrompt, modelIds) => {
     setShuffledOrder(modelIds);
     setRunning(true);
-    setPhase('auto-running');
     setAutoEvalResult(null);
     setAutoEvalText('');
     const init = {};
@@ -280,11 +279,12 @@ export default function ModelCompare() {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let evalResult = null;
     try {
       const res = await fetch(`${API_BASE}/api/compare/auto-evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ models: modelIds, prompt: prompt, judgeModel: autoJudgeModel }),
+        body: JSON.stringify({ models: modelIds, prompt: evalPrompt, judgeModel: autoJudgeModel }),
         signal: controller.signal,
       });
       const reader = res.body.getReader();
@@ -314,38 +314,107 @@ export default function ModelCompare() {
                 return copy;
               });
             }
-            if (data.type === 'phase' && data.phase === 'evaluating') {
-              setPhase('auto-evaluating');
-            }
-            if (data.type === 'evaluate-text') {
-              setAutoEvalText((prev) => prev + data.content);
-            }
-            if (data.type === 'evaluate-result') {
-              setAutoEvalResult(data.result);
-              setPhase('auto-done');
-            }
-            if (data.type === 'evaluate-error') {
-              setAutoEvalText((prev) => prev + '\n[평가 오류: ' + data.message + ']');
-              setPhase('auto-done');
-            }
+            if (data.type === 'phase' && data.phase === 'evaluating') setPhase('auto-evaluating');
+            if (data.type === 'evaluate-text') setAutoEvalText((prev) => prev + data.content);
+            if (data.type === 'evaluate-result') { evalResult = data.result; setAutoEvalResult(data.result); }
+            if (data.type === 'evaluate-error') setAutoEvalText((prev) => prev + '\n[평가 오류: ' + data.message + ']');
           } catch {}
         }
       }
     } catch (err) {
       if (err.name !== 'AbortError') console.error(err);
     } finally { setRunning(false); abortRef.current = null; }
-  }, [prompt, modelsToRun, autoJudgeModel]);
+    return evalResult;
+  }, [autoJudgeModel]);
 
-  const toggleModelSelection = (id) => {
-    setSelectedModelIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  // 개별 문제 평가
+  const runAutoEvaluate = useCallback(async () => {
+    if (!prompt.trim() || modelsToRun.length < 2) return;
+    const modelIds = modelsToRun.map((m) => m.id);
+    setPhase('auto-running');
+    const presetMatch = ALL_PRESETS.find((p) => p.prompt === prompt);
+    const result = await runSingleAutoEval(prompt, modelIds);
+    if (result) {
+      setAutoHistory((prev) => [...prev, { prompt, presetName: presetMatch?.name || '직접 입력', category: presetMatch?.category || '', result, timestamp: new Date().toISOString() }]);
+    }
+    setPhase('auto-done');
+  }, [prompt, modelsToRun, runSingleAutoEval]);
+
+  // 전체 문제 일괄 테스트
+  const runBatchEvaluate = useCallback(async () => {
+    if (modelsToRun.length < 2) return;
+    const modelIds = modelsToRun.map((m) => m.id);
+    batchAbortRef.current = false;
+    setBatchQueue(ALL_PRESETS);
+    for (let i = 0; i < ALL_PRESETS.length; i++) {
+      if (batchAbortRef.current) break;
+      const preset = ALL_PRESETS[i];
+      setBatchIndex(i);
+      setPhase('auto-running');
+      setPrompt(preset.prompt);
+      const result = await runSingleAutoEval(preset.prompt, modelIds);
+      if (result) {
+        setAutoHistory((prev) => [...prev, { prompt: preset.prompt, presetName: preset.name, category: preset.category, result, timestamp: new Date().toISOString() }]);
+      }
+      setPhase('auto-done');
+    }
+    setBatchIndex(-1); setBatchQueue([]);
+    setPhase('auto-summary');
+  }, [modelsToRun, runSingleAutoEval]);
+
+  // 누적 결과 집계
+  const aggregatedResults = useMemo(() => {
+    if (autoHistory.length === 0) return [];
+    const totals = {};
+    for (const entry of autoHistory) {
+      if (!entry.result?.evaluations) continue;
+      for (const [modelId, scores] of Object.entries(entry.result.evaluations)) {
+        if (!totals[modelId]) totals[modelId] = { total: 0, count: 0, details: {} };
+        totals[modelId].total += scores.total || 0;
+        totals[modelId].count += 1;
+        for (const sk of SCORE_KEYS) {
+          if (!totals[modelId].details[sk.key]) totals[modelId].details[sk.key] = 0;
+          totals[modelId].details[sk.key] += scores[sk.key] || 0;
+        }
+      }
+    }
+    return Object.entries(totals)
+      .map(([modelId, data]) => ({ modelId, ...data, avg: data.count ? (data.total / data.count).toFixed(1) : 0 }))
+      .sort((a, b) => b.total - a.total);
+  }, [autoHistory]);
+
+  // PDF 저장
+  const handlePrintPDF = () => {
+    const el = printRef.current;
+    if (!el) return;
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>AI 모델 비교 평가 결과</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; color: #1a1a1a; max-width: 900px; margin: 0 auto; }
+        h1 { text-align: center; font-size: 22px; margin-bottom: 4px; }
+        .subtitle { text-align: center; color: #666; font-size: 13px; margin-bottom: 28px; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 12px; }
+        th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: center; }
+        th { background: #f5f5f5; font-weight: 600; }
+        .rank-1 td { background: #fef3c7; font-weight: bold; }
+        .section { margin: 20px 0; }
+        .section h2 { font-size: 15px; border-bottom: 2px solid #333; padding-bottom: 4px; margin-bottom: 10px; }
+        .detail { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin: 6px 0; font-size: 12px; }
+        .detail-title { font-weight: 600; margin-bottom: 3px; }
+        .detail-prompt { color: #888; font-size: 11px; margin-bottom: 5px; }
+        .scores { display: flex; gap: 8px; flex-wrap: wrap; }
+        .champion { color: #059669; }
+        @media print { body { padding: 20px; } }
+      </style></head><body>`);
+    w.document.write(el.innerHTML);
+    w.document.write('</body></html>');
+    w.document.close();
+    setTimeout(() => w.print(), 500);
   };
 
+  const toggleModelSelection = (id) => setSelectedModelIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const getModelInfo = (id) => allModels.find((m) => m.id === id) || { display_name: id, tier: '', provider: '' };
-  const getCardTitle = (modelId, idx) => {
-    if (blind) return `Model ${LABELS[idx] || `#${idx + 1}`}`;
-    const info = getModelInfo(modelId);
-    return info.display_name;
-  };
+  const getCardTitle = (modelId, idx) => blind ? `Model ${LABELS[idx] || `#${idx + 1}`}` : getModelInfo(modelId).display_name;
   const getLabelColor = (idx) => LABEL_COLORS[idx % LABEL_COLORS.length];
   const getRank = (modelId) => { const i = rankings.indexOf(modelId); return i === -1 ? null : i + 1; };
 
@@ -360,18 +429,13 @@ export default function ModelCompare() {
 
   const canEditPrompt = phase === 'idle' || phase === 'finals-prompt';
   const isAutoMode = mode === 'auto';
-
-  // 프로바이더별 그룹핑 (공개 모드 체크박스용)
   const modelsByProvider = useMemo(() => {
     const groups = {};
-    for (const m of availableModels) {
-      if (!groups[m.provider]) groups[m.provider] = [];
-      groups[m.provider].push(m);
-    }
+    for (const m of availableModels) { if (!groups[m.provider]) groups[m.provider] = []; groups[m.provider].push(m); }
     return groups;
   }, [availableModels]);
-
   const providerNames = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google', upstage: 'Upstage' };
+  const testedPresetNames = useMemo(() => new Set(autoHistory.map((h) => h.presetName)), [autoHistory]);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-6">
@@ -381,7 +445,7 @@ export default function ModelCompare() {
           <p className="text-gray-500 mt-1">
             {mode === 'blind' ? '블라인드 토너먼트: 익명 비교 → Top 5 → 3회 결선'
               : mode === 'open' ? '공개 비교: 모델을 직접 선택하고 결과를 나란히 비교'
-              : 'AI 자동 평가: 선택한 모델들의 응답을 AI가 자동으로 채점하고 순위를 매깁니다'}
+              : 'AI 자동 평가: 개별/전체 문제로 모델을 자동 채점하고 누적 결과를 PDF로 저장'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -390,9 +454,10 @@ export default function ModelCompare() {
               <span className={`px-3 py-1.5 rounded-lg text-sm font-medium ${isAutoMode ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
                 {phase === 'prelim' || phase === 'prelim-rank' ? '예선'
                   : phase === 'done' ? '최종 결과'
-                  : phase === 'auto-running' ? '모델 생성 중'
+                  : phase === 'auto-running' ? (batchQueue.length > 0 ? `일괄 ${batchIndex + 1}/${batchQueue.length}` : '모델 생성 중')
                   : phase === 'auto-evaluating' ? 'AI 평가 중'
-                  : phase === 'auto-done' ? 'AI 평가 완료'
+                  : phase === 'auto-done' ? `평가 완료 (${autoHistory.length}건)`
+                  : phase === 'auto-summary' ? '최종 결과'
                   : phase === 'finals-prompt' ? `결선 ${round}회 준비`
                   : `결선 ${round}/${TOTAL_ROUNDS}회`}
               </span>
@@ -402,60 +467,38 @@ export default function ModelCompare() {
         </div>
       </div>
 
-      {/* 모드 토글 — idle 상태에서만 변경 가능 */}
+      {/* 모드 토글 */}
       {phase === 'idle' && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-4 flex-wrap">
             <span className="text-sm font-medium text-gray-700">비교 방식</span>
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-              {[
-                { key: 'blind', label: '블라인드 (익명)' },
-                { key: 'open', label: '공개 (모델 선택)' },
-                { key: 'auto', label: 'AI 자동 평가' },
-              ].map(({ key, label }) => (
+              {[{ key: 'blind', label: '블라인드 (익명)' }, { key: 'open', label: '공개 (모델 선택)' }, { key: 'auto', label: 'AI 자동 평가' }].map(({ key, label }) => (
                 <button key={key} onClick={() => setMode(key)}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${mode === key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {label}
-                </button>
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${mode === key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{label}</button>
               ))}
             </div>
           </div>
-
-          {/* 공개/자동 모드: 모델 체크박스 */}
           {mode !== 'blind' && (
             <div className="mt-4 space-y-3">
               {Object.entries(modelsByProvider).map(([provider, models]) => (
                 <div key={provider}>
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PROVIDER_BADGES[provider] || 'bg-gray-100'}`}>
-                      {providerNames[provider] || provider}
-                    </span>
-                    <button onClick={() => {
-                      const allIds = models.map((m) => m.id);
-                      const allSelected = allIds.every((id) => selectedModelIds.includes(id));
-                      setSelectedModelIds((prev) => allSelected ? prev.filter((id) => !allIds.includes(id)) : [...new Set([...prev, ...allIds])]);
-                    }} className="text-[10px] text-gray-400 hover:text-gray-600">
-                      전체 {models.every((m) => selectedModelIds.includes(m.id)) ? '해제' : '선택'}
-                    </button>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PROVIDER_BADGES[provider] || 'bg-gray-100'}`}>{providerNames[provider] || provider}</span>
+                    <button onClick={() => { const ids = models.map((m) => m.id); const all = ids.every((id) => selectedModelIds.includes(id)); setSelectedModelIds((prev) => all ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])]); }}
+                      className="text-[10px] text-gray-400 hover:text-gray-600">전체 {models.every((m) => selectedModelIds.includes(m.id)) ? '해제' : '선택'}</button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {models.map((m) => {
-                      const checked = selectedModelIds.includes(m.id);
-                      return (
-                        <label key={m.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm cursor-pointer transition-all ${
-                          checked ? 'border-indigo-400 bg-indigo-50 text-indigo-800' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                        }`}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleModelSelection(m.id)} className="sr-only" />
-                          <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
-                            checked ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300'
-                          }`}>
-                            {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                          </span>
-                          <span className="font-medium">{m.display_name}</span>
-                          <span className="text-[10px] text-gray-400">{m.tier}</span>
-                        </label>
-                      );
-                    })}
+                    {models.map((m) => { const checked = selectedModelIds.includes(m.id); return (
+                      <label key={m.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm cursor-pointer transition-all ${checked ? 'border-indigo-400 bg-indigo-50 text-indigo-800' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleModelSelection(m.id)} className="sr-only" />
+                        <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300'}`}>
+                          {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                        </span>
+                        <span className="font-medium">{m.display_name}</span>
+                        <span className="text-[10px] text-gray-400">{m.tier}</span>
+                      </label>
+                    ); })}
                   </div>
                 </div>
               ))}
@@ -463,11 +506,8 @@ export default function ModelCompare() {
               {mode === 'auto' && (
                 <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
                   <span className="text-sm font-medium text-gray-600">심사위원 모델</span>
-                  <select value={autoJudgeModel} onChange={(e) => setAutoJudgeModel(e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white">
-                    {allModels.map((m) => (
-                      <option key={m.id} value={m.id}>{m.display_name} ({m.tier})</option>
-                    ))}
+                  <select value={autoJudgeModel} onChange={(e) => setAutoJudgeModel(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+                    {allModels.map((m) => <option key={m.id} value={m.id}>{m.display_name} ({m.tier})</option>)}
                   </select>
                   <span className="text-xs text-gray-400">이 모델이 다른 모델들의 응답을 평가합니다</span>
                 </div>
@@ -477,93 +517,104 @@ export default function ModelCompare() {
         </div>
       )}
 
-      {/* 진행률 — 블라인드/공개 모드에서만 */}
+      {/* 진행률 - 블라인드/공개 */}
       {phase !== 'idle' && !isAutoMode && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-2">
             {['예선', '1회', '2회', '3회', '결과'].map((label, i) => {
-              const active = (i === 0 && (phase === 'prelim' || phase === 'prelim-rank'))
-                || (i >= 1 && i <= 3 && ((phase === 'finals-prompt' || phase === 'finals' || phase === 'finals-rank') && round === i))
-                || (i === 4 && phase === 'done');
-              const done = (i === 0 && phase !== 'prelim' && phase !== 'prelim-rank')
-                || (i >= 1 && i <= 3 && (((phase === 'finals-prompt' || phase === 'finals' || phase === 'finals-rank') && round > i) || phase === 'done'));
-              return (
-                <div key={label} className="flex-1">
-                  <div className={`h-2 rounded-full ${done ? 'bg-indigo-500' : active ? 'bg-indigo-300 animate-pulse' : 'bg-gray-200'}`} />
-                  <p className={`text-xs mt-1 text-center ${active ? 'text-indigo-700 font-medium' : done ? 'text-indigo-500' : 'text-gray-400'}`}>{label}</p>
-                </div>
-              );
+              const active = (i === 0 && (phase === 'prelim' || phase === 'prelim-rank')) || (i >= 1 && i <= 3 && ((phase === 'finals-prompt' || phase === 'finals' || phase === 'finals-rank') && round === i)) || (i === 4 && phase === 'done');
+              const done = (i === 0 && phase !== 'prelim' && phase !== 'prelim-rank') || (i >= 1 && i <= 3 && (((phase === 'finals-prompt' || phase === 'finals' || phase === 'finals-rank') && round > i) || phase === 'done'));
+              return (<div key={label} className="flex-1"><div className={`h-2 rounded-full ${done ? 'bg-indigo-500' : active ? 'bg-indigo-300 animate-pulse' : 'bg-gray-200'}`} /><p className={`text-xs mt-1 text-center ${active ? 'text-indigo-700 font-medium' : done ? 'text-indigo-500' : 'text-gray-400'}`}>{label}</p></div>);
             })}
           </div>
         </div>
       )}
 
       {/* AI 자동 평가 진행 상태 */}
-      {isAutoMode && phase !== 'idle' && (
+      {isAutoMode && phase !== 'idle' && phase !== 'auto-summary' && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-2">
             {['모델 생성', 'AI 평가', '결과'].map((label, i) => {
-              const active = (i === 0 && phase === 'auto-running')
-                || (i === 1 && phase === 'auto-evaluating')
-                || (i === 2 && phase === 'auto-done');
-              const done = (i === 0 && (phase === 'auto-evaluating' || phase === 'auto-done'))
-                || (i === 1 && phase === 'auto-done');
-              return (
-                <div key={label} className="flex-1">
-                  <div className={`h-2 rounded-full ${done ? 'bg-emerald-500' : active ? 'bg-emerald-300 animate-pulse' : 'bg-gray-200'}`} />
-                  <p className={`text-xs mt-1 text-center ${active ? 'text-emerald-700 font-medium' : done ? 'text-emerald-500' : 'text-gray-400'}`}>{label}</p>
-                </div>
-              );
+              const active = (i === 0 && phase === 'auto-running') || (i === 1 && phase === 'auto-evaluating') || (i === 2 && phase === 'auto-done');
+              const done = (i === 0 && (phase === 'auto-evaluating' || phase === 'auto-done')) || (i === 1 && phase === 'auto-done');
+              return (<div key={label} className="flex-1"><div className={`h-2 rounded-full ${done ? 'bg-emerald-500' : active ? 'bg-emerald-300 animate-pulse' : 'bg-gray-200'}`} /><p className={`text-xs mt-1 text-center ${active ? 'text-emerald-700 font-medium' : done ? 'text-emerald-500' : 'text-gray-400'}`}>{label}</p></div>);
             })}
           </div>
+          {batchQueue.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                <span>일괄 테스트: {batchIndex + 1} / {batchQueue.length}</span>
+                <span>{batchQueue[batchIndex]?.name}</span>
+              </div>
+              <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${((batchIndex + 1) / batchQueue.length) * 100}%` }} />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* 프롬프트 */}
-      {(phase === 'idle' || phase === 'finals-prompt' || phase === 'prelim' || phase === 'finals') && (
+      {(phase === 'idle' || phase === 'finals-prompt' || phase === 'prelim' || phase === 'finals' || (isAutoMode && phase === 'auto-done')) && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700">
-              {phase === 'finals-prompt' ? `결선 ${round}회차 프롬프트` : '프롬프트'}
+              {phase === 'finals-prompt' ? `결선 ${round}회차 프롬프트`
+                : isAutoMode && phase === 'auto-done' ? '다음 문제 선택 (또는 최종 결과 확인)'
+                : '프롬프트'}
             </h3>
-            {phase === 'finals-prompt' && roundPrompts.length > 0 && (
-              <span className="text-xs text-gray-400">이전과 다른 프롬프트를 선택하면 더 공정합니다</span>
+            {isAutoMode && autoHistory.length > 0 && phase !== 'auto-summary' && (
+              <span className="text-xs text-emerald-600 font-medium">{autoHistory.length}건 완료</span>
             )}
           </div>
           <div className="space-y-2">
             {PRESET_CATEGORIES.map((cat) => (
               <div key={cat.category} className="flex items-center gap-2 flex-wrap">
                 <span className={`px-2 py-0.5 rounded text-[10px] font-medium shrink-0 ${cat.color}`}>{cat.category}</span>
-                {cat.presets.map((p) => (
-                  <button key={p.name} onClick={() => setPrompt(p.prompt)} disabled={!canEditPrompt}
-                    className={`px-3 py-1 rounded-full text-xs transition-colors disabled:opacity-40 ${
-                      roundPrompts.includes(p.prompt) ? 'bg-gray-100 text-gray-400 line-through' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                    }`}>{p.name}</button>
-                ))}
+                {cat.presets.map((p) => {
+                  const tested = testedPresetNames.has(p.name);
+                  return (
+                    <button key={p.name} onClick={() => setPrompt(p.prompt)} disabled={!canEditPrompt && phase !== 'auto-done'}
+                      className={`px-3 py-1 rounded-full text-xs transition-colors disabled:opacity-40 ${
+                        tested ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
+                        roundPrompts.includes(p.prompt) ? 'bg-gray-100 text-gray-400 line-through' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                      }`}>{p.name} {tested && '(완료)'}</button>
+                  );
+                })}
               </div>
             ))}
           </div>
-          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} disabled={!canEditPrompt}
+          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} disabled={!canEditPrompt && phase !== 'auto-done'}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
-            placeholder={phase === 'finals-prompt' ? `${round}회차에 사용할 프롬프트를 입력하세요...` : '비교할 프롬프트를 입력하세요...'} />
-          {phase === 'idle' && (
-            <div className="flex items-center gap-3">
+            placeholder={isAutoMode ? '개별 테스트할 프롬프트를 선택하거나 입력하세요...' : phase === 'finals-prompt' ? `${round}회차에 사용할 프롬프트를 입력하세요...` : '비교할 프롬프트를 입력하세요...'} />
+          {(phase === 'idle' || (isAutoMode && phase === 'auto-done')) && (
+            <div className="flex items-center gap-3 flex-wrap">
               {mode === 'auto' ? (
-                <button onClick={runAutoEvaluate} disabled={!prompt.trim() || modelsToRun.length < 2}
-                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 transition-all">
-                  AI 자동 평가 시작 ({modelsToRun.length}개 모델)
-                </button>
+                <>
+                  <button onClick={runAutoEvaluate} disabled={!prompt.trim() || modelsToRun.length < 2 || running}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 transition-all">
+                    개별 문제 테스트 ({modelsToRun.length}개 모델)
+                  </button>
+                  {phase === 'idle' && (
+                    <button onClick={runBatchEvaluate} disabled={modelsToRun.length < 2 || running}
+                      className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 transition-all">
+                      전체 문제 일괄 테스트 ({ALL_PRESETS.length}개)
+                    </button>
+                  )}
+                  {autoHistory.length > 0 && (
+                    <button onClick={() => setPhase('auto-summary')}
+                      className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-medium hover:from-amber-600 hover:to-orange-600 transition-all">
+                      최종 결과 확인 ({autoHistory.length}건)
+                    </button>
+                  )}
+                </>
               ) : (
                 <button onClick={startTournament} disabled={!prompt.trim() || modelsToRun.length < 2}
                   className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-medium hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 transition-all">
                   {blind ? `토너먼트 시작 (${modelsToRun.length}개 모델)` : `비교 시작 (${modelsToRun.length}개 모델)`}
                 </button>
               )}
-              {modelsToRun.length < 2 && (
-                <p className="text-xs text-orange-600">
-                  {mode === 'blind' ? '2개 이상 프로바이더의 API 키를 설정해주세요' : '2개 이상 모델을 선택해주세요'}
-                </p>
-              )}
+              {modelsToRun.length < 2 && <p className="text-xs text-orange-600">{mode === 'blind' ? '2개 이상 프로바이더의 API 키를 설정해주세요' : '2개 이상 모델을 선택해주세요'}</p>}
             </div>
           )}
           {phase === 'finals-prompt' && (
@@ -575,53 +626,31 @@ export default function ModelCompare() {
         </div>
       )}
 
-      {/* 중지 -> 바로 투표 */}
+      {/* 중지 */}
       {running && (phase === 'prelim' || phase === 'finals' || phase === 'auto-running') && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
           <p className="text-red-700 text-sm mb-2">생성이 너무 길면 중지하고 현재까지의 결과로 투표할 수 있습니다</p>
           <button onClick={() => {
-            abortRef.current?.abort();
-            setRunning(false);
-            setResults((prev) => {
-              const copy = { ...prev };
-              for (const [id, r] of Object.entries(copy)) {
-                if (r.status === 'streaming' || r.status === 'waiting') {
-                  copy[id] = { ...r, status: r.text ? 'done' : 'error', error: r.text ? undefined : '중지됨' };
-                }
-              }
-              return copy;
-            });
+            abortRef.current?.abort(); batchAbortRef.current = true; setRunning(false);
+            setResults((prev) => { const copy = { ...prev }; for (const [id, r] of Object.entries(copy)) { if (r.status === 'streaming' || r.status === 'waiting') copy[id] = { ...r, status: r.text ? 'done' : 'error', error: r.text ? undefined : '중지됨' }; } return copy; });
             if (phase === 'prelim') setPhase('prelim-rank');
             if (phase === 'finals') setPhase('finals-rank');
-            if (phase === 'auto-running') setPhase('auto-done');
-          }}
-            className="px-6 py-2.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
-            중지 → 바로 투표
+            if (phase === 'auto-running') setPhase(autoHistory.length > 0 ? 'auto-summary' : 'auto-done');
+          }} className="px-6 py-2.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
+            {batchQueue.length > 0 ? '일괄 테스트 중지 → 결과 확인' : '중지 → 바로 투표'}
           </button>
         </div>
       )}
 
-      {/* 예선 Top 5 선택 */}
+      {/* 예선 Top 5 */}
       {phase === 'prelim-rank' && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center">
-          <p className="text-indigo-800 font-medium">예선 완료! 느낌적으로 좋은 Top {Math.min(TOP_N, validModels.length)}개를 골라주세요</p>
+          <p className="text-indigo-800 font-medium">예선 완료! Top {Math.min(TOP_N, validModels.length)}개를 골라주세요</p>
           <p className="text-indigo-600 text-sm mt-1">{rankings.length}/{Math.min(TOP_N, validModels.length)} 선택</p>
-          {rankings.length > 0 && (
-            <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
-              {rankings.map((mid) => {
-                const idx = shuffledOrder.indexOf(mid);
-                return (
-                  <span key={mid} className={`text-sm font-medium px-2.5 py-1 rounded border ${getLabelColor(idx)}`}>
-                    {blind ? LABELS[idx] : getModelInfo(mid).display_name}
-                  </span>
-                );
-              })}
-            </div>
-          )}
+          {rankings.length > 0 && <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">{rankings.map((mid) => { const idx = shuffledOrder.indexOf(mid); return <span key={mid} className={`text-sm font-medium px-2.5 py-1 rounded border ${getLabelColor(idx)}`}>{blind ? LABELS[idx] : getModelInfo(mid).display_name}</span>; })}</div>}
           <div className="mt-3 flex justify-center gap-2">
-            <button onClick={confirmTop5} disabled={rankings.length < Math.min(TOP_N, validModels.length)}
-              className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
-              {rankings.length < Math.min(TOP_N, validModels.length) ? `${Math.min(TOP_N, validModels.length) - rankings.length}개 더 선택` : 'Top 5 확정 → 결선 3회전!'}
+            <button onClick={confirmTop5} disabled={rankings.length < Math.min(TOP_N, validModels.length)} className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
+              {rankings.length < Math.min(TOP_N, validModels.length) ? `${Math.min(TOP_N, validModels.length) - rankings.length}개 더 선택` : 'Top 5 확정 → 결선!'}
             </button>
             {rankings.length > 0 && <button onClick={() => setRankings([])} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>}
           </div>
@@ -631,159 +660,135 @@ export default function ModelCompare() {
       {/* 결선 순위 */}
       {phase === 'finals-rank' && (
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-          <p className="text-purple-800 font-medium">{round}회차 완료! 순위를 매겨주세요 (느낌적으로)</p>
+          <p className="text-purple-800 font-medium">{round}회차 완료! 순위를 매겨주세요</p>
           <p className="text-purple-600 text-sm mt-1">클릭 순서 = 1등 → 2등 → ... ({rankings.length}/{validModels.length})</p>
-          {rankings.length > 0 && (
-            <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
-              {rankings.map((mid, i) => {
-                const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' };
-                const idx = shuffledOrder.indexOf(mid);
-                return (
-                  <div key={mid} className="flex items-center gap-1">
-                    <span className={`w-6 h-6 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-xs font-bold`}>{i + 1}</span>
-                    <span className={`text-sm font-medium px-2 py-0.5 rounded border ${getLabelColor(idx)}`}>
-                      {blind ? LABELS[idx] : getModelInfo(mid).display_name}
-                    </span>
-                    {i < rankings.length - 1 && <span className="text-gray-300 mx-1">{'>'}</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {rankings.length > 0 && <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">{rankings.map((mid, i) => { const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' }; const idx = shuffledOrder.indexOf(mid); return (<div key={mid} className="flex items-center gap-1"><span className={`w-6 h-6 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-xs font-bold`}>{i + 1}</span><span className={`text-sm font-medium px-2 py-0.5 rounded border ${getLabelColor(idx)}`}>{blind ? LABELS[idx] : getModelInfo(mid).display_name}</span>{i < rankings.length - 1 && <span className="text-gray-300 mx-1">{'>'}</span>}</div>); })}</div>}
           <div className="mt-3 flex justify-center gap-2">
-            <button onClick={confirmFinalsRanking} disabled={rankings.length < validModels.length}
-              className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
-              {rankings.length < validModels.length ? `${validModels.length - rankings.length}개 남음` : round < TOTAL_ROUNDS ? `확정 → ${round + 1}회차 프롬프트 선택` : '확정 → 최종 결과!'}
+            <button onClick={confirmFinalsRanking} disabled={rankings.length < validModels.length} className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
+              {rankings.length < validModels.length ? `${validModels.length - rankings.length}개 남음` : round < TOTAL_ROUNDS ? `확정 → ${round + 1}회차` : '확정 → 최종 결과!'}
             </button>
             {rankings.length > 0 && <button onClick={() => setRankings([])} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>}
           </div>
         </div>
       )}
 
-      {/* 최종 결과 */}
+      {/* 블라인드/공개 최종 결과 */}
       {phase === 'done' && (
         <div className="bg-white rounded-xl border-2 border-amber-300 p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">최종 결과 (3회 합산)</h3>
           <div className="space-y-3 mb-6">
-            {finalResults.map((item, i) => {
-              const info = getModelInfo(item.modelId);
+            {finalResults.map((item, i) => { const info = getModelInfo(item.modelId); const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' }; return (
+              <div key={item.modelId} className={`flex items-center gap-4 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-gray-50'}`}>
+                <span className={`w-10 h-10 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-lg font-bold shrink-0`}>{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap"><span className={`text-sm font-medium px-2 py-0.5 rounded-full ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span><span className="text-xs text-gray-400">{info.tier}</span>{i === 0 && <span className="text-amber-500 font-bold">CHAMPION</span>}</div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">{item.scores.map((s, ri) => <span key={ri}>{ri + 1}회: {s}점</span>)}</div>
+                </div>
+                <div className="text-right shrink-0"><p className="text-xl font-bold text-gray-900">{item.total}점</p><p className="text-xs text-gray-400">/ {TOTAL_ROUNDS * top5.length}점</p></div>
+              </div>
+            ); })}
+          </div>
+          <div className="text-center mt-4"><button onClick={resetAll} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">새 비교</button></div>
+        </div>
+      )}
+
+      {/* AI 자동 평가: 개별 결과 */}
+      {phase === 'auto-done' && autoEvalResult && (
+        <div className="bg-white rounded-xl border-2 border-emerald-300 p-6">
+          <h3 className="text-sm font-bold text-gray-900 mb-3">이번 테스트 결과</h3>
+          <div className="space-y-2">
+            {autoEvalResult.ranking?.map((modelId, i) => {
+              const info = getModelInfo(modelId);
+              const scores = autoEvalResult.evaluations?.[modelId];
               const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' };
               return (
-                <div key={item.modelId} className={`flex items-center gap-4 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-gray-50'}`}>
-                  <span className={`w-10 h-10 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-lg font-bold shrink-0`}>{i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span>
-                      <span className="text-xs text-gray-400">{info.tier}</span>
-                      {i === 0 && <span className="text-amber-500 font-bold">CHAMPION</span>}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                      {item.scores.map((s, ri) => <span key={ri}>{ri + 1}회: {s}점</span>)}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xl font-bold text-gray-900">{item.total}점</p>
-                    <p className="text-xs text-gray-400">/ {TOTAL_ROUNDS * top5.length}점</p>
-                  </div>
-                  {info.pricing && <span className="text-xs text-gray-400 shrink-0">${info.pricing.input}/${info.pricing.output}</span>}
+                <div key={modelId} className={`flex items-center gap-3 p-3 rounded-lg ${i === 0 ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+                  <span className={`w-8 h-8 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-sm font-bold shrink-0`}>{i + 1}</span>
+                  <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span>
+                  {scores && <div className="flex items-center gap-2 flex-1 flex-wrap">{SCORE_KEYS.map(({ key, label }) => <span key={key} className="text-[10px] text-gray-500">{label}: <b className={scores[key] >= 8 ? 'text-emerald-600' : ''}>{scores[key]}</b></span>)}</div>}
+                  {scores && <span className="text-lg font-bold text-gray-900 shrink-0">{scores.total}</span>}
                 </div>
               );
             })}
           </div>
-          <details className="text-sm">
-            <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium">회차별 상세</summary>
-            <div className="mt-3 space-y-3">
-              {roundHistory.map((rh) => (
-                <div key={rh.round} className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs font-medium text-gray-600 mb-1">{rh.round}회차</p>
-                  <p className="text-xs text-gray-400 mb-2 truncate" title={rh.prompt}>{rh.prompt}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {rh.rankings.map((r) => {
-                      const info = getModelInfo(r.modelId);
-                      const style = RANK_STYLES[r.rank - 1] || { bg: 'bg-gray-300', text: 'text-white' };
+          {autoEvalResult.summary && <p className="text-xs text-gray-500 mt-2">{autoEvalResult.summary}</p>}
+        </div>
+      )}
+
+      {/* AI 자동 평가: 최종 누적 결과 */}
+      {phase === 'auto-summary' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border-2 border-amber-300 p-6">
+            <div ref={printRef}>
+              <h1 style={{ textAlign: 'center', fontSize: '22px', marginBottom: '4px' }}>AI 모델 비교 평가 보고서</h1>
+              <p style={{ textAlign: 'center', color: '#666', fontSize: '13px', marginBottom: '24px' }}>
+                심사위원: {getModelInfo(autoJudgeModel).display_name} | 테스트: {autoHistory.length}건 | {new Date().toLocaleDateString('ko-KR')}
+              </p>
+
+              <div style={{ marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '15px', borderBottom: '2px solid #333', paddingBottom: '4px', marginBottom: '10px' }}>종합 순위</h2>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ border: '1px solid #ddd', padding: '6px', background: '#f5f5f5' }}>순위</th>
+                      <th style={{ border: '1px solid #ddd', padding: '6px', background: '#f5f5f5' }}>모델</th>
+                      {SCORE_KEYS.map((sk) => <th key={sk.key} style={{ border: '1px solid #ddd', padding: '6px', background: '#f5f5f5' }}>{sk.label}</th>)}
+                      <th style={{ border: '1px solid #ddd', padding: '6px', background: '#f5f5f5' }}>합계</th>
+                      <th style={{ border: '1px solid #ddd', padding: '6px', background: '#f5f5f5' }}>평균</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aggregatedResults.map((item, i) => {
+                      const info = getModelInfo(item.modelId);
                       return (
-                        <span key={r.modelId} className="flex items-center gap-1">
-                          <span className={`w-5 h-5 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-[10px] font-bold`}>{r.rank}</span>
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span>
-                        </span>
+                        <tr key={item.modelId} style={i === 0 ? { background: '#fef3c7', fontWeight: 'bold' } : {}}>
+                          <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>{i + 1}</td>
+                          <td style={{ border: '1px solid #ddd', padding: '6px' }}>{info.display_name} <span style={{ color: '#999', fontSize: '11px' }}>{info.tier}</span></td>
+                          {SCORE_KEYS.map((sk) => <td key={sk.key} style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>{item.details[sk.key]}</td>)}
+                          <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'center', fontWeight: 'bold' }}>{item.total}</td>
+                          <td style={{ border: '1px solid #ddd', padding: '6px', textAlign: 'center' }}>{item.avg}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <h2 style={{ fontSize: '15px', borderBottom: '2px solid #333', paddingBottom: '4px', marginBottom: '10px' }}>문제별 상세</h2>
+                {autoHistory.map((entry, hi) => (
+                  <div key={hi} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '10px', marginBottom: '6px', fontSize: '12px' }}>
+                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>{hi + 1}. {entry.presetName} {entry.category && <span style={{ color: '#888', fontWeight: 'normal' }}>({entry.category})</span>}</div>
+                    <div style={{ color: '#888', fontSize: '11px', marginBottom: '4px' }}>{entry.prompt.slice(0, 120)}...</div>
+                    {entry.result?.ranking?.map((modelId, ri) => {
+                      const info = getModelInfo(modelId);
+                      const scores = entry.result.evaluations?.[modelId];
+                      return (
+                        <div key={modelId} style={{ display: 'flex', gap: '8px', padding: '1px 0', color: ri === 0 ? '#059669' : 'inherit', fontWeight: ri === 0 ? 'bold' : 'normal' }}>
+                          <span style={{ width: '18px' }}>{ri + 1}.</span>
+                          <span style={{ width: '110px' }}>{info.display_name}</span>
+                          {scores && SCORE_KEYS.map(({ key }) => <span key={key} style={{ width: '40px', textAlign: 'center' }}>{scores[key]}</span>)}
+                          {scores && <span style={{ fontWeight: 'bold' }}>= {scores.total}</span>}
+                        </div>
                       );
                     })}
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </details>
-          <div className="text-center mt-4">
-            <button onClick={resetAll} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">새 비교</button>
+          </div>
+
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={handlePrintPDF} className="px-6 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg text-sm font-medium hover:from-red-600 hover:to-pink-600 transition-all">
+              PDF로 저장
+            </button>
+            <button onClick={() => { setPhase('auto-done'); setAutoEvalResult(null); }} className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">추가 테스트</button>
+            <button onClick={() => { resetAll(); setAutoHistory([]); }} className="px-5 py-2.5 bg-gray-500 text-white rounded-lg text-sm font-medium hover:bg-gray-600">전체 초기화</button>
           </div>
         </div>
       )}
 
-      {/* AI 자동 평가 결과 */}
-      {phase === 'auto-done' && autoEvalResult && (
-        <div className="bg-white rounded-xl border-2 border-emerald-300 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-2 text-center">AI 자동 평가 결과</h3>
-          <p className="text-sm text-gray-500 text-center mb-4">심사위원: {getModelInfo(autoJudgeModel).display_name}</p>
-
-          {/* 순위 */}
-          {autoEvalResult.ranking?.length > 0 && (
-            <div className="space-y-3 mb-6">
-              {autoEvalResult.ranking.map((modelId, i) => {
-                const info = getModelInfo(modelId);
-                const scores = autoEvalResult.evaluations?.[modelId];
-                const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' };
-                return (
-                  <div key={modelId} className={`flex items-center gap-4 p-4 rounded-xl ${i === 0 ? 'bg-emerald-50 border-2 border-emerald-300' : 'bg-gray-50'}`}>
-                    <span className={`w-10 h-10 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-lg font-bold shrink-0`}>{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span>
-                        <span className="text-xs text-gray-400">{info.tier}</span>
-                        {i === 0 && <span className="text-emerald-600 font-bold">CHAMPION</span>}
-                      </div>
-                      {scores && (
-                        <div className="flex items-center gap-3 mt-2 flex-wrap">
-                          {[
-                            { key: 'accuracy', label: '정확성' },
-                            { key: 'structure', label: '구조화' },
-                            { key: 'educational', label: '교육적 가치' },
-                            { key: 'korean', label: '한국어' },
-                            { key: 'creativity', label: '창의성' },
-                          ].map(({ key, label }) => (
-                            <div key={key} className="flex items-center gap-1">
-                              <span className="text-[10px] text-gray-400">{label}</span>
-                              <span className={`text-xs font-bold ${scores[key] >= 8 ? 'text-emerald-600' : scores[key] >= 6 ? 'text-blue-600' : 'text-gray-600'}`}>{scores[key]}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {scores?.comment && <p className="text-xs text-gray-500 mt-1">{scores.comment}</p>}
-                    </div>
-                    <div className="text-right shrink-0">
-                      {scores && <p className="text-xl font-bold text-gray-900">{scores.total}점</p>}
-                      <p className="text-xs text-gray-400">/ 50점</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* 종합 요약 */}
-          {autoEvalResult.summary && (
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <p className="text-sm font-medium text-gray-700 mb-1">종합 평가</p>
-              <p className="text-sm text-gray-600">{autoEvalResult.summary}</p>
-            </div>
-          )}
-
-          <div className="text-center">
-            <button onClick={resetAll} className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">새 비교</button>
-          </div>
-        </div>
-      )}
-
-      {/* AI 평가 중 텍스트 표시 */}
+      {/* AI 평가 중 */}
       {phase === 'auto-evaluating' && (
         <div className="bg-white rounded-xl border border-emerald-200 p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -795,7 +800,7 @@ export default function ModelCompare() {
       )}
 
       {/* 카드 그리드 */}
-      {shuffledOrder.length > 0 && phase !== 'done' && phase !== 'auto-done' && phase !== 'finals-prompt' && (
+      {shuffledOrder.length > 0 && phase !== 'done' && phase !== 'auto-summary' && phase !== 'finals-prompt' && (
         <div className={`grid gap-4 ${gridCols}`}>
           {shuffledOrder.map((modelId, idx) => {
             const r = results[modelId] || {};
@@ -803,25 +808,15 @@ export default function ModelCompare() {
             const canClick = (phase === 'prelim-rank' || phase === 'finals-rank') && r.status !== 'error';
             const rankStyle = rank ? (RANK_STYLES[rank - 1] || { bg: 'bg-gray-300', text: 'text-white', border: 'border-gray-400', ring: 'ring-gray-200' }) : null;
             const info = getModelInfo(modelId);
-
             return (
               <div key={modelId} onClick={() => canClick && handleRankToggle(modelId)}
-                className={`bg-white rounded-xl border-2 flex flex-col overflow-hidden transition-all ${
-                  rank ? `${rankStyle.border} ring-2 ${rankStyle.ring} shadow-md` : 'border-gray-200'
-                } ${canClick ? 'cursor-pointer hover:border-indigo-300 hover:shadow-md' : ''}`}>
+                className={`bg-white rounded-xl border-2 flex flex-col overflow-hidden transition-all ${rank ? `${rankStyle.border} ring-2 ${rankStyle.ring} shadow-md` : 'border-gray-200'} ${canClick ? 'cursor-pointer hover:border-indigo-300 hover:shadow-md' : ''}`}>
                 <div className={`px-4 py-3 border-b bg-gray-50 flex items-center justify-between ${rank ? rankStyle.border : 'border-gray-200'}`}>
                   <div className="flex items-center gap-2">
-                    {rank ? (
-                      <span className={`w-8 h-8 rounded-full ${rankStyle.bg} ${rankStyle.text} flex items-center justify-center text-sm font-bold`}>{rank}</span>
-                    ) : (
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold border ${getLabelColor(idx)}`}>
-                        {blind ? LABELS[idx] : (info.display_name || '')[0]}
-                      </span>
-                    )}
+                    {rank ? <span className={`w-8 h-8 rounded-full ${rankStyle.bg} ${rankStyle.text} flex items-center justify-center text-sm font-bold`}>{rank}</span>
+                      : <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold border ${getLabelColor(idx)}`}>{blind ? LABELS[idx] : (info.display_name || '')[0]}</span>}
                     <div>
-                      <span className="text-sm font-medium text-gray-700">
-                        {getCardTitle(modelId, idx)}
-                      </span>
+                      <span className="text-sm font-medium text-gray-700">{getCardTitle(modelId, idx)}</span>
                       {!blind && <span className="text-[10px] text-gray-400 ml-1">{info.tier}</span>}
                       {rank && <span className="text-xs text-gray-400 ml-1">({rank}등)</span>}
                     </div>
