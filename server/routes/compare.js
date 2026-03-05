@@ -16,8 +16,8 @@ router.post('/', requireApiKey, asyncHandler(async (req, res) => {
   if (!models || !Array.isArray(models) || models.length < 2) {
     return res.status(400).json({ message: '2개 이상의 모델을 선택해주세요.' });
   }
-  if (models.length > 4) {
-    return res.status(400).json({ message: '최대 4개 모델까지 비교할 수 있습니다.' });
+  if (models.length > 20) {
+    return res.status(400).json({ message: '최대 20개 모델까지 비교할 수 있습니다.' });
   }
   if (!prompt?.trim()) {
     return res.status(400).json({ message: '프롬프트를 입력해주세요.' });
