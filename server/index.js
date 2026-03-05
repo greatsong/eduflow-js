@@ -22,7 +22,7 @@ const PORT = process.env.PORT || 7829;
 
 // 미들웨어
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:7830',
+  origin: process.env.NODE_ENV === 'production' ? true : (process.env.CLIENT_URL || 'http://localhost:7830'),
 }));
 app.use(express.json({ limit: '10mb' }));
 
@@ -72,6 +72,15 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/beta', betaRouter);
 app.use('/api/compare', compareRouter);
+
+// 프로덕션: 프론트엔드 정적 파일 서빙
+if (process.env.NODE_ENV === 'production') {
+  const clientDist = path.resolve(__dirname, '..', 'client', 'dist');
+  app.use(express.static(clientDist));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // 에러 핸들링
 app.use(errorHandler);
