@@ -55,6 +55,8 @@ export default function ModelCompare() {
   const [running, setRunning] = useState(false);
   const [shuffledOrder, setShuffledOrder] = useState([]);
   const [rankings, setRankings] = useState([]);
+  const [worstPicks, setWorstPicks] = useState([]);
+  const [selectionMode, setSelectionMode] = useState('best'); // 'best' | 'worst'
   const [top5, setTop5] = useState([]);
   const [roundScores, setRoundScores] = useState({});
   const [roundHistory, setRoundHistory] = useState([]);
@@ -158,15 +160,36 @@ export default function ModelCompare() {
   };
 
   const handleRankToggle = (modelId) => {
+    if (phase === 'prelim-rank') {
+      if (selectionMode === 'best') {
+        setRankings((prev) => {
+          if (prev.includes(modelId)) return prev.filter((id) => id !== modelId);
+          if (prev.length >= Math.min(TOP_N, validModels.length)) return prev;
+          return [...prev, modelId];
+        });
+        // best에 넣으면 worst에서 제거
+        setWorstPicks((prev) => prev.filter((id) => id !== modelId));
+      } else {
+        setWorstPicks((prev) => {
+          if (prev.includes(modelId)) return prev.filter((id) => id !== modelId);
+          if (prev.length >= TOP_N) return prev;
+          return [...prev, modelId];
+        });
+        // worst에 넣으면 best에서 제거
+        setRankings((prev) => prev.filter((id) => id !== modelId));
+      }
+      return;
+    }
+    // finals-rank: 순위 매기기
     setRankings((prev) => {
-      if (prev.includes(modelId)) return prev.slice(0, prev.indexOf(modelId));
-      const max = phase === 'prelim-rank' ? Math.min(TOP_N, validModels.length) : validModels.length;
-      if (prev.length >= max) return prev;
+      if (prev.includes(modelId)) return prev.filter((id) => id !== modelId);
+      if (prev.length >= validModels.length) return prev;
       return [...prev, modelId];
     });
   };
 
   const confirmTop5 = () => {
+    if (rankings.length < 2) return;
     const selected = rankings.slice(0, TOP_N);
     setTop5(selected);
     const init = {};
@@ -207,7 +230,8 @@ export default function ModelCompare() {
 
   const resetAll = () => {
     setPhase('idle'); setRound(0); setResults({}); setShuffledOrder([]);
-    setRankings([]); setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]); setPrompt('');
+    setRankings([]); setWorstPicks([]); setSelectionMode('best');
+    setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]); setPrompt('');
   };
 
   const getModelInfo = (id) => allModels.find((m) => m.id === id) || { display_name: id, tier: '', provider: '' };
@@ -305,32 +329,72 @@ export default function ModelCompare() {
             </button>
           )}
           {running && (
-            <button onClick={() => { abortRef.current?.abort(); setRunning(false); }}
-              className="px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50">중지</button>
+            <button onClick={() => {
+              abortRef.current?.abort();
+              setRunning(false);
+              setResults((prev) => {
+                const copy = { ...prev };
+                for (const [id, r] of Object.entries(copy)) {
+                  if (r.status === 'streaming' || r.status === 'waiting') {
+                    copy[id] = { ...r, status: r.text ? 'done' : 'error', error: r.text ? undefined : '중지됨' };
+                  }
+                }
+                return copy;
+              });
+              if (phase === 'prelim') setPhase('prelim-rank');
+              if (phase === 'finals') setPhase('finals-rank');
+            }}
+              className="px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50">중지 → 바로 투표</button>
           )}
         </div>
       )}
 
       {/* 예선 Top 5 선택 */}
       {phase === 'prelim-rank' && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center">
-          <p className="text-indigo-800 font-medium">예선 완료! 느낌적으로 좋은 Top {Math.min(TOP_N, validModels.length)}개를 골라주세요</p>
-          <p className="text-indigo-600 text-sm mt-1">{rankings.length}/{Math.min(TOP_N, validModels.length)} 선택</p>
-          {rankings.length > 0 && (
-            <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
-              {rankings.map((mid) => (
-                <span key={mid} className={`text-sm font-medium px-2.5 py-1 rounded border ${getLabelColor(shuffledOrder.indexOf(mid))}`}>
-                  {getLabel(shuffledOrder.indexOf(mid))}
-                </span>
-              ))}
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center space-y-3">
+          <p className="text-indigo-800 font-medium">예선 완료! 카드를 클릭해 Best / Worst를 골라주세요</p>
+          <div className="flex justify-center gap-2">
+            <button onClick={() => setSelectionMode('best')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectionMode === 'best' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'}`}>
+              Best 선택 ({rankings.length}/{Math.min(TOP_N, validModels.length)})
+            </button>
+            <button onClick={() => setSelectionMode('worst')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectionMode === 'worst' ? 'bg-red-500 text-white shadow-md' : 'bg-white border border-red-300 text-red-700 hover:bg-red-50'}`}>
+              Worst 선택 ({worstPicks.length}/{TOP_N})
+            </button>
+          </div>
+          {(rankings.length > 0 || worstPicks.length > 0) && (
+            <div className="space-y-2">
+              {rankings.length > 0 && (
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <span className="text-xs text-emerald-600 font-medium">Best:</span>
+                  {rankings.map((mid) => (
+                    <span key={mid} className={`text-sm font-medium px-2.5 py-1 rounded border ${getLabelColor(shuffledOrder.indexOf(mid))}`}>
+                      {getLabel(shuffledOrder.indexOf(mid))}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {worstPicks.length > 0 && (
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <span className="text-xs text-red-600 font-medium">Worst:</span>
+                  {worstPicks.map((mid) => (
+                    <span key={mid} className="text-sm font-medium px-2.5 py-1 rounded border bg-red-50 text-red-600 border-red-300 line-through">
+                      {getLabel(shuffledOrder.indexOf(mid))}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          <div className="mt-3 flex justify-center gap-2">
-            <button onClick={confirmTop5} disabled={rankings.length < Math.min(TOP_N, validModels.length)}
+          <div className="flex justify-center gap-2">
+            <button onClick={confirmTop5} disabled={rankings.length < 2}
               className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
-              {rankings.length < Math.min(TOP_N, validModels.length) ? `${Math.min(TOP_N, validModels.length) - rankings.length}개 더 선택` : 'Top 5 확정 → 결선 3회전!'}
+              {rankings.length < 2 ? '2개 이상 Best를 선택해주세요' : `Top ${rankings.length} 확정 → 결선 3회전!`}
             </button>
-            {rankings.length > 0 && <button onClick={() => setRankings([])} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>}
+            {(rankings.length > 0 || worstPicks.length > 0) && (
+              <button onClick={() => { setRankings([]); setWorstPicks([]); }} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>
+            )}
           </div>
         </div>
       )}
@@ -429,23 +493,37 @@ export default function ModelCompare() {
           {shuffledOrder.map((modelId, idx) => {
             const r = results[modelId] || {};
             const rank = getRank(modelId);
+            const isWorst = worstPicks.includes(modelId);
+            const isBest = phase === 'prelim-rank' && rankings.includes(modelId);
             const canClick = (phase === 'prelim-rank' || phase === 'finals-rank') && r.status !== 'error';
-            const rankStyle = rank ? (RANK_STYLES[rank - 1] || { bg: 'bg-gray-300', text: 'text-white', border: 'border-gray-400', ring: 'ring-gray-200' }) : null;
+            const rankStyle = rank && phase !== 'prelim-rank' ? (RANK_STYLES[rank - 1] || { bg: 'bg-gray-300', text: 'text-white', border: 'border-gray-400', ring: 'ring-gray-200' }) : null;
 
             return (
               <div key={modelId} onClick={() => canClick && handleRankToggle(modelId)}
                 className={`bg-white rounded-xl border-2 flex flex-col overflow-hidden transition-all ${
-                  rank ? `${rankStyle.border} ring-2 ${rankStyle.ring} shadow-md` : 'border-gray-200'
-                } ${canClick ? 'cursor-pointer hover:border-indigo-300 hover:shadow-md' : ''}`}>
-                <div className={`px-4 py-3 border-b bg-gray-50 flex items-center justify-between ${rank ? rankStyle.border : 'border-gray-200'}`}>
+                  isWorst ? 'border-red-400 ring-2 ring-red-200 opacity-60'
+                  : isBest ? 'border-emerald-400 ring-2 ring-emerald-200 shadow-md'
+                  : rankStyle ? `${rankStyle.border} ring-2 ${rankStyle.ring} shadow-md`
+                  : 'border-gray-200'
+                } ${canClick ? 'cursor-pointer hover:shadow-md' : ''}`}>
+                <div className={`px-4 py-3 border-b bg-gray-50 flex items-center justify-between ${
+                  isWorst ? 'border-red-300' : isBest ? 'border-emerald-300' : rankStyle ? rankStyle.border : 'border-gray-200'
+                }`}>
                   <div className="flex items-center gap-2">
-                    {rank ? (
+                    {isWorst ? (
+                      <span className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center text-sm font-bold">X</span>
+                    ) : isBest ? (
+                      <span className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-bold">{rankings.indexOf(modelId) + 1}</span>
+                    ) : rankStyle ? (
                       <span className={`w-8 h-8 rounded-full ${rankStyle.bg} ${rankStyle.text} flex items-center justify-center text-sm font-bold`}>{rank}</span>
                     ) : (
                       <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold border ${getLabelColor(idx)}`}>{getLabel(idx)}</span>
                     )}
                     <span className="text-sm font-medium text-gray-500">
-                      Model {getLabel(idx)}{rank && <span className="text-xs ml-1 opacity-60">({rank}등)</span>}
+                      Model {getLabel(idx)}
+                      {isWorst && <span className="text-xs ml-1 text-red-500">(Worst)</span>}
+                      {isBest && <span className="text-xs ml-1 text-emerald-500">(Best {rankings.indexOf(modelId) + 1})</span>}
+                      {rank && phase !== 'prelim-rank' && <span className="text-xs ml-1 opacity-60">({rank}등)</span>}
                     </span>
                   </div>
                   <div className="text-right">

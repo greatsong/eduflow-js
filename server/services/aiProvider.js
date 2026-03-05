@@ -152,19 +152,12 @@ function _buildOpenAIMessages(messages, system) {
   return result;
 }
 
-function _isReasoningModel(model) {
-  return /^o[1-9]/.test(model);
-}
-
 async function _openaiChat({ apiKey, model, messages, system, maxTokens, baseURL }) {
   const client = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
-  const tokensParam = _isReasoningModel(model)
-    ? { max_completion_tokens: maxTokens }
-    : { max_tokens: maxTokens };
   const response = await client.chat.completions.create({
     model,
     messages: _buildOpenAIMessages(messages, system),
-    ...tokensParam,
+    max_completion_tokens: maxTokens,
   });
 
   const choice = response.choices[0];
@@ -178,13 +171,10 @@ async function _openaiChat({ apiKey, model, messages, system, maxTokens, baseURL
 
 async function _openaiStream({ apiKey, model, messages, system, maxTokens, res, onText, baseURL }) {
   const client = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
-  const tokensParam = _isReasoningModel(model)
-    ? { max_completion_tokens: maxTokens }
-    : { max_tokens: maxTokens };
   const stream = await client.chat.completions.create({
     model,
     messages: _buildOpenAIMessages(messages, system),
-    ...tokensParam,
+    max_completion_tokens: maxTokens,
     stream: true,
     stream_options: { include_usage: true },
   });
