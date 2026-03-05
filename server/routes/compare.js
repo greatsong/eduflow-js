@@ -52,6 +52,7 @@ router.post('/', requireApiKey, asyncHandler(async (req, res) => {
 
     try {
       await streamChat({
+        provider,
         model: modelId,
         messages,
         system: systemPrompt || '교육 콘텐츠 전문가로서 명확하고 구조화된 답변을 해주세요.',
