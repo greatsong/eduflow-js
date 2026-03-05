@@ -1,26 +1,44 @@
 {
   "_안내": "=== 모델 설정 파일 === 새 모델이 나오면 이 파일만 수정하세요! 앱 전체에 자동 반영됩니다.",
-  "_수정방법": "1) 아래 models에서 id/display_name/pricing 수정  2) defaults에서 기본 모델 변경  3) 앱 새로고침 (60초 캐시)",
-  "_가격확인": "https://anthropic.com/pricing",
-  "_최종수정일": "2026-02-21",
+  "_수정방법": "1) 아래 models에서 id/provider/display_name/pricing 수정  2) defaults에서 기본 모델 변경  3) 앱 새로고침 (60초 캐시)",
+  "_가격확인": "anthropic.com/pricing | openai.com/pricing | ai.google.dev/pricing | upstage.ai",
+  "_최종수정일": "2026-03-05",
+
+  "providers": {
+    "anthropic": {
+      "name": "Anthropic",
+      "envKey": "ANTHROPIC_API_KEY",
+      "description": "Claude 모델 시리즈"
+    },
+    "openai": {
+      "name": "OpenAI",
+      "envKey": "OPENAI_API_KEY",
+      "description": "GPT / o-시리즈 모델"
+    },
+    "google": {
+      "name": "Google",
+      "envKey": "GOOGLE_API_KEY",
+      "description": "Gemini 모델 시리즈"
+    },
+    "upstage": {
+      "name": "Upstage",
+      "envKey": "UPSTAGE_API_KEY",
+      "description": "Solar 모델 시리즈 (한국어 특화)"
+    }
+  },
 
   "models": [
     {
       "id": "claude-opus-4-6",
+      "provider": "anthropic",
       "display_name": "Claude Opus 4.6",
       "tier": "최고 품질",
       "pricing": { "input": 5.0, "output": 25.0 },
       "recommended_for": ["챕터 생성", "고품질 콘텐츠", "에이전트", "코딩"]
     },
     {
-      "id": "claude-opus-4-5-20251101",
-      "display_name": "Claude Opus 4.5",
-      "tier": "고품질",
-      "pricing": { "input": 5.0, "output": 25.0 },
-      "recommended_for": ["챕터 생성", "고품질 콘텐츠"]
-    },
-    {
       "id": "claude-sonnet-4-6",
+      "provider": "anthropic",
       "display_name": "Claude Sonnet 4.6",
       "tier": "빠르고 강력",
       "pricing": { "input": 3.0, "output": 15.0 },
@@ -28,24 +46,67 @@
     },
     {
       "id": "claude-sonnet-4-5-20250929",
+      "provider": "anthropic",
       "display_name": "Claude Sonnet 4.5",
       "tier": "균형",
       "pricing": { "input": 3.0, "output": 15.0 },
       "recommended_for": ["대화", "목차 생성", "피드백"]
     },
     {
-      "id": "claude-sonnet-4-20250514",
-      "display_name": "Claude Sonnet 4",
-      "tier": "경제적",
-      "pricing": { "input": 3.0, "output": 15.0 },
-      "recommended_for": ["대화", "목차 생성", "피드백"]
-    },
-    {
       "id": "claude-haiku-4-5-20251001",
+      "provider": "anthropic",
       "display_name": "Claude Haiku 4.5",
       "tier": "초고속·대량",
       "pricing": { "input": 0.8, "output": 4.0 },
       "recommended_for": ["대량 생성", "대화", "빠른 피드백"]
+    },
+    {
+      "id": "gpt-4.1",
+      "provider": "openai",
+      "display_name": "GPT-4.1",
+      "tier": "고품질",
+      "pricing": { "input": 2.0, "output": 8.0 },
+      "recommended_for": ["챕터 생성", "대화", "코딩"]
+    },
+    {
+      "id": "gpt-4.1-mini",
+      "provider": "openai",
+      "display_name": "GPT-4.1 Mini",
+      "tier": "경제적·빠름",
+      "pricing": { "input": 0.4, "output": 1.6 },
+      "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
+    },
+    {
+      "id": "gpt-4.1-nano",
+      "provider": "openai",
+      "display_name": "GPT-4.1 Nano",
+      "tier": "초경량",
+      "pricing": { "input": 0.1, "output": 0.4 },
+      "recommended_for": ["대량 생성", "빠른 피드백"]
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "provider": "google",
+      "display_name": "Gemini 2.5 Flash",
+      "tier": "빠르고 강력",
+      "pricing": { "input": 0.15, "output": 0.6 },
+      "recommended_for": ["챕터 생성", "대화", "목차 생성"]
+    },
+    {
+      "id": "gemini-2.0-flash",
+      "provider": "google",
+      "display_name": "Gemini 2.0 Flash",
+      "tier": "경제적",
+      "pricing": { "input": 0.1, "output": 0.4 },
+      "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
+    },
+    {
+      "id": "solar-pro",
+      "provider": "upstage",
+      "display_name": "Solar Pro",
+      "tier": "한국어 특화",
+      "pricing": { "input": 1.0, "output": 4.0 },
+      "recommended_for": ["한국어 콘텐츠", "챕터 생성", "대화"]
     }
   ],
 

@@ -1,13 +1,18 @@
 import { readFile, writeFile, unlink, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import Anthropic from '@anthropic-ai/sdk';
+import { chat, streamChat, detectProvider, resolveApiKey } from './aiProvider.js';
 
 export class ConversationManager {
-  constructor(projectPath, apiKey = null) {
+  constructor(projectPath, apiKeys = null) {
     this.projectPath = projectPath;
     this.discussionsPath = join(projectPath, 'discussions');
-    this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY;
+    // 하위 호환: 문자열이면 anthropic 키로 취급
+    if (typeof apiKeys === 'string') {
+      this.apiKeys = { anthropic: apiKeys, _default: apiKeys };
+    } else {
+      this.apiKeys = apiKeys || {};
+    }
   }
 
   async ensureDir() {
@@ -159,30 +164,25 @@ ${conversationText}
 `;
     }
 
-    const client = new Anthropic({ apiKey: this.apiKey });
+    const provider = detectProvider(model);
+    const apiKey = resolveApiKey(provider, this.apiKeys);
     let summary = '';
 
     if (res) {
       // SSE 스트리밍 모드
-      const stream = client.messages.stream({
-        model,
-        max_tokens: 2048,
+      const result = await streamChat({
+        provider, apiKey, model,
         messages: [{ role: 'user', content: prompt }],
+        maxTokens: 2048, res,
       });
-
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta?.text) {
-          summary += event.delta.text;
-          res.write(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`);
-        }
-      }
+      summary = result.content;
     } else {
-      const response = await client.messages.create({
-        model,
-        max_tokens: 2048,
+      const result = await chat({
+        provider, apiKey, model,
         messages: [{ role: 'user', content: prompt }],
+        maxTokens: 2048,
       });
-      summary = response.content[0].text;
+      summary = result.content;
     }
 
     // 파일 저장

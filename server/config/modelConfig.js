@@ -39,10 +39,28 @@ export async function getModelDisplayOptions() {
   const config = await loadModelConfig();
   return config.models.map((m) => ({
     id: m.id,
+    provider: m.provider || 'anthropic',
     label: `${m.display_name} (${m.tier})`,
     pricing: m.pricing,
     recommendedFor: m.recommended_for,
   }));
+}
+
+/**
+ * 프로바이더 정보 목록
+ */
+export async function getProviders() {
+  const config = await loadModelConfig();
+  return config.providers || {};
+}
+
+/**
+ * 모델 ID -> 프로바이더 조회
+ */
+export async function getModelProvider(modelId) {
+  const config = await loadModelConfig();
+  const model = config.models.find((m) => m.id === modelId);
+  return model?.provider || 'anthropic';
 }
 
 /**

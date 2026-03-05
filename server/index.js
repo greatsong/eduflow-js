@@ -30,31 +30,30 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API 키 상태 확인 (서버 .env에 키가 있는지)
+// API 키 상태 확인 (서버 .env에 어떤 키들이 있는지)
 app.get('/api/auth/status', (req, res) => {
-  const hasEnvKey = !!process.env.ANTHROPIC_API_KEY;
+  const hasEnvKey = !!(
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.UPSTAGE_API_KEY
+  );
   res.json({ hasEnvKey });
 });
 
-// API 키 검증 (클라이언트에서 보낸 키가 유효한지 Anthropic에 확인)
+// API 키 검증 (간소화: 키가 비어있지 않으면 유효로 처리)
 app.post('/api/auth/verify', async (req, res) => {
-  const apiKey = req.headers['x-api-key'] || req.body.apiKey;
-  if (!apiKey) {
+  // 어떤 프로바이더든 키가 있으면 통과
+  const hasAny = !!(
+    req.headers['x-api-key'] ||
+    req.headers['x-openai-key'] ||
+    req.headers['x-google-key'] ||
+    req.headers['x-upstage-key']
+  );
+  if (!hasAny) {
     return res.status(400).json({ valid: false, message: 'API 키가 제공되지 않았습니다.' });
   }
-  try {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey });
-    await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1,
-      messages: [{ role: 'user', content: 'hi' }],
-    });
-    res.json({ valid: true });
-  } catch (e) {
-    const msg = e.status === 401 ? '유효하지 않은 API 키입니다.' : `검증 실패: ${e.message}`;
-    res.json({ valid: false, message: msg });
-  }
+  res.json({ valid: true });
 });
 
 // 라우트

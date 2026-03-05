@@ -1,14 +1,18 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import Anthropic from '@anthropic-ai/sdk';
+import { chat, streamChat, detectProvider, resolveApiKey } from './aiProvider.js';
 import { TemplateManager } from './templateManager.js';
 import { ReferenceManager } from './referenceManager.js';
 
 export class TOCGenerator {
-  constructor(projectPath, apiKey = null) {
+  constructor(projectPath, apiKeys = null) {
     this.projectPath = projectPath;
-    this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY;
+    if (typeof apiKeys === 'string') {
+      this.apiKeys = { anthropic: apiKeys, _default: apiKeys };
+    } else {
+      this.apiKeys = apiKeys || {};
+    }
   }
 
   /**
@@ -77,35 +81,28 @@ ${referencesText}
 ${templateAddition}
 `;
 
-    const client = new Anthropic({ apiKey: this.apiKey });
+    const provider = detectProvider(model);
+    const apiKey = resolveApiKey(provider, this.apiKeys);
     let responseText = '';
     let stopReason = null;
 
     if (res) {
       // SSE 스트리밍 모드
-      const stream = client.messages.stream({
-        model,
-        max_tokens: maxTokens,
+      const result = await streamChat({
+        provider, apiKey, model,
         messages: [{ role: 'user', content: prompt }],
+        maxTokens, res,
       });
-
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta?.text) {
-          responseText += event.delta.text;
-          res.write(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`);
-        }
-      }
-
-      const finalMessage = await stream.finalMessage();
-      stopReason = finalMessage.stop_reason;
+      responseText = result.content;
+      stopReason = result.stopReason;
     } else {
-      const response = await client.messages.create({
-        model,
-        max_tokens: maxTokens,
+      const result = await chat({
+        provider, apiKey, model,
         messages: [{ role: 'user', content: prompt }],
+        maxTokens,
       });
-      responseText = response.content[0].text;
-      stopReason = response.stop_reason;
+      responseText = result.content;
+      stopReason = result.stopReason;
     }
 
     // 토큰 제한 확인

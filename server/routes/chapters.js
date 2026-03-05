@@ -5,7 +5,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireApiKey } from '../middleware/apiKey.js';
 import { ChapterGenerator } from '../services/chapterGenerator.js';
 import { ProgressManager } from '../services/progressManager.js';
-import Anthropic from '@anthropic-ai/sdk';
+import { streamChat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -95,7 +95,7 @@ router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
   sseHeaders(res);
 
   try {
-    const gen = new ChapterGenerator(projPath, req.apiKey);
+    const gen = new ChapterGenerator(projPath, req.apiKeys);
     await gen.init();
 
     // TOC 로드
@@ -143,7 +143,7 @@ router.post('/:chapterId/generate', requireApiKey, asyncHandler(async (req, res)
   const projPath = projectPath(req.params.id);
   const chapterId = req.params.chapterId;
 
-  const gen = new ChapterGenerator(projPath, req.apiKey);
+  const gen = new ChapterGenerator(projPath, req.apiKeys);
   await gen.init();
 
   // TOC에서 챕터 정보 조회
@@ -178,7 +178,7 @@ router.post('/:chapterId/chat', requireApiKey, asyncHandler(async (req, res) => 
   sseHeaders(res);
 
   try {
-    const gen = new ChapterGenerator(projPath, req.apiKey);
+    const gen = new ChapterGenerator(projPath, req.apiKeys);
     await gen.init();
 
     // 현재 챕터 내용 로드
@@ -215,27 +215,19 @@ ${currentContent.slice(0, 3000) || '(아직 작성되지 않음)'}
     }));
     apiMessages.push({ role: 'user', content: message });
 
-    const client = new Anthropic({ apiKey: req.apiKey });
-    const stream = client.messages.stream({
-      model: model || 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt,
+    const useModel = model || 'claude-sonnet-4-20250514';
+    const provider = detectProvider(useModel);
+    const apiKey = resolveApiKey(provider, req.apiKeys);
+
+    await streamChat({
+      provider, apiKey, model: useModel,
       messages: apiMessages,
+      system: systemPrompt,
+      maxTokens: 4096, res,
     });
 
-    stream.on('text', (text) => {
-      sseSend(res, { type: 'text', content: text });
-    });
-
-    stream.on('end', () => {
-      sseSend(res, { type: 'done' });
-      res.end();
-    });
-
-    stream.on('error', (err) => {
-      sseSend(res, { type: 'error', message: err.message });
-      res.end();
-    });
+    sseSend(res, { type: 'done' });
+    res.end();
   } catch (e) {
     sseSend(res, { type: 'error', message: e.message });
     res.end();

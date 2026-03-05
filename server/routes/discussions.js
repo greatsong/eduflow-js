@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import Anthropic from '@anthropic-ai/sdk';
+import { streamChat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireApiKey } from '../middleware/apiKey.js';
 import { ConversationManager } from '../services/conversationManager.js';
@@ -65,7 +65,7 @@ router.post('/:step/summarize', requireApiKey, asyncHandler(async (req, res) => 
   res.flushHeaders();
 
   try {
-    const cm = new ConversationManager(projPath, req.apiKey);
+    const cm = new ConversationManager(projPath, req.apiKeys);
     await cm.summarizeConversation(step, model || 'claude-sonnet-4-20250514', res);
 
     // Step 1이면 진행 상태 업데이트
@@ -95,7 +95,7 @@ router.post('/:step/chat', requireApiKey, asyncHandler(async (req, res) => {
   res.flushHeaders();
 
   try {
-    const cm = new ConversationManager(projPath, req.apiKey);
+    const cm = new ConversationManager(projPath, req.apiKeys);
 
     // 사용자 메시지 저장
     await cm.saveMessage(step, 'user', message);
@@ -205,28 +205,22 @@ ${referencesText}
     // 대화 히스토리 구성
     const allMessages = clientMessages || await cm.loadConversation(step);
 
-    // Claude 스트리밍 호출
-    const client = new Anthropic({ apiKey: req.apiKey });
-    const stream = client.messages.stream({
-      model: model || 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
-      system: systemPrompt,
+    // AI 스트리밍 호출 (멀티 프로바이더)
+    const useModel = model || 'claude-sonnet-4-20250514';
+    const provider = detectProvider(useModel);
+    const apiKey = resolveApiKey(provider, req.apiKeys);
+
+    const result = await streamChat({
+      provider, apiKey, model: useModel,
       messages: allMessages,
+      system: systemPrompt,
+      maxTokens: 2048, res,
     });
 
-    let fullResponse = '';
-
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta?.text) {
-        fullResponse += event.delta.text;
-        res.write(`data: ${JSON.stringify({ type: 'text', content: event.delta.text })}\n\n`);
-      }
-    }
-
     // 어시스턴트 응답 저장
-    await cm.saveMessage(step, 'assistant', fullResponse);
+    await cm.saveMessage(step, 'assistant', result.content);
 
-    res.write(`data: ${JSON.stringify({ type: 'done', content: fullResponse })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'done', content: result.content })}\n\n`);
   } catch (e) {
     res.write(`data: ${JSON.stringify({ type: 'error', message: e.message })}\n\n`);
   }

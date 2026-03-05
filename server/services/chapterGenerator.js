@@ -2,9 +2,9 @@ import { readFile, writeFile, readdir, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import Anthropic from '@anthropic-ai/sdk';
 import pLimit from 'p-limit';
 import { TemplateManager } from './templateManager.js';
+import { streamChat, detectProvider, resolveApiKey } from './aiProvider.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -150,13 +150,18 @@ const DEFAULT_PROMPT = {
 };
 
 export class ChapterGenerator {
-  constructor(projectPath, apiKey = null) {
+  constructor(projectPath, apiKeys = null) {
     this.projectPath = projectPath;
     this.docsPath = join(projectPath, 'docs');
     this.outlinesPath = join(projectPath, 'outlines');
     this.referencesPath = join(projectPath, 'references');
     this.logsPath = join(projectPath, 'logs');
-    this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY;
+    // 하위 호환: 문자열이면 anthropic 키로 취급
+    if (typeof apiKeys === 'string') {
+      this.apiKeys = { anthropic: apiKeys, _default: apiKeys };
+    } else {
+      this.apiKeys = apiKeys || {};
+    }
 
     // 모델 가격 캐시 (BUG-001 수정: 한 번만 로드)
     this._modelPricing = null;
@@ -364,45 +369,41 @@ export class ChapterGenerator {
   }
 
   /**
-   * 스트리밍 방식 Claude API 호출 (실시간 진행률 표시)
+   * 스트리밍 방식 AI API 호출 (실시간 진행률 표시, 멀티 프로바이더)
    */
   async _streamGenerate(model, maxTokens, prompt, chapterId, progressCallback, isRetry = false) {
-    const client = new Anthropic({ apiKey: this.apiKey, timeout: 15 * 60 * 1000 });
+    const provider = detectProvider(model);
+    const apiKey = resolveApiKey(provider, this.apiKeys);
     const estimatedTotalChars = Math.round(maxTokens * 1.5);
-    let content = '';
-    let lastProgressTime = Date.now();
     const prefix = isRetry ? '재시도 ' : '';
+    let charsSoFar = 0;
+    let lastProgressTime = Date.now();
 
-    const stream = client.messages.stream({
-      model,
-      max_tokens: maxTokens,
+    const result = await streamChat({
+      provider, apiKey, model,
       messages: [{ role: 'user', content: prompt }],
+      maxTokens,
+      onText: (text) => {
+        charsSoFar += text.length;
+        const now = Date.now();
+        if (now - lastProgressTime >= 3000 && progressCallback) {
+          const pct = Math.min(99, Math.round((charsSoFar / estimatedTotalChars) * 100));
+          progressCallback(`📝 ${chapterId} ${prefix}생성 중... ${charsSoFar.toLocaleString()}자 (~${pct}%)`);
+          lastProgressTime = now;
+        }
+      },
     });
 
-    stream.on('text', (text) => {
-      content += text;
-      const now = Date.now();
-      if (now - lastProgressTime >= 3000 && progressCallback) {
-        const charCount = content.length;
-        const pct = Math.min(99, Math.round((charCount / estimatedTotalChars) * 100));
-        progressCallback(`📝 ${chapterId} ${prefix}생성 중... ${charCount.toLocaleString()}자 (~${pct}%)`);
-        lastProgressTime = now;
-      }
-    });
-
-    const finalMessage = await stream.finalMessage();
-    const stopReason = finalMessage.stop_reason;
-
-    if (stopReason === 'max_tokens') {
-      this._log(`⚠️ ${chapterId} 응답이 max_tokens(${maxTokens})로 잘림 — 마지막 200자: ...${content.slice(-200)}`);
+    if (result.stopReason === 'max_tokens') {
+      this._log(`⚠️ ${chapterId} 응답이 max_tokens(${maxTokens})로 잘림 — 마지막 200자: ...${result.content.slice(-200)}`);
       if (progressCallback) progressCallback(`⚠️ ${chapterId} 토큰 한도 도달 — 내용이 잘렸을 수 있습니다. max_tokens를 늘려보세요.`);
     }
 
     return {
-      content,
-      inputTokens: finalMessage.usage.input_tokens,
-      outputTokens: finalMessage.usage.output_tokens,
-      stopReason,
+      content: result.content,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      stopReason: result.stopReason,
     };
   }
 

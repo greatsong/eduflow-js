@@ -5,6 +5,7 @@ import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireApiKey } from '../middleware/apiKey.js';
+import { chat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
 import { TOCGenerator } from '../services/tocGenerator.js';
 import { ReferenceManager } from '../services/referenceManager.js';
 import { ConversationManager } from '../services/conversationManager.js';
@@ -71,7 +72,7 @@ router.post('/generate', requireApiKey, asyncHandler(async (req, res) => {
     }
 
     // 목차 생성 (SSE 스트리밍)
-    const tg = new TOCGenerator(projPath, req.apiKey);
+    const tg = new TOCGenerator(projPath, req.apiKeys);
     const tocData = await tg.generate(
       referencesContent,
       directionSummary,
@@ -188,15 +189,16 @@ router.post('/parse-md', requireApiKey, asyncHandler(async (req, res) => {
       sseSend({ type: 'progress', message: `📚 참고자료로 저장: ${refFileName}` });
     }
 
-    // Claude API로 MD → JSON TOC 변환
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const client = new Anthropic({ apiKey: req.apiKey });
+    // AI API로 MD → JSON TOC 변환 (멀티 프로바이더)
+    const useModel = model || 'claude-sonnet-4-20250514';
+    const provider = detectProvider(useModel);
+    const apiKey = resolveApiKey(provider, req.apiKeys);
 
-    sseSend({ type: 'progress', message: '🤖 Claude가 목차를 분석하고 있습니다...' });
+    sseSend({ type: 'progress', message: '🤖 AI가 목차를 분석하고 있습니다...' });
 
-    const response = await client.messages.create({
-      model: model || 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
+    const result = await chat({
+      provider, apiKey, model: useModel,
+      maxTokens: 4096,
       messages: [{ role: 'user', content: `다음 마크다운 교육자료를 분석하여 목차(Table of Contents)를 JSON 형식으로 추출해주세요.
 
 ## 입력 내용
@@ -237,7 +239,7 @@ ${content.slice(0, 50000)}
 - 반드시 유효한 JSON만 출력하세요 (설명 텍스트 없이 JSON 코드블록만)` }],
     });
 
-    const responseText = response.content[0].text;
+    const responseText = result.content;
 
     // JSON 추출
     const jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/) || responseText.match(/\{[\s\S]*\}/);

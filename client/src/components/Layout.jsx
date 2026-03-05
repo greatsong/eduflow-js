@@ -120,6 +120,29 @@ export default function Layout() {
               <span>{item.name}</span>
             </NavLink>
           ))}
+
+          <hr className="my-2 border-gray-200" />
+
+          {/* 수업 시나리오 */}
+          <p className="px-3 pt-1 pb-0.5 text-xs text-gray-400 font-semibold uppercase tracking-wide">
+            수업 시나리오
+          </p>
+          <NavLink
+            to="/lesson/vpython-1"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-indigo-100 text-indigo-900 font-medium'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`
+            }
+          >
+            <span>🎓</span>
+            <div className="flex-1 min-w-0">
+              <p className="truncate">VPython S1</p>
+              <p className="text-xs text-gray-400">말로 만드는 세계</p>
+            </div>
+          </NavLink>
         </nav>
 
         {/* API 키 상태 + 설정 */}
@@ -142,7 +165,7 @@ export default function Layout() {
 
         {/* 하단 정보 */}
         <div className="p-4 border-t border-gray-200 text-xs text-gray-400">
-          EduFlow v0.1.0
+          EduFlow v0.2.0 Multi-AI
         </div>
       </aside>
 

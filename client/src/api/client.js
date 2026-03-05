@@ -1,31 +1,59 @@
 export const API_BASE = import.meta.env.VITE_API_URL || '';
 
-const API_KEY_STORAGE = 'eduflow_api_key';
+// 프로바이더별 localStorage 키 매핑
+const PROVIDER_KEYS = {
+  anthropic: 'eduflow_api_key',       // 기존 호환
+  openai: 'eduflow_openai_key',
+  google: 'eduflow_google_key',
+  upstage: 'eduflow_upstage_key',
+};
 
-/** localStorage에서 API 키 가져오기 */
-export function getApiKey() {
-  return localStorage.getItem(API_KEY_STORAGE) || '';
+/** 프로바이더별 API 키 가져오기 */
+export function getApiKey(provider = 'anthropic') {
+  return localStorage.getItem(PROVIDER_KEYS[provider] || PROVIDER_KEYS.anthropic) || '';
 }
 
-/** localStorage에 API 키 저장 */
-export function setApiKey(key) {
+/** 프로바이더별 API 키 저장 */
+export function setApiKey(key, provider = 'anthropic') {
+  const storageKey = PROVIDER_KEYS[provider] || PROVIDER_KEYS.anthropic;
   if (key) {
-    localStorage.setItem(API_KEY_STORAGE, key);
+    localStorage.setItem(storageKey, key);
   } else {
-    localStorage.removeItem(API_KEY_STORAGE);
+    localStorage.removeItem(storageKey);
   }
 }
 
-/** API 키가 설정되어 있는지 확인 */
-export function hasApiKey() {
-  return !!getApiKey();
+/** 설정된 모든 프로바이더 키 조회 */
+export function getAllApiKeys() {
+  const keys = {};
+  for (const [provider, storageKey] of Object.entries(PROVIDER_KEYS)) {
+    const val = localStorage.getItem(storageKey);
+    if (val) keys[provider] = val;
+  }
+  return keys;
 }
 
-/** 공통 헤더 생성 */
+/** 아무 API 키라도 설정되어 있는지 확인 */
+export function hasApiKey() {
+  return Object.values(PROVIDER_KEYS).some((k) => !!localStorage.getItem(k));
+}
+
+/** 공통 헤더 생성 — 모든 프로바이더 키를 각각의 헤더로 전송 */
 function authHeaders(extra = {}) {
-  const key = getApiKey();
-  const headers = { 'Content-Type': 'application/json', ...extra };
-  if (key) headers['x-api-key'] = key;
+  const headers = { 'Content-Type': 'application/json' };
+  // 기존 호환: x-api-key
+  const anthropicKey = getApiKey('anthropic');
+  if (anthropicKey) headers['x-api-key'] = anthropicKey;
+
+  // 프로바이더별 헤더
+  const openaiKey = getApiKey('openai');
+  if (openaiKey) headers['x-openai-key'] = openaiKey;
+  const googleKey = getApiKey('google');
+  if (googleKey) headers['x-google-key'] = googleKey;
+  const upstageKey = getApiKey('upstage');
+  if (upstageKey) headers['x-upstage-key'] = upstageKey;
+
+  Object.assign(headers, extra);
   return headers;
 }
 
