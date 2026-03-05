@@ -465,6 +465,21 @@ export default function ModelCompare() {
               );
             })}
           </div>
+          {worstPicks.length > 0 && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+              <h4 className="text-sm font-bold text-red-700 mb-2">예선 탈락 (Worst)</h4>
+              <div className="flex items-center gap-2 flex-wrap">
+                {worstPicks.map((id) => {
+                  const info = getModelInfo(id);
+                  return (
+                    <span key={id} className={`text-xs px-2 py-1 rounded-full line-through ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>
+                      {info.display_name}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <details className="text-sm">
             <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium">회차별 상세</summary>
             <div className="mt-3 space-y-3">
