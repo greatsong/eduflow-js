@@ -178,10 +178,13 @@ async function _openaiChat({ apiKey, model, messages, system, maxTokens, baseURL
 
 async function _openaiStream({ apiKey, model, messages, system, maxTokens, res, onText, baseURL }) {
   const client = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
+  const tokensParam = _isReasoningModel(model)
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens };
   const stream = await client.chat.completions.create({
     model,
     messages: _buildOpenAIMessages(messages, system),
-    max_completion_tokens: maxTokens,
+    ...tokensParam,
     stream: true,
     stream_options: { include_usage: true },
   });
