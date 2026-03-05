@@ -85,6 +85,14 @@
       "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
     },
     {
+      "id": "gpt-5-nano",
+      "provider": "openai",
+      "display_name": "GPT-5 Nano",
+      "tier": "초경량·최저가",
+      "pricing": { "input": 0.05, "output": 0.40 },
+      "recommended_for": ["요약", "분류", "대량 생성"]
+    },
+    {
       "id": "gpt-4.1",
       "provider": "openai",
       "display_name": "GPT-4.1",
@@ -117,10 +125,34 @@
       "recommended_for": ["추론", "코딩", "수학"]
     },
     {
+      "id": "gemini-3.1-pro-preview",
+      "provider": "google",
+      "display_name": "Gemini 3.1 Pro",
+      "tier": "최신 최고급 추론",
+      "pricing": { "input": 2.0, "output": 12.0 },
+      "recommended_for": ["챕터 생성", "복잡한 추론", "에이전트", "코딩"]
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "provider": "google",
+      "display_name": "Gemini 3 Flash",
+      "tier": "고성능 멀티모달",
+      "pricing": { "input": 0.50, "output": 3.0 },
+      "recommended_for": ["챕터 생성", "멀티모달 이해", "대화"]
+    },
+    {
+      "id": "gemini-3.1-flash-lite-preview",
+      "provider": "google",
+      "display_name": "Gemini 3.1 Flash-Lite",
+      "tier": "초고속·최저가",
+      "pricing": { "input": 0.25, "output": 1.50 },
+      "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
+    },
+    {
       "id": "gemini-2.5-pro",
       "provider": "google",
       "display_name": "Gemini 2.5 Pro",
-      "tier": "최고급 추론",
+      "tier": "고급 추론",
       "pricing": { "input": 1.25, "output": 10.0 },
       "recommended_for": ["챕터 생성", "고품질 콘텐츠", "복잡한 추론"]
     },
