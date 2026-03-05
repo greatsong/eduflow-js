@@ -328,24 +328,31 @@ export default function ModelCompare() {
               {round}회차 시작
             </button>
           )}
-          {running && (
-            <button onClick={() => {
-              abortRef.current?.abort();
-              setRunning(false);
-              setResults((prev) => {
-                const copy = { ...prev };
-                for (const [id, r] of Object.entries(copy)) {
-                  if (r.status === 'streaming' || r.status === 'waiting') {
-                    copy[id] = { ...r, status: r.text ? 'done' : 'error', error: r.text ? undefined : '중지됨' };
-                  }
+        </div>
+      )}
+
+      {/* 중지 → 바로 투표 (생성 중일 때 항상 표시) */}
+      {running && (phase === 'prelim' || phase === 'finals') && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+          <p className="text-red-700 text-sm mb-2">생성이 너무 길면 중지하고 현재까지의 결과로 투표할 수 있습니다</p>
+          <button onClick={() => {
+            abortRef.current?.abort();
+            setRunning(false);
+            setResults((prev) => {
+              const copy = { ...prev };
+              for (const [id, r] of Object.entries(copy)) {
+                if (r.status === 'streaming' || r.status === 'waiting') {
+                  copy[id] = { ...r, status: r.text ? 'done' : 'error', error: r.text ? undefined : '중지됨' };
                 }
-                return copy;
-              });
-              if (phase === 'prelim') setPhase('prelim-rank');
-              if (phase === 'finals') setPhase('finals-rank');
-            }}
-              className="px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50">중지 → 바로 투표</button>
-          )}
+              }
+              return copy;
+            });
+            if (phase === 'prelim') setPhase('prelim-rank');
+            if (phase === 'finals') setPhase('finals-rank');
+          }}
+            className="px-6 py-2.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
+            중지 → 바로 투표
+          </button>
         </div>
       )}
 
