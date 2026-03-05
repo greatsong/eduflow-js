@@ -12,6 +12,7 @@ export const STEPS = [
 export const EXTRA_NAV = [
   { name: '포트폴리오', icon: '📊', route: '/portfolio' },
   { name: '베타 배포', icon: '🎁', route: '/beta' },
+  { name: 'AI 모델 비교', icon: '⚖️', route: '/compare' },
 ];
 
 // 챕터 상태

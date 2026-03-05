@@ -9,6 +9,8 @@ import ChapterCreation from './pages/ChapterCreation';
 import Deployment from './pages/Deployment';
 import Portfolio from './pages/Portfolio';
 import BetaDeploy from './pages/BetaDeploy';
+import ModelCompare from './pages/ModelCompare';
+import LessonPlayer from './pages/LessonPlayer';
 
 export default function App() {
   return (
@@ -23,6 +25,8 @@ export default function App() {
         <Route path="/deploy" element={<Deployment />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/beta" element={<BetaDeploy />} />
+        <Route path="/compare" element={<ModelCompare />} />
+        <Route path="/lesson/vpython-1" element={<LessonPlayer />} />
       </Route>
     </Routes>
   );

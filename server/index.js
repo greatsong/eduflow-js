@@ -11,6 +11,7 @@ import chaptersRouter from './routes/chapters.js';
 import deployRouter from './routes/deploy.js';
 import portfolioRouter from './routes/portfolio.js';
 import betaRouter from './routes/beta.js';
+import compareRouter from './routes/compare.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -70,6 +71,7 @@ app.use('/api/projects', projectsRouter);
 
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/beta', betaRouter);
+app.use('/api/compare', compareRouter);
 
 // 에러 핸들링
 app.use(errorHandler);
