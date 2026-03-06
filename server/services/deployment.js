@@ -643,15 +643,109 @@ export const collections = {
 `;
     await writeFile(join(slPath, 'src', 'content.config.ts'), contentConfig, 'utf-8');
 
-    // custom.css
+    // custom.css (ai-physical-computing 디자인 기반)
     const customCss = `@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
 
 :root {
-  --sl-font: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --sl-font-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --sl-color-accent-low: #1e3a5f;
-  --sl-color-accent: #3b82f6;
-  --sl-color-accent-high: #93c5fd;
+  /* 메인 색상 */
+  --sl-color-accent-low: #0d3d38;
+  --sl-color-accent: #4ECDC4;
+  --sl-color-accent-high: #a8e6e1;
+
+  /* 폰트 */
+  --sl-font: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* 텍스트 */
+  --sl-text-2xl: 1.75rem;
+  --sl-text-3xl: 2rem;
+  --sl-text-4xl: 2.5rem;
+
+  /* 콘텐츠 너비 */
+  --sl-content-width: 48rem;
+}
+
+/* 다크 모드 색상 */
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #0d3d38;
+  --sl-color-accent: #4ECDC4;
+  --sl-color-accent-high: #a8e6e1;
+}
+
+/* 팁 박스 */
+.tip-box {
+  border-left: 4px solid #FFE66D;
+  background: rgba(255, 230, 109, 0.08);
+  padding: 1rem 1.25rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  margin: 1rem 0;
+}
+
+/* 질문 박스 */
+.question-box {
+  border-left: 4px solid #4ECDC4;
+  background: rgba(78, 205, 196, 0.08);
+  padding: 1rem 1.25rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  margin: 1rem 0;
+  font-style: italic;
+}
+
+/* 난이도 표시 */
+.difficulty-dots span.filled {
+  color: #4ECDC4;
+}
+.difficulty-dots span.empty {
+  color: #4a5568;
+}
+
+/* 체크리스트 진행 바 */
+.progress-bar {
+  background: rgba(78, 205, 196, 0.2);
+  border-radius: 9999px;
+  height: 0.5rem;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  background: #4ECDC4;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* 코드 블록 줄별 해설 */
+.code-annotation {
+  background: rgba(78, 205, 196, 0.1);
+  border-left: 2px solid #4ECDC4;
+  padding: 0.25rem 0.75rem;
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+  border-radius: 0 0.25rem 0.25rem 0;
+}
+
+/* 메타 뱃지 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.badge-mint {
+  background: rgba(78, 205, 196, 0.15);
+  color: #4ECDC4;
+}
+.badge-coral {
+  background: rgba(255, 107, 107, 0.15);
+  color: #FF6B6B;
+}
+.badge-yellow {
+  background: rgba(255, 230, 109, 0.15);
+  color: #d4a810;
+}
+.badge-slate {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
 }
 `;
     await writeFile(join(slPath, 'src', 'styles', 'custom.css'), customCss, 'utf-8');
