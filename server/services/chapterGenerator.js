@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import pLimit from 'p-limit';
 import { TemplateManager } from './templateManager.js';
 import { streamChat, detectProvider, resolveApiKey } from './aiProvider.js';
+import { buildDevicesPrompt } from '../../shared/pedagogicalDevices.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -503,6 +504,16 @@ export class ChapterGenerator {
     const tm = new TemplateManager();
     const templateAddition = await tm.getChapterPromptAddition(this.projectPath);
 
+    // 교육적 장치 프롬프트 로드
+    let devicesPrompt = '';
+    const configPath = join(this.projectPath, 'config.json');
+    try {
+      const config = JSON.parse(await readFile(configPath, 'utf-8'));
+      if (config.pedagogical_devices && config.pedagogical_devices.length > 0) {
+        devicesPrompt = buildDevicesPrompt(config.pedagogical_devices);
+      }
+    } catch { /* config 없으면 기본 프롬프트 사용 */ }
+
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
     // estimated_time이 없으면 기본 1차시(50분) 기준으로 분량 가이드 생성
     const effectiveMinutes = timeMinutes > 0 ? timeMinutes : 50;
@@ -632,6 +643,8 @@ ${docStructure}
 - **시각 자료**: 다이어그램은 반드시 Mermaid 코드블록 사용
 - **마크다운 테이블 금지**: 파이프(|)와 대시(-)로 만드는 표(마크다운 테이블) 절대 사용 금지! 정보 요약은 볼드+목록, 개념 비교는 Mermaid로 표현
 - **ASCII art 절대 금지**: 텍스트 문자로 그림/도표/박스를 그리지 마세요
+
+${devicesPrompt}
 
 # 마크다운 형식으로 전체 챕터를 작성해주세요.
 위 구조를 **반드시 모두** 포함하되, 분량 가이드를 철저히 준수하세요.

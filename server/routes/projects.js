@@ -9,6 +9,7 @@ import { ProgressManager } from '../services/progressManager.js';
 import { TemplateManager } from '../services/templateManager.js';
 import { ReferenceManager } from '../services/referenceManager.js';
 import { sanitizeId } from '../middleware/sanitize.js';
+import { PEDAGOGICAL_DEVICES, DEVICE_CATEGORIES, RECOMMENDED_SETS } from '../../shared/pedagogicalDevices.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -340,6 +341,39 @@ router.put('/:id/context', asyncHandler(async (req, res) => {
   await pm.markStep1Completed();
 
   res.json({ success: true, message: '저장 완료' });
+}));
+
+// ============================================================
+// 교육적 장치 (Pedagogical Devices)
+// ============================================================
+
+// GET /api/projects/devices/catalog - 교육적 장치 카탈로그
+router.get('/devices/catalog', (req, res) => {
+  res.json({
+    categories: DEVICE_CATEGORIES,
+    devices: PEDAGOGICAL_DEVICES.map(({ id, name, description, category }) => ({ id, name, description, category })),
+    recommendedSets: RECOMMENDED_SETS,
+  });
+});
+
+// GET /api/projects/:id/devices - 프로젝트의 선택된 장치 목록
+router.get('/:id/devices', asyncHandler(async (req, res) => {
+  const config = await loadConfig(req.params.id);
+  if (!config) return res.status(404).json({ message: '프로젝트를 찾을 수 없습니다' });
+  res.json({ devices: config.pedagogical_devices || [] });
+}));
+
+// PUT /api/projects/:id/devices - 프로젝트의 교육적 장치 설정
+router.put('/:id/devices', asyncHandler(async (req, res) => {
+  const projPath = projectPath(req.params.id);
+  const configFile = join(projPath, 'config.json');
+  if (!existsSync(configFile)) return res.status(404).json({ message: '프로젝트를 찾을 수 없습니다' });
+
+  const config = JSON.parse(await readFile(configFile, 'utf-8'));
+  config.pedagogical_devices = req.body.devices || [];
+  await writeFile(configFile, JSON.stringify(config, null, 2), 'utf-8');
+
+  res.json({ success: true, devices: config.pedagogical_devices });
 }));
 
 export default router;

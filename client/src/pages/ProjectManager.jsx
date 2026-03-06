@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { apiFetch, apiStreamPost, API_BASE } from '../api/client';
 
-const TABS = ['프로젝트 설정', '참고자료', '프롬프트 설정', '빠른 시작'];
+const TABS = ['프로젝트 설정', '참고자료', '교육적 장치', '프롬프트 설정', '빠른 시작'];
 
 export default function ProjectManager() {
   const { projects, currentProject, fetchProjects, selectProject, clearProject } = useProjectStore();
@@ -55,8 +55,9 @@ export default function ProjectManager() {
       {/* 탭 콘텐츠 */}
       {activeTab === 0 && <ProjectSettingsTab project={currentProject} onCreated={fetchProjects} onUpdated={fetchProjects} />}
       {activeTab === 1 && <ReferencesTab projectId={currentProject?.name} />}
-      {activeTab === 2 && <PromptSettingsTab projectId={currentProject?.name} />}
-      {activeTab === 3 && <QuickStartTab projectId={currentProject?.name} />}
+      {activeTab === 2 && <PedagogicalDevicesTab projectId={currentProject?.name} />}
+      {activeTab === 3 && <PromptSettingsTab projectId={currentProject?.name} />}
+      {activeTab === 4 && <QuickStartTab projectId={currentProject?.name} />}
     </div>
   );
 }
@@ -831,6 +832,153 @@ function Field({ label, placeholder, value, onChange, disabled = false }) {
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
       />
+    </div>
+  );
+}
+
+// ============================================================
+// 탭 3: 교육적 장치 선택
+// ============================================================
+function PedagogicalDevicesTab({ projectId }) {
+  const [catalog, setCatalog] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    apiFetch('/api/projects/devices/catalog').then(setCatalog).catch(() => {});
+    if (projectId) {
+      apiFetch(`/api/projects/${projectId}/devices`)
+        .then((d) => setSelected(d.devices || []))
+        .catch(() => {});
+    }
+  }, [projectId]);
+
+  if (!projectId) {
+    return <p className="text-gray-400 text-sm py-8 text-center">먼저 프로젝트를 선택하세요.</p>;
+  }
+
+  if (!catalog) {
+    return <p className="text-gray-400 text-sm py-8 text-center">로딩 중...</p>;
+  }
+
+  const toggle = (id) => {
+    setSelected((prev) => prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]);
+    setMessage('');
+  };
+
+  const applySet = (setId) => {
+    const rec = catalog.recommendedSets[setId];
+    if (rec) {
+      setSelected(rec.devices);
+      setMessage('');
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/devices`, {
+        method: 'PUT',
+        body: JSON.stringify({ devices: selected }),
+      });
+      setMessage('저장 완료! 챕터 생성 시 선택한 장치가 적용됩니다.');
+    } catch (e) {
+      setMessage(`오류: ${e.message}`);
+    }
+    setSaving(false);
+  };
+
+  const { categories, devices, recommendedSets } = catalog;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-4">
+        <h3 className="font-semibold text-purple-900 mb-1">📊 교육적 장치 선택</h3>
+        <p className="text-sm text-purple-700">
+          챕터 생성 시 AI가 적용할 교육적 장치를 선택하세요. 주제에 맞는 추천 세트를 사용하거나 직접 골라보세요.
+        </p>
+      </div>
+
+      {/* 추천 세트 */}
+      <div>
+        <h4 className="text-sm font-medium text-gray-700 mb-2">추천 세트</h4>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(recommendedSets).map(([setId, set]) => (
+            <button
+              key={setId}
+              onClick={() => applySet(setId)}
+              className="px-3 py-1.5 text-xs rounded-full border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors"
+            >
+              {set.label} ({set.devices.length}개)
+            </button>
+          ))}
+          <button
+            onClick={() => setSelected([])}
+            className="px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100"
+          >
+            초기화
+          </button>
+        </div>
+      </div>
+
+      {/* 카테고리별 장치 */}
+      {categories.map((cat) => {
+        const catDevices = devices.filter((d) => d.category === cat.id);
+        if (catDevices.length === 0) return null;
+
+        return (
+          <div key={cat.id}>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">
+              {cat.icon} {cat.label}
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {catDevices.map((device) => {
+                const isSelected = selected.includes(device.id);
+                return (
+                  <button
+                    key={device.id}
+                    onClick={() => toggle(device.id)}
+                    className={`text-left p-3 rounded-lg border transition-all ${
+                      isSelected
+                        ? 'border-purple-400 bg-purple-50 ring-1 ring-purple-300'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-0.5 text-sm ${isSelected ? 'text-purple-600' : 'text-gray-300'}`}>
+                        {isSelected ? '✅' : '⬜'}
+                      </span>
+                      <div>
+                        <p className={`text-sm font-medium ${isSelected ? 'text-purple-900' : 'text-gray-700'}`}>
+                          {device.name}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">{device.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* 저장 */}
+      <div className="flex items-center gap-4">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-5 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium"
+        >
+          {saving ? '저장 중...' : `💾 저장 (${selected.length}개 선택)`}
+        </button>
+        {message && (
+          <span className={`text-sm ${message.startsWith('오류') ? 'text-red-600' : 'text-green-600'}`}>
+            {message}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
