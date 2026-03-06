@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, stat, mkdir, unlink, copyFile } from 'fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir, unlink, copyFile, rm } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync, createReadStream } from 'fs';
 import { fileURLToPath } from 'url';
@@ -12,6 +12,7 @@ export class Deployment {
     this.docsPath = join(projectPath, 'docs');
     this.outputPath = join(projectPath, 'output');
     this.sitePath = join(projectPath, 'site');
+    this.starlightPath = join(projectPath, '_starlight');
   }
 
   async init() {
@@ -457,6 +458,370 @@ ${navYaml}`;
     } catch (e) {
       // 포트폴리오 갱신 실패는 배포 자체를 실패시키지 않음
       return { success: false, message: `포트폴리오 갱신 실패: ${e.message}` };
+    }
+  }
+
+  // =============================================
+  // Starlight 관련 메서드
+  // =============================================
+
+  /**
+   * 마크다운을 Starlight 호환 형식으로 변환
+   */
+  _convertToStarlight(markdown) {
+    let content = markdown;
+
+    // pymdownx admonition -> Starlight aside
+    content = content.replace(
+      /^!!! (\w+)(?: "([^"]*)")?\s*\n((?:    .+\n?)*)/gm,
+      (_, type, title, body) => {
+        const typeMap = { note: 'note', tip: 'tip', warning: 'caution', danger: 'danger', info: 'note', success: 'tip', example: 'note' };
+        const starlightType = typeMap[type] || 'note';
+        const cleanBody = body.replace(/^    /gm, '');
+        return title
+          ? `:::${starlightType}[${title}]\n${cleanBody}:::\n`
+          : `:::${starlightType}\n${cleanBody}:::\n`;
+      }
+    );
+
+    // ??? collapsible admonition -> aside
+    content = content.replace(
+      /^\?\?\?[+]? (\w+)(?: "([^"]*)")?\s*\n((?:    .+\n?)*)/gm,
+      (_, type, title, body) => {
+        const typeMap = { note: 'note', tip: 'tip', warning: 'caution', danger: 'danger', info: 'note' };
+        const starlightType = typeMap[type] || 'note';
+        const cleanBody = body.replace(/^    /gm, '');
+        return title
+          ? `:::${starlightType}[${title}]\n${cleanBody}:::\n`
+          : `:::${starlightType}\n${cleanBody}:::\n`;
+      }
+    );
+
+    return content;
+  }
+
+  /**
+   * frontmatter 추가/갱신
+   */
+  _addFrontmatter(content, title, order) {
+    const stripped = content.replace(/^---\n[\s\S]*?\n---\n*/, '');
+    const fm = `---\ntitle: "${title.replace(/"/g, '\\"')}"\nsidebar:\n  order: ${order}\n---\n\n`;
+    return fm + stripped;
+  }
+
+  /**
+   * Starlight 프로젝트 스캐폴딩 생성
+   */
+  async generateStarlightProject(siteName, repoName, username) {
+    const tocFile = join(this.projectPath, 'toc.json');
+    let tocData = null;
+    if (existsSync(tocFile)) {
+      try { tocData = JSON.parse(await readFile(tocFile, 'utf-8')); } catch { /* skip */ }
+    }
+
+    const chapters = await this.getChapterFiles();
+    if (chapters.length === 0) {
+      return { success: false, message: '챕터 파일이 없습니다' };
+    }
+
+    const slPath = this.starlightPath;
+
+    // node_modules 보존을 위해 src/ 만 재생성
+    const srcPath = join(slPath, 'src');
+    if (existsSync(srcPath)) {
+      await rm(srcPath, { recursive: true, force: true });
+    }
+    await mkdir(join(slPath, 'src', 'content', 'docs'), { recursive: true });
+    await mkdir(join(slPath, 'src', 'styles'), { recursive: true });
+
+    // 파트별 디렉토리 생성 + 챕터 복사
+    let globalOrder = 1;
+
+    if (tocData) {
+      for (const part of tocData.parts || []) {
+        const partDir = `part-${part.part_number}`;
+        const partPath = join(slPath, 'src', 'content', 'docs', partDir);
+        await mkdir(partPath, { recursive: true });
+
+        let chapterOrder = 1;
+        for (const ch of part.chapters || []) {
+          const srcFile = join(this.docsPath, `${ch.chapter_id}.md`);
+          if (!existsSync(srcFile)) continue;
+
+          let content = await readFile(srcFile, 'utf-8');
+          content = this._convertToStarlight(content);
+          content = this._addFrontmatter(content, ch.chapter_title, chapterOrder);
+
+          const destFile = join(partPath, `${ch.chapter_id}.md`);
+          await writeFile(destFile, content, 'utf-8');
+          chapterOrder++;
+          globalOrder++;
+        }
+      }
+    } else {
+      for (const ch of chapters) {
+        let content = await readFile(ch.path, 'utf-8');
+        content = this._convertToStarlight(content);
+        content = this._addFrontmatter(content, ch.title, globalOrder);
+        const destFile = join(slPath, 'src', 'content', 'docs', `${ch.id}.md`);
+        await writeFile(destFile, content, 'utf-8');
+        globalOrder++;
+      }
+    }
+
+    // sidebar config
+    const sidebarEntries = [];
+    if (tocData) {
+      for (const part of tocData.parts || []) {
+        const partDir = `part-${part.part_number}`;
+        const label = `Part ${part.part_number}: ${part.part_title}`;
+        sidebarEntries.push(`          {\n            label: '${label.replace(/'/g, "\\'")}',\n            autogenerate: { directory: '${partDir}' },\n          }`);
+      }
+    } else {
+      sidebarEntries.push(`          {\n            label: '목차',\n            autogenerate: { directory: '.' },\n          }`);
+    }
+
+    const basePath = repoName ? `/${repoName}` : '';
+    const siteUrlBase = username ? `https://${username}.github.io` : 'https://example.github.io';
+
+    // astro.config.mjs
+    const astroConfig = `import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+
+export default defineConfig({
+  site: '${siteUrlBase}',
+  base: '${basePath}',
+  integrations: [
+    starlight({
+      title: '${siteName.replace(/'/g, "\\'")}',
+      defaultLocale: 'root',
+      locales: {
+        root: { label: '한국어', lang: 'ko' },
+      },
+      sidebar: [
+${sidebarEntries.join(',\n')}
+      ],
+      customCss: ['./src/styles/custom.css'],
+    }),
+  ],
+});
+`;
+    await writeFile(join(slPath, 'astro.config.mjs'), astroConfig, 'utf-8');
+
+    // package.json
+    const pkgJson = {
+      name: repoName || 'starlight-docs',
+      type: 'module',
+      version: '0.0.1',
+      scripts: {
+        dev: 'astro dev',
+        start: 'astro dev',
+        build: 'astro build',
+        preview: 'astro preview',
+        astro: 'astro',
+      },
+      dependencies: {
+        astro: '^5.6.0',
+        '@astrojs/starlight': '^0.34.0',
+        sharp: '^0.33.0',
+      },
+    };
+    await writeFile(join(slPath, 'package.json'), JSON.stringify(pkgJson, null, 2), 'utf-8');
+
+    // tsconfig.json
+    await writeFile(join(slPath, 'tsconfig.json'), JSON.stringify({
+      extends: 'astro/tsconfigs/strict',
+    }, null, 2), 'utf-8');
+
+    // content.config.ts
+    const contentConfig = `import { defineCollection } from 'astro:content';
+import { docsSchema } from '@astrojs/starlight/schema';
+
+export const collections = {
+  docs: defineCollection({ schema: docsSchema() }),
+};
+`;
+    await writeFile(join(slPath, 'src', 'content.config.ts'), contentConfig, 'utf-8');
+
+    // custom.css
+    const customCss = `@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+
+:root {
+  --sl-font: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sl-color-accent-low: #1e3a5f;
+  --sl-color-accent: #3b82f6;
+  --sl-color-accent-high: #93c5fd;
+}
+`;
+    await writeFile(join(slPath, 'src', 'styles', 'custom.css'), customCss, 'utf-8');
+
+    // index.mdx (splash page)
+    const desc = tocData?.description || siteName;
+    const firstChapterId = tocData?.parts?.[0]?.chapters?.[0]?.chapter_id;
+    const startLink = firstChapterId
+      ? `${basePath}/part-1/${firstChapterId}/`.replace(/\/+/g, '/')
+      : '#';
+
+    let indexContent = `---
+title: "${siteName.replace(/"/g, '\\"')}"
+template: splash
+hero:
+  tagline: "${desc.replace(/"/g, '\\"')}"
+  actions:
+    - text: 학습 시작
+      link: ${startLink}
+      icon: right-arrow
+---
+
+## 목차
+
+`;
+
+    if (tocData) {
+      for (const part of tocData.parts || []) {
+        indexContent += `### Part ${part.part_number}: ${part.part_title}\n\n`;
+        for (const ch of part.chapters || []) {
+          if (existsSync(join(this.docsPath, `${ch.chapter_id}.md`))) {
+            indexContent += `- [${ch.chapter_title}](${basePath}/part-${part.part_number}/${ch.chapter_id}/)\n`;
+          }
+        }
+        indexContent += '\n';
+      }
+    }
+
+    await writeFile(join(slPath, 'src', 'content', 'docs', 'index.mdx'), indexContent, 'utf-8');
+
+    return {
+      success: true,
+      starlightPath: slPath,
+      chapterCount: globalOrder - 1,
+      message: `Starlight 프로젝트 생성 완료 (${globalOrder - 1}개 챕터)`,
+    };
+  }
+
+  /**
+   * Starlight npm install
+   */
+  async installStarlight() {
+    try {
+      await execa('npm', ['install'], {
+        cwd: this.starlightPath,
+        timeout: 300000,
+      });
+      return { success: true, message: '의존성 설치 완료' };
+    } catch (e) {
+      return { success: false, message: e.shortMessage || e.message };
+    }
+  }
+
+  /**
+   * Starlight 빌드
+   */
+  async buildStarlight() {
+    try {
+      const astroCache = join(this.starlightPath, '.astro');
+      if (existsSync(astroCache)) {
+        await rm(astroCache, { recursive: true, force: true });
+      }
+
+      const result = await execa('npm', ['run', 'build'], {
+        cwd: this.starlightPath,
+        timeout: 300000,
+      });
+      return { success: true, message: '빌드 성공', stdout: result.stdout };
+    } catch (e) {
+      return { success: false, message: e.shortMessage || e.message, error: e.stderr };
+    }
+  }
+
+  /**
+   * Starlight 로컬 프리뷰
+   */
+  async serveStarlight(port = 4321) {
+    try {
+      try {
+        const { stdout } = await execa('lsof', ['-ti', `:${port}`]);
+        if (stdout.trim()) {
+          for (const pid of stdout.trim().split('\n')) {
+            try { process.kill(Number(pid), 'SIGTERM'); } catch { /* ignore */ }
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      } catch { /* 포트 사용 중인 프로세스 없음 */ }
+
+      const subprocess = execa('npm', ['run', 'preview', '--', '--port', String(port)], {
+        cwd: this.starlightPath,
+        detached: true,
+        stdio: 'ignore',
+      });
+      subprocess.catch(() => {});
+      subprocess.unref();
+      return { success: true, url: `http://localhost:${port}`, pid: subprocess.pid };
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
+  }
+
+  /**
+   * Starlight GitHub Pages 배포
+   */
+  async deployStarlightToGitHub(repoName) {
+    const userResult = await this.getGitHubUser();
+    if (!userResult.success) {
+      return { success: false, message: userResult.message };
+    }
+    const username = userResult.username;
+
+    const distPath = join(this.starlightPath, 'dist');
+    if (!existsSync(distPath)) {
+      return { success: false, message: '빌드된 파일이 없습니다. 먼저 빌드를 실행하세요.' };
+    }
+
+    try {
+      let repoExists = false;
+      try {
+        await execa('gh', ['repo', 'view', `${username}/${repoName}`]);
+        repoExists = true;
+      } catch { /* 없음 */ }
+
+      if (!repoExists) {
+        await execa('gh', ['repo', 'create', repoName, '--public']);
+      }
+
+      const gitDir = join(distPath, '.git');
+      if (existsSync(gitDir)) {
+        await rm(gitDir, { recursive: true, force: true });
+      }
+
+      await execa('git', ['init'], { cwd: distPath });
+      await execa('git', ['add', '.'], { cwd: distPath });
+      await execa('git', ['commit', '-m', 'Deploy Starlight site'], { cwd: distPath });
+      await execa('git', ['branch', '-M', 'gh-pages'], { cwd: distPath });
+      await execa('git', ['remote', 'add', 'origin', `https://github.com/${username}/${repoName}.git`], { cwd: distPath });
+      await execa('git', ['push', '-f', 'origin', 'gh-pages'], { cwd: distPath });
+
+      try {
+        await execa('gh', ['api', '-X', 'PUT', `repos/${username}/${repoName}/pages`,
+          '-f', 'source[branch]=gh-pages', '-f', 'source[path]=/',
+        ]);
+      } catch {
+        try {
+          await execa('gh', ['api', '-X', 'POST', `repos/${username}/${repoName}/pages`,
+            '-f', 'source[branch]=gh-pages', '-f', 'source[path]=/',
+          ]);
+        } catch { /* Pages가 이미 활성화됨 */ }
+      }
+
+      const siteUrl = `https://${username}.github.io/${repoName}/`;
+      return {
+        success: true,
+        site_url: siteUrl,
+        repo_url: `https://github.com/${username}/${repoName}`,
+        username,
+      };
+    } catch (e) {
+      return { success: false, message: e.shortMessage || e.message, error: e.stderr };
     }
   }
 

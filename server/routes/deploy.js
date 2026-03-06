@@ -26,6 +26,8 @@ router.get('/status', asyncHandler(async (req, res) => {
   const tools = await dep.checkTools();
   const chapters = await dep.getChapterFiles();
   const hasMkdocsYml = existsSync(join(projectPath(req.params.id), 'mkdocs.yml'));
+  const hasStarlight = existsSync(join(projectPath(req.params.id), '_starlight', 'package.json'));
+  const hasStarlightDist = existsSync(join(projectPath(req.params.id), '_starlight', 'dist'));
 
   let ghUser = null;
   if (tools.gh) {
@@ -33,10 +35,14 @@ router.get('/status', asyncHandler(async (req, res) => {
     if (result.success) ghUser = result.username;
   }
 
+  tools.node = true;
+
   res.json({
     tools,
     chapterCount: chapters.length,
     hasMkdocsYml,
+    hasStarlight,
+    hasStarlightDist,
     ghUser,
   });
 }));
@@ -124,7 +130,104 @@ router.get('/docx/download', asyncHandler(async (req, res) => {
   createReadStream(filePath).pipe(res);
 }));
 
-// POST /api/projects/:id/deploy/github - GitHub Pages 배포
+// =============================================
+// Starlight 엔드포인트
+// =============================================
+
+// POST /api/projects/:id/deploy/starlight/config - Starlight 프로젝트 생성
+router.post('/starlight/config', asyncHandler(async (req, res) => {
+  const { siteName, repoName } = req.body;
+  const dep = new Deployment(projectPath(req.params.id));
+  await dep.init();
+
+  let username = null;
+  const userResult = await dep.getGitHubUser();
+  if (userResult.success) username = userResult.username;
+
+  const result = await dep.generateStarlightProject(
+    siteName || '교육자료',
+    repoName || '',
+    username || ''
+  );
+  res.json(result);
+}));
+
+// POST /api/projects/:id/deploy/starlight/install - npm install
+router.post('/starlight/install', asyncHandler(async (req, res) => {
+  const dep = new Deployment(projectPath(req.params.id));
+  const result = await dep.installStarlight();
+  res.json(result);
+}));
+
+// POST /api/projects/:id/deploy/starlight/build - 빌드
+router.post('/starlight/build', asyncHandler(async (req, res) => {
+  const dep = new Deployment(projectPath(req.params.id));
+  const result = await dep.buildStarlight();
+  res.json(result);
+}));
+
+// POST /api/projects/:id/deploy/starlight/serve - 로컬 프리뷰
+router.post('/starlight/serve', asyncHandler(async (req, res) => {
+  const { port } = req.body;
+  const dep = new Deployment(projectPath(req.params.id));
+  const result = await dep.serveStarlight(port || 4321);
+  res.json(result);
+}));
+
+// POST /api/projects/:id/deploy/starlight/github - 원스텝 배포
+router.post('/starlight/github', asyncHandler(async (req, res) => {
+  const { siteName, repoName } = req.body;
+  if (!repoName) {
+    return res.status(400).json({ message: '저장소 이름이 필요합니다' });
+  }
+
+  const dep = new Deployment(projectPath(req.params.id));
+  await dep.init();
+
+  // Step 1: config
+  let username = null;
+  const userResult = await dep.getGitHubUser();
+  if (userResult.success) username = userResult.username;
+
+  const configResult = await dep.generateStarlightProject(
+    siteName || '교육자료', repoName, username || ''
+  );
+  if (!configResult.success) {
+    return res.json({ success: false, message: `프로젝트 생성 실패: ${configResult.message}`, step: 'config' });
+  }
+
+  // Step 2: install
+  const installResult = await dep.installStarlight();
+  if (!installResult.success) {
+    return res.json({ success: false, message: `의존성 설치 실패: ${installResult.message}`, step: 'install' });
+  }
+
+  // Step 3: build
+  const buildResult = await dep.buildStarlight();
+  if (!buildResult.success) {
+    return res.json({ success: false, message: `빌드 실패: ${buildResult.message}`, step: 'build' });
+  }
+
+  // Step 4: deploy
+  const deployResult = await dep.deployStarlightToGitHub(repoName);
+
+  // 배포 성공 시 deployment_info 저장
+  if (deployResult.success && deployResult.site_url) {
+    const { writeFile } = await import('fs/promises');
+    const infoPath = join(projectPath(req.params.id), 'deployment_info.json');
+    await writeFile(infoPath, JSON.stringify({
+      engine: 'starlight',
+      site_url: deployResult.site_url,
+      repo_url: deployResult.repo_url,
+      username: deployResult.username,
+      deployed_at: new Date().toISOString(),
+    }, null, 2), 'utf-8');
+  }
+
+  res.json(deployResult);
+}));
+
+// POST /api/projects/:id/deploy/github - GitHub Pages 배포 (MkDocs)
 router.post('/github', asyncHandler(async (req, res) => {
   const { repoName } = req.body;
   if (!repoName) {

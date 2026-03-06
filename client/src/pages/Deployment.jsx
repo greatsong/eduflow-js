@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { apiFetch } from '../api/client';
 
-const TABS = ['🌐 MkDocs 웹사이트', '📄 DOCX 문서', '🔍 미리보기'];
+const TABS = ['⭐ Starlight 웹사이트', '🌐 MkDocs 웹사이트', '📄 DOCX 문서', '🔍 미리보기'];
 
 export default function Deployment() {
   const navigate = useNavigate();
@@ -72,9 +72,10 @@ export default function Deployment() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {activeTab === 0 && <MkDocsTab project={currentProject} status={status} />}
-        {activeTab === 1 && <DocxTab project={currentProject} status={status} />}
-        {activeTab === 2 && <PreviewTab project={currentProject} status={status} />}
+        {activeTab === 0 && <StarlightTab project={currentProject} status={status} />}
+        {activeTab === 1 && <MkDocsTab project={currentProject} status={status} />}
+        {activeTab === 2 && <DocxTab project={currentProject} status={status} />}
+        {activeTab === 3 && <PreviewTab project={currentProject} status={status} />}
       </div>
 
       {/* 포트폴리오로 */}
@@ -91,33 +92,30 @@ export default function Deployment() {
 }
 
 // =============================================
-// 탭 1: MkDocs 웹사이트
+// 탭 0: Starlight 웹사이트
 // =============================================
-// 레포 이름 추천 함수
+
+// 레포 이름 추천 함수 (공용)
 function suggestRepoNames(projectName) {
   const sanitize = (name) =>
     name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
   const suggestions = [];
 
-  // 1. 프로젝트 이름 그대로 (30자 이하)
   if (projectName && projectName.length <= 30) {
     suggestions.push(sanitize(projectName));
   }
 
-  // 2. 날짜 접미사 제거 (-260207 등)
   const withoutDate = projectName.replace(/-\d{6}$/, '');
   if (withoutDate !== projectName && withoutDate.length >= 3) {
     suggestions.push(sanitize(withoutDate));
   }
 
-  // 3. 숫자 접미사 제거 (-000 등)
   const withoutNum = projectName.replace(/-\d+$/, '');
   if (withoutNum !== projectName && withoutNum !== withoutDate && withoutNum.length >= 3) {
     suggestions.push(sanitize(withoutNum));
   }
 
-  // 4. 너무 길면 첫 2~3 세그먼트만
   if (projectName.length > 30) {
     const segments = projectName.split('-');
     if (segments.length > 2) {
@@ -126,16 +124,214 @@ function suggestRepoNames(projectName) {
     }
   }
 
-  // 5. -book 또는 -course 변형
   const base = sanitize(withoutDate.length >= 3 ? withoutDate : projectName);
   if (base.length <= 20 && !base.includes('book') && !base.includes('course')) {
     suggestions.push(`${base}-book`);
   }
 
-  // 중복 제거 + 빈 문자열 제거 + 최대 3개
   return [...new Set(suggestions)].filter(Boolean).slice(0, 3);
 }
 
+function StarlightTab({ project, status }) {
+  const [siteName, setSiteName] = useState('');
+  const [repoName, setRepoName] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState('');
+  const [result, setResult] = useState(null);
+  const resultRef = useRef(null);
+
+  useEffect(() => {
+    apiFetch(`/api/projects/${project.name}/toc`)
+      .then((d) => setSiteName(d.toc?.title || '교육자료'))
+      .catch(() => setSiteName('교육자료'));
+
+    const names = suggestRepoNames(project.name);
+    setSuggestions(names);
+    if (!repoName && names.length > 0) setRepoName(names[0]);
+  }, [project]);
+
+  const handleOneDeploy = async () => {
+    if (!repoName.trim()) return;
+    setLoading(true);
+    setResult(null);
+    setStep('프로젝트 생성 → 의존성 설치 → 빌드 → 배포');
+
+    try {
+      const res = await apiFetch(`/api/projects/${project.name}/deploy/starlight/github`, {
+        method: 'POST',
+        body: JSON.stringify({ siteName, repoName: repoName.trim() }),
+      });
+      setResult(res);
+      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+    } catch (e) {
+      setResult({ success: false, message: e.message });
+      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+    }
+    setStep('');
+    setLoading(false);
+  };
+
+  const handleBuildOnly = async () => {
+    setLoading(true);
+    setResult(null);
+
+    try {
+      setStep('프로젝트 생성');
+      await apiFetch(`/api/projects/${project.name}/deploy/starlight/config`, {
+        method: 'POST',
+        body: JSON.stringify({ siteName, repoName: repoName.trim() }),
+      });
+
+      setStep('의존성 설치');
+      await apiFetch(`/api/projects/${project.name}/deploy/starlight/install`, {
+        method: 'POST',
+      });
+
+      setStep('빌드');
+      const buildRes = await apiFetch(`/api/projects/${project.name}/deploy/starlight/build`, {
+        method: 'POST',
+      });
+
+      setResult(buildRes.success
+        ? { success: true, buildOnly: true, message: '빌드 완료! 미리보기 탭에서 확인하세요.' }
+        : { success: false, message: buildRes.message }
+      );
+    } catch (e) {
+      setResult({ success: false, message: e.message });
+    }
+    setStep('');
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 p-5">
+        <h3 className="font-semibold text-indigo-900 mb-1">⭐ Astro Starlight</h3>
+        <p className="text-sm text-indigo-700 mb-4">
+          최신 문서 프레임워크로 검색, 다크모드, 반응형이 기본 제공됩니다.
+        </p>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">사이트 제목</label>
+            <input
+              type="text"
+              value={siteName}
+              onChange={(e) => setSiteName(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">저장소 이름</label>
+            <input
+              type="text"
+              value={repoName}
+              onChange={(e) => setRepoName(e.target.value)}
+              placeholder="my-education-site"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+            {suggestions.length > 0 && (
+              <div className="flex gap-2 mt-2 items-center">
+                <span className="text-xs text-gray-400">추천:</span>
+                {suggestions.map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => setRepoName(name)}
+                    className={`px-2.5 py-0.5 text-xs rounded-full border transition-colors ${
+                      repoName === name
+                        ? 'bg-indigo-100 border-indigo-300 text-indigo-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {repoName && status?.ghUser && (
+          <p className="text-xs text-indigo-500 mb-4">
+            🌐 https://{status.ghUser}.github.io/{repoName}/
+          </p>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleOneDeploy}
+            disabled={loading || !repoName.trim() || !status?.tools?.gh || !status?.ghUser}
+            className="px-5 py-2.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                배포 중...
+              </span>
+            ) : '⭐ Starlight로 배포'}
+          </button>
+          <button
+            onClick={handleBuildOnly}
+            disabled={loading}
+            className="px-4 py-2.5 border border-gray-300 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            📦 빌드만
+          </button>
+        </div>
+
+        {loading && step && (
+          <div className="mt-4 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
+            <div className="flex items-center gap-3">
+              <span className="inline-block w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-indigo-700 font-medium">{step}...</span>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div ref={resultRef} className={`mt-4 p-4 rounded-xl border-2 ${result.success ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+            {result.success ? (
+              result.buildOnly ? (
+                <p className="text-sm text-green-700 font-medium">✅ {result.message}</p>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-green-800">✅ Starlight 배포 완료!</p>
+                    <a href={result.site_url} target="_blank" rel="noopener noreferrer"
+                      className="text-green-700 underline font-medium text-sm">
+                      🌐 {result.site_url}
+                    </a>
+                    <p className="text-xs text-gray-500 mt-1">GitHub Pages 반영까지 1~2분 소요될 수 있습니다.</p>
+                  </div>
+                  <a href={result.site_url} target="_blank" rel="noopener noreferrer"
+                    className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 whitespace-nowrap">
+                    사이트 열기 →
+                  </a>
+                </div>
+              )
+            ) : (
+              <div>
+                <p className="font-semibold text-red-800">❌ 실패</p>
+                <p className="text-sm text-red-700 mt-1">{result.message}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!status?.ghUser && (
+          <p className="mt-3 text-sm text-amber-600">
+            ⚠️ GitHub 배포에는 로그인이 필요합니다. <code className="bg-amber-100 px-1 rounded">gh auth login</code>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================
+// 탭 1: MkDocs 웹사이트
+// =============================================
 function MkDocsTab({ project, status }) {
   const [siteName, setSiteName] = useState('');
   const [theme, setTheme] = useState('material');
@@ -147,12 +343,10 @@ function MkDocsTab({ project, status }) {
   const deployResultRef = useRef(null);
 
   useEffect(() => {
-    // TOC에서 제목 가져오기
     apiFetch(`/api/projects/${project.name}/toc`)
       .then((d) => setSiteName(d.toc?.title || '교육자료'))
       .catch(() => setSiteName('교육자료'));
 
-    // 레포 이름 추천 생성
     const names = suggestRepoNames(project.name);
     setSuggestions(names);
     if (!repoName && names.length > 0) {
@@ -521,40 +715,53 @@ function DocxTab({ project, status }) {
 }
 
 // =============================================
-// 탭 3: 미리보기 (MkDocs 서버 자동 실행 + iframe)
+// 탭 3: 미리보기 (Starlight / MkDocs 자동 선택)
 // =============================================
 function PreviewTab({ project, status }) {
-  const [serveState, setServeState] = useState('idle'); // idle | starting | running | error
+  const [serveState, setServeState] = useState('idle');
   const [serveUrl, setServeUrl] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [retryCount, setRetryCount] = useState(0);
-  const PREVIEW_PORT = 8000;
+  const [engine, setEngine] = useState('auto');
+
+  const effectiveEngine = engine === 'auto'
+    ? (status?.hasStarlightDist ? 'starlight' : 'mkdocs')
+    : engine;
 
   const startServe = async (cancelled = { current: false }) => {
     setServeState('starting');
     try {
-      // 먼저 빌드
-      await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/build`, {
-        method: 'POST',
-      });
-
-      if (cancelled.current) return;
-
-      // 서버 실행 (백엔드에서 기존 프로세스 정리 후 시작)
-      const result = await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/serve`, {
-        method: 'POST',
-        body: JSON.stringify({ port: PREVIEW_PORT }),
-      });
-
-      if (cancelled.current) return;
-
-      if (result.success) {
-        await new Promise((r) => setTimeout(r, 2000));
-        setServeUrl(result.url);
-        setServeState('running');
+      if (effectiveEngine === 'starlight') {
+        const result = await apiFetch(`/api/projects/${project.name}/deploy/starlight/serve`, {
+          method: 'POST',
+          body: JSON.stringify({ port: 4321 }),
+        });
+        if (cancelled.current) return;
+        if (result.success) {
+          await new Promise((r) => setTimeout(r, 2000));
+          setServeUrl(result.url);
+          setServeState('running');
+        } else {
+          setErrorMsg(result.message || '서버 실행 실패');
+          setServeState('error');
+        }
       } else {
-        setErrorMsg(result.message || '서버 실행 실패');
-        setServeState('error');
+        await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/build`, { method: 'POST' });
+        if (cancelled.current) return;
+
+        const result = await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/serve`, {
+          method: 'POST',
+          body: JSON.stringify({ port: 8000 }),
+        });
+        if (cancelled.current) return;
+        if (result.success) {
+          await new Promise((r) => setTimeout(r, 2000));
+          setServeUrl(result.url);
+          setServeState('running');
+        } else {
+          setErrorMsg(result.message || '서버 실행 실패');
+          setServeState('error');
+        }
       }
     } catch (e) {
       if (!cancelled.current) {
@@ -564,27 +771,21 @@ function PreviewTab({ project, status }) {
     }
   };
 
-  useEffect(() => {
-    if (!status?.tools?.mkdocs || !status?.hasMkdocsYml) return;
+  const hasAnyPreview = status?.hasStarlightDist || (status?.tools?.mkdocs && status?.hasMkdocsYml);
 
+  useEffect(() => {
+    if (!hasAnyPreview) return;
     const cancelled = { current: false };
     startServe(cancelled);
     return () => { cancelled.current = true; };
-  }, [project, retryCount]);
+  }, [project, retryCount, effectiveEngine]);
 
-  if (!status?.tools?.mkdocs) {
+  if (!hasAnyPreview) {
     return (
       <div className="text-center py-16">
-        <p className="text-gray-400 text-sm">MkDocs가 설치되지 않았습니다.</p>
-        <code className="block mt-2 text-xs text-gray-500">pip install mkdocs mkdocs-material</code>
-      </div>
-    );
-  }
-
-  if (!status?.hasMkdocsYml) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-gray-400 text-sm">먼저 "🌐 MkDocs 웹사이트" 탭에서 MkDocs 프로젝트를 생성하세요.</p>
+        <p className="text-gray-400 text-sm">
+          미리보기를 사용하려면 Starlight 빌드 또는 MkDocs 프로젝트가 필요합니다.
+        </p>
       </div>
     );
   }
@@ -593,7 +794,9 @@ function PreviewTab({ project, status }) {
     return (
       <div className="text-center py-16">
         <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-gray-500 text-sm">MkDocs 빌드 및 서버 시작 중...</p>
+        <p className="text-gray-500 text-sm">
+          {effectiveEngine === 'starlight' ? 'Starlight' : 'MkDocs'} 서버 시작 중...
+        </p>
       </div>
     );
   }
@@ -614,12 +817,27 @@ function PreviewTab({ project, status }) {
   }
 
   if (serveState === 'running' && serveUrl) {
+    const bothAvailable = status?.hasStarlightDist && status?.tools?.mkdocs && status?.hasMkdocsYml;
+
     return (
       <div className="h-full flex flex-col">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-green-600">
-            MkDocs 서버 실행 중: {serveUrl}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-green-600">
+              {effectiveEngine === 'starlight' ? '⭐ Starlight' : '🌐 MkDocs'} 서버: {serveUrl}
+            </span>
+            {bothAvailable && (
+              <select
+                value={engine}
+                onChange={(e) => { setEngine(e.target.value); setServeState('idle'); setRetryCount((c) => c + 1); }}
+                className="text-xs border border-gray-300 rounded px-2 py-0.5 bg-white"
+              >
+                <option value="auto">자동</option>
+                <option value="starlight">Starlight</option>
+                <option value="mkdocs">MkDocs</option>
+              </select>
+            )}
+          </div>
           <div className="flex gap-3">
             <button
               onClick={() => setRetryCount((c) => c + 1)}
@@ -627,12 +845,8 @@ function PreviewTab({ project, status }) {
             >
               새로고침
             </button>
-            <a
-              href={serveUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:underline"
-            >
+            <a href={serveUrl} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline">
               새 탭에서 열기 →
             </a>
           </div>
@@ -640,7 +854,7 @@ function PreviewTab({ project, status }) {
         <iframe
           src={serveUrl}
           className="flex-1 w-full rounded-xl border border-gray-200"
-          title="MkDocs Preview"
+          title="Preview"
         />
       </div>
     );
