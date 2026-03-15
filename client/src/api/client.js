@@ -61,10 +61,15 @@ function authHeaders(extra = {}) {
  * 기본 fetch 래퍼
  */
 export async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const fetchOptions = {
     ...options,
     headers: authHeaders(options.headers),
-  });
+  };
+  // body가 객체면 자동 JSON 직렬화
+  if (fetchOptions.body && typeof fetchOptions.body === 'object' && !(fetchOptions.body instanceof FormData)) {
+    fetchOptions.body = JSON.stringify(fetchOptions.body);
+  }
+  const res = await fetch(`${API_BASE}${path}`, fetchOptions);
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));

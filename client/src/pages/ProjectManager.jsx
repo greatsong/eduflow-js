@@ -539,7 +539,7 @@ function QuickStartTab({ projectId }) {
   const [mdContent, setMdContent] = useState('');
   const [fileName, setFileName] = useState('');
   const [saveAsRef, setSaveAsRef] = useState(true);
-  const [model, setModel] = useState('claude-sonnet-4-20250514');
+  const [model, setModel] = useState('claude-sonnet-4-6');
   const [models, setModels] = useState([]);
   const [processing, setProcessing] = useState(false);
   const [logs, setLogs] = useState([]);

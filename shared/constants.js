@@ -11,7 +11,6 @@ export const STEPS = [
 // 추가 메뉴 (워크플로우 외)
 export const EXTRA_NAV = [
   { name: '포트폴리오', icon: '📊', route: '/portfolio' },
-  { name: '베타 배포', icon: '🎁', route: '/beta' },
   { name: 'AI 모델 비교', icon: '⚖️', route: '/compare' },
 ];
 

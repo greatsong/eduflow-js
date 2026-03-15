@@ -1,18 +1,27 @@
-# EduFlow JS - 아키텍처 문서
+# EduFlow - 아키텍처 문서
 
 ## 1. 시스템 개요
 
-에듀플로는 Claude AI를 활용한 교육자료 자동 생성 플랫폼이다.
+에듀플로는 **멀티 AI 프로바이더**를 활용한 교육자료 자동 생성 플랫폼이다.
 교육자가 아이디어를 입력하면 6단계 워크플로우를 통해 완성된 교재를 생성한다.
 
 ```
-[React SPA] ←→ [Express API] ←→ [Claude API]
+[React SPA] ←→ [Express API] ←→ [AI API (Claude, GPT, Gemini, Solar)]
      │               │
      │               ├── 파일시스템 (projects/, templates/)
      │               └── CLI 도구 (mkdocs, pandoc, git, gh)
      │
      └── SSE 스트리밍 (채팅, 생성 진행률)
 ```
+
+### 지원 AI 프로바이더
+
+| 프로바이더 | SDK | 모델 접두사 | 환경변수 |
+|-----------|-----|-----------|---------|
+| Anthropic | @anthropic-ai/sdk | claude- | ANTHROPIC_API_KEY |
+| OpenAI | openai | gpt-, o- | OPENAI_API_KEY |
+| Google | @google/genai | gemini- | GOOGLE_API_KEY |
+| Upstage | openai (호환) | solar- | UPSTAGE_API_KEY |
 
 ## 2. 6단계 워크플로우
 
@@ -23,92 +32,61 @@
 | 2 | 목차 작성 | `/toc` | `/api/projects/:id/toc` | tocGenerator |
 | 3 | 피드백 컨펌 | `/feedback` | `/api/projects/:id/discussions` | conversationManager |
 | 4 | 챕터 제작 | `/chapters` | `/api/projects/:id/chapters` | chapterGenerator |
-| 5 | 배포 관리 | `/deploy` | `/api/projects/:id/deploy` | deployment |
+| 5 | 배포 관리 | `/deploy` | `/api/projects/:id/deploy` | deployment, docxGenerator |
 | - | 포트폴리오 | `/portfolio` | `/api/portfolio` | (집계 로직) |
-| - | 베타 배포 | `/beta` | `/api/beta` | (GitHub CLI 연동) |
+| - | 모델 비교 | `/compare` | `/api/compare` | aiProvider (병렬 호출) |
 
-## 3. 백엔드 서비스 모듈
+## 3. 기술 스택
 
-### 3-1. chapterGenerator.js (← chapter_generator.py, 799줄)
-가장 복잡한 모듈. Claude API로 비동기 병렬 챕터 생성.
+| 영역 | 기술 |
+|------|------|
+| 프론트엔드 | React 19, Vite 6, React Router 7, Zustand 5, Tailwind CSS 4 |
+| 백엔드 | Express 5, Node.js 20+ |
+| AI SDK | @anthropic-ai/sdk, openai, @google/genai |
+| 문서 생성 | marked (HTML), docx (DOCX), MkDocs (웹사이트) |
+| 빌드 도구 | npm workspaces (client/, server/, shared/) |
+| 배포 도구 | execa (CLI 실행: mkdocs, git, gh) |
+
+## 4. 백엔드 서비스 모듈
+
+### 4-1. aiProvider.js — 멀티 AI 통합 레이어
+모든 AI API 호출을 단일 인터페이스로 추상화. 모델 ID로 프로바이더를 자동 판별.
+
+### 4-2. chapterGenerator.js — 챕터 생성 엔진
+가장 복잡한 모듈. AI API로 비동기 병렬 챕터 생성.
 
 **핵심 기능:**
 - `p-limit`으로 동시성 제어 (1~N개 병렬)
 - 토큰 추정 (한국어 2자/토큰, 영어 4자/토큰)
 - 레퍼런스 관련성 정렬 + 동적 잘라내기 (150K 토큰 한도)
-- 6종 템플릿별 프롬프트 생성
+- 8종 템플릿별 프롬프트 생성
 - 비용 추적 → generation_report.json
 
-**API 호출 패턴:**
-```javascript
-import Anthropic from '@anthropic-ai/sdk';
-const client = new Anthropic({ apiKey });
-
-// 배치 생성 (비동기)
-const response = await client.messages.create({
-  model: 'claude-opus-4-5-20251101',
-  max_tokens: 16000,
-  messages: [{ role: 'user', content: prompt }]
-});
-```
-
-### 3-2. tocGenerator.js (← toc_generator.py, 319줄)
+### 4-3. tocGenerator.js — 목차 생성
 레퍼런스 + 방향성 요약 → 목차 JSON 생성.
 
-**출력 형식:**
-```json
-{
-  "title": "교육자료 제목",
-  "parts": [{
-    "part_number": 1,
-    "part_title": "Part 제목",
-    "chapters": [{
-      "chapter_id": "chapter01",
-      "chapter_title": "챕터 제목",
-      "learning_objectives": ["목표1", "목표2"],
-      "outline": "개요 텍스트"
-    }]
-  }]
-}
-```
-
-### 3-3. conversationManager.js (← conversation_manager.py, 293줄)
+### 4-4. conversationManager.js — 대화 관리
 대화 이력 저장/로드, 요약 생성.
 
-**파일 구조:**
-```
-discussions/step1_conversation.json → { step, messages: [{role, content, timestamp}] }
-discussions/step1_summary.md → 마크다운 요약 (= master-context.md)
-```
+### 4-5. progressManager.js — 진행 상태 추적
+워크플로우 진행 상태 추적. `progress.json` 관리.
 
-### 3-4. progressManager.js (← progress_manager.py, 282줄)
-워크플로우 진행 상태 추적.
+### 4-6. templateManager.js — 교육 템플릿 관리
+8종 교육 템플릿 로드 및 적용: school-textbook, programming-course, business-education, workshop-material, self-directed-learning, teacher-guide-4c, storytelling, class-preview
 
-**파일:** `progress.json`
-```json
-{
-  "step1_completed": true,
-  "step2_completed": true,
-  "step3_confirmed": false,
-  "chapters": { "chapter01": { "status": "completed" } }
-}
-```
-
-### 3-5. templateManager.js (← template_manager.py, 122줄)
-교육 템플릿 6종 로드 및 적용.
-
-**템플릿 종류:** programming-course, school-textbook, business-education, workshop-material, self-directed-learning, teacher-guide-4c
-
-### 3-6. referenceManager.js (← reference_manager.py, 162줄)
+### 4-7. referenceManager.js — 참고자료 관리
 레퍼런스 파일 업로드/읽기/검색/삭제. multer로 업로드 처리.
 
-### 3-7. deployment.js (← deployment.py, 293줄)
-MkDocs 빌드, Pandoc DOCX 변환, Git/GitHub CLI 연동. `execa`로 CLI 실행.
+### 4-8. deployment.js — 배포 엔진
+MkDocs 빌드, GitHub Pages 배포. `execa`로 CLI 실행.
 
-### 3-8. utils.js (← utils.py, 256줄)
-모델 설정 로드, API 키 관리, Mermaid 변환.
+### 4-9. docxGenerator.js — DOCX 생성
+marked + docx 패키지로 마크다운 → Word 문서 변환.
 
-## 4. API 엔드포인트 전체 목록
+### 4-10. tokenUsageManager.js — 토큰 사용량 추적
+AI API 호출 시 토큰 사용량과 비용을 기록.
+
+## 5. API 엔드포인트 전체 목록
 
 ### 프로젝트 관리
 ```
@@ -136,14 +114,14 @@ POST   /api/projects/:id/discussions/:step/messages        # 메시지 저장
 DELETE /api/projects/:id/discussions/:step                  # 초기화
 GET    /api/projects/:id/discussions/:step/summary          # 요약 조회
 POST   /api/projects/:id/discussions/:step/summarize        # 요약 생성
-GET    /api/projects/:id/discussions/:step/chat (SSE)       # 스트리밍 채팅 ⚡
+GET    /api/projects/:id/discussions/:step/chat (SSE)       # 스트리밍 채팅
 ```
 
 ### 목차
 ```
 GET    /api/projects/:id/toc                    # 로드
 PUT    /api/projects/:id/toc                    # 저장
-POST   /api/projects/:id/toc/generate (SSE)     # 자동 생성 ⚡
+POST   /api/projects/:id/toc/generate (SSE)     # 자동 생성
 POST   /api/projects/:id/toc/confirm            # 확정
 POST   /api/projects/:id/toc/outlines           # 아웃라인 생성
 ```
@@ -153,9 +131,9 @@ POST   /api/projects/:id/toc/outlines           # 아웃라인 생성
 GET    /api/projects/:id/chapters                         # 목록 + 상태
 GET    /api/projects/:id/chapters/:chapterId              # 내용 읽기
 PUT    /api/projects/:id/chapters/:chapterId              # 내용 수정
-POST   /api/projects/:id/chapters/generate-all (SSE)      # 배치 생성 ⚡
+POST   /api/projects/:id/chapters/generate-all (SSE)      # 배치 생성
 POST   /api/projects/:id/chapters/:chapterId/generate     # 단일 생성
-POST   /api/projects/:id/chapters/:chapterId/chat (SSE)   # 인터랙티브 ⚡
+POST   /api/projects/:id/chapters/:chapterId/chat (SSE)   # 인터랙티브
 ```
 
 ### 배포
@@ -167,21 +145,21 @@ GET    /api/projects/:id/deploy/docx/download    # DOCX 다운로드
 POST   /api/projects/:id/deploy/github           # GitHub Pages 배포
 ```
 
-### 포트폴리오 / 베타 / 모델
+### 모델 비교
+```
+POST   /api/compare                # 멀티 모델 병렬 비교 (SSE)
+POST   /api/compare/auto-evaluate  # AI 자동 평가
+```
+
+### 포트폴리오 / 모델
 ```
 GET    /api/portfolio                  # 통계 + 카드
 GET    /api/portfolio/:id/report       # 상세 리포트
-GET    /api/beta/config                # 베타 설정
-POST   /api/beta/repo                  # 리포 생성
-POST   /api/beta/testers               # 테스터 초대
-DELETE /api/beta/testers/:username      # 테스터 제거
-POST   /api/beta/push                  # 커밋 & 푸시
-GET    /api/beta/github-status          # GitHub 상태
 GET    /api/models                     # 모델 목록
 GET    /api/models/default/:purpose    # 기본 모델
 ```
 
-## 5. 스트리밍 아키텍처 (SSE)
+## 6. 스트리밍 아키텍처 (SSE)
 
 SSE(Server-Sent Events)를 사용하여 실시간 데이터를 프론트엔드에 전달한다.
 
@@ -191,8 +169,8 @@ res.setHeader('Content-Type', 'text/event-stream');
 res.setHeader('Cache-Control', 'no-cache');
 res.setHeader('Connection', 'keep-alive');
 
-// Claude 스트리밍
-const stream = client.messages.stream({ model, max_tokens, messages });
+// AI 스트리밍 (aiProvider 통합)
+const stream = await provider.streamChat({ model, messages, apiKey });
 stream.on('text', (text) => {
   res.write(`data: ${JSON.stringify({ type: 'text', content: text })}\n\n`);
 });
@@ -212,7 +190,7 @@ es.onmessage = (e) => {
 };
 ```
 
-## 6. 상태 관리 (Zustand)
+## 7. 상태 관리 (Zustand)
 
 | Store | 역할 | 주요 상태 |
 |-------|------|----------|
@@ -220,34 +198,18 @@ es.onmessage = (e) => {
 | `chatStore` | 채팅 메시지 | `messages`, `isStreaming` |
 | `generationStore` | 챕터 생성 진행 | `status`, `progress`, `logs` |
 
-## 7. 데이터 디렉토리
+## 8. 데이터 디렉토리
 
-프로젝트 데이터는 `server/` 기준 상대경로 또는 환경변수로 설정:
+프로젝트 데이터는 환경변수 또는 기본 경로에 저장:
 ```
 PROJECTS_DIR=./projects      # 프로젝트 저장소
 TEMPLATES_DIR=./templates    # 교육 템플릿
 ```
 
-## 8. 배포 구조
+## 9. API 키 우선순위
 
 ```
-Vercel (프론트엔드)          Railway/Render (백엔드)
-  React SPA 빌드    ←API→     Express + 영속 디스크
-  VITE_API_URL 환경변수        ANTHROPIC_API_KEY
-                               PROJECTS_DIR, TEMPLATES_DIR
+사용자 브라우저 키 (x-{provider}-key 헤더) → 환경변수 (.env)
 ```
 
-## 9. Python → JS 변환 매핑
-
-| Python | JavaScript 대응 |
-|--------|----------------|
-| `asyncio.Semaphore(n)` | `pLimit(n)` (p-limit) |
-| `asyncio.gather(*tasks)` | `Promise.allSettled(tasks)` |
-| `AsyncAnthropic` | `new Anthropic()` (JS SDK는 기본 async) |
-| `pathlib.Path` | `path.join()` + `fs.promises` |
-| `subprocess.run()` | `execa()` |
-| `json.load/dump` | `JSON.parse()` / `JSON.stringify()` |
-| `datetime.now().isoformat()` | `new Date().toISOString()` |
-| `st.session_state` | Zustand store |
-| `st.chat_message` | `<ChatInterface />` 컴포넌트 |
-| `client.messages.stream()` | SSE + `client.messages.stream()` |
+> Deploy 버전은 추가로 관리자 설정 키(settings.json)를 지원합니다.

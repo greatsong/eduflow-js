@@ -1,7 +1,14 @@
 import { Router } from 'express';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { requireApiKey } from '../middleware/apiKey.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { streamChat, chat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
+import { TokenUsageManager } from '../services/tokenUsageManager.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
+const tokenUsage = new TokenUsageManager(DATA_DIR);
 
 const router = Router();
 
@@ -51,7 +58,7 @@ router.post('/', requireApiKey, asyncHandler(async (req, res) => {
     let fullText = '';
 
     try {
-      await streamChat({
+      const result = await streamChat({
         provider,
         model: modelId,
         messages,
@@ -62,6 +69,16 @@ router.post('/', requireApiKey, asyncHandler(async (req, res) => {
           fullText += chunk;
           send({ type: 'text', modelId, content: chunk });
         },
+      });
+
+      // 토큰 사용량 기록
+      tokenUsage.record({
+        userId: req.user?.googleId, userName: req.user?.name,
+        userEmail: req.user?.email,
+        projectId: '', action: 'compare',
+        provider, model: modelId,
+        inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+        keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
       });
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -127,7 +144,7 @@ router.post('/auto-evaluate', requireApiKey, asyncHandler(async (req, res) => {
     let fullText = '';
 
     try {
-      await streamChat({
+      const result = await streamChat({
         provider,
         model: modelId,
         messages,
@@ -138,6 +155,16 @@ router.post('/auto-evaluate', requireApiKey, asyncHandler(async (req, res) => {
           fullText += chunk;
           send({ type: 'text', modelId, content: chunk });
         },
+      });
+
+      // 토큰 사용량 기록
+      tokenUsage.record({
+        userId: req.user?.googleId, userName: req.user?.name,
+        userEmail: req.user?.email,
+        projectId: '', action: 'compare',
+        provider, model: modelId,
+        inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+        keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
       });
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -213,7 +240,7 @@ ${responsesText}
 
   let evaluateText = '';
   try {
-    await streamChat({
+    const judgeResult = await streamChat({
       provider: judgeProvider,
       model: judgeModel,
       messages: [{ role: 'user', content: evaluatePrompt }],
@@ -224,6 +251,16 @@ ${responsesText}
         evaluateText += chunk;
         send({ type: 'evaluate-text', content: chunk });
       },
+    });
+
+    // 심사위원 토큰 사용량 기록
+    tokenUsage.record({
+      userId: req.user?.googleId, userName: req.user?.name,
+      userEmail: req.user?.email,
+      projectId: '', action: 'compare',
+      provider: judgeProvider, model: judgeModel,
+      inputTokens: judgeResult.inputTokens, outputTokens: judgeResult.outputTokens,
+      keySource: req.headers[`x-${judgeProvider}-key`] ? 'user' : 'server',
     });
 
     // JSON 파싱 시도

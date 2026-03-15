@@ -1,8 +1,9 @@
-import { readFile, writeFile, readdir, stat, mkdir, unlink, copyFile, rm } from 'fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir, unlink, copyFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync, createReadStream } from 'fs';
 import { fileURLToPath } from 'url';
 import { execa } from 'execa';
+import { markdownToDocx } from './docxGenerator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -12,7 +13,6 @@ export class Deployment {
     this.docsPath = join(projectPath, 'docs');
     this.outputPath = join(projectPath, 'output');
     this.sitePath = join(projectPath, 'site');
-    this.starlightPath = join(projectPath, '_starlight');
   }
 
   async init() {
@@ -105,7 +105,7 @@ export class Deployment {
   /**
    * MkDocs 프로젝트 설정 생성 (mkdocs.yml + index.md)
    */
-  async generateMkdocsConfig(siteName, theme = 'material') {
+  async generateMkdocsConfig(siteName, theme = 'material', creator = null, colorTheme = 'indigo') {
     const tocFile = join(this.projectPath, 'toc.json');
     let tocData = null;
     if (existsSync(tocFile)) {
@@ -137,25 +137,120 @@ export class Deployment {
 
     const desc = tocData?.description || '';
 
-    // 커스텀 CSS 복사
+    // 커스텀 CSS 복사 + 테마 색상 변수 주입
     const stylesDir = join(this.docsPath, 'stylesheets');
     if (!existsSync(stylesDir)) await mkdir(stylesDir, { recursive: true });
     const customCssSource = join(__dirname, '..', 'assets', 'mkdocs-custom.css');
     if (existsSync(customCssSource)) {
-      await copyFile(customCssSource, join(stylesDir, 'custom.css'));
+      let cssContent = await readFile(customCssSource, 'utf-8');
+      // 테마별 CSS 변수 오버라이드 (모든 테마 색상 변수 포함)
+      const CSS_VARS = {
+        indigo: {
+          primary: '#4f46e5', dark: '#4338ca', light: '#eef2ff', lighter: '#f5f3ff',
+          accent: '#7c3aed', text: '#312e81', border: '#c7d2fe',
+          deep: '#1e1b4b', deepMid: '#312e81', codeBorder: '#e0e7ff',
+          footerLink: '#a5b4fc', footerLinkHover: '#c7d2fe',
+          darkText: '#c4b5fd',
+        },
+        teal: {
+          primary: '#0d9488', dark: '#0f766e', light: '#f0fdfa', lighter: '#f0fdf4',
+          accent: '#10b981', text: '#134e4a', border: '#99f6e4',
+          deep: '#042f2e', deepMid: '#134e4a', codeBorder: '#ccfbf1',
+          footerLink: '#5eead4', footerLinkHover: '#99f6e4',
+          darkText: '#5eead4',
+        },
+        amber: {
+          primary: '#ea580c', dark: '#c2410c', light: '#fff7ed', lighter: '#fffbeb',
+          accent: '#f59e0b', text: '#7c2d12', border: '#fed7aa',
+          deep: '#431407', deepMid: '#7c2d12', codeBorder: '#ffedd5',
+          footerLink: '#fdba74', footerLinkHover: '#fed7aa',
+          darkText: '#fdba74',
+        },
+        blue: {
+          primary: '#2563eb', dark: '#1d4ed8', light: '#eff6ff', lighter: '#f0f9ff',
+          accent: '#0ea5e9', text: '#1e3a5f', border: '#bfdbfe',
+          deep: '#172554', deepMid: '#1e3a5f', codeBorder: '#dbeafe',
+          footerLink: '#93c5fd', footerLinkHover: '#bfdbfe',
+          darkText: '#93c5fd',
+        },
+        rose: {
+          primary: '#e11d48', dark: '#be123c', light: '#fff1f2', lighter: '#fdf2f8',
+          accent: '#f43f5e', text: '#881337', border: '#fecdd3',
+          deep: '#4c0519', deepMid: '#881337', codeBorder: '#ffe4e6',
+          footerLink: '#fda4af', footerLinkHover: '#fecdd3',
+          darkText: '#fda4af',
+        },
+      };
+      const cv = CSS_VARS[colorTheme] || CSS_VARS.indigo;
+      // CSS 변수 오버라이드를 파일 끝에 추가 (나중 선언이 우선)
+      const overrideVars = `
+/* === Color Theme Override: ${colorTheme} === */
+:root {
+  --ef-primary: ${cv.primary};
+  --ef-primary-dark: ${cv.dark};
+  --ef-primary-light: ${cv.light};
+  --ef-primary-lighter: ${cv.lighter};
+  --ef-accent: ${cv.accent};
+  --ef-primary-text: ${cv.text};
+  --ef-primary-border: ${cv.border};
+  --ef-primary-deep: ${cv.deep};
+  --ef-primary-deep-mid: ${cv.deepMid};
+  --ef-code-border: ${cv.codeBorder};
+  --ef-footer-link: ${cv.footerLink};
+  --ef-footer-link-hover: ${cv.footerLinkHover};
+}
+[data-md-color-scheme="slate"] {
+  --ef-primary-text: ${cv.darkText};
+}
+`;
+      cssContent = cssContent + overrideVars;
+      await writeFile(join(stylesDir, 'custom.css'), cssContent, 'utf-8');
     }
 
-    // 커스텀 JS 복사 (헤더 제목 클릭 → 홈 이동)
+    // 커스텀 JS 복사 (헤더 제목 클릭, Mermaid 설정, 스크롤 프로그레스)
     const jsDir = join(this.docsPath, 'javascripts');
     if (!existsSync(jsDir)) await mkdir(jsDir, { recursive: true });
-    const titleLinkJsSource = join(__dirname, '..', 'assets', 'mkdocs-title-link.js');
-    if (existsSync(titleLinkJsSource)) {
-      await copyFile(titleLinkJsSource, join(jsDir, 'title-link.js'));
+    const jsFiles = [
+      { src: 'mkdocs-title-link.js', dest: 'title-link.js' },
+      { src: 'mermaid-config.js', dest: 'mermaid-config.js' },
+      { src: 'scroll-progress.js', dest: 'scroll-progress.js' },
+    ];
+    for (const jf of jsFiles) {
+      const srcPath = join(__dirname, '..', 'assets', jf.src);
+      if (existsSync(srcPath)) {
+        await copyFile(srcPath, join(jsDir, jf.dest));
+      }
     }
+
+    // 제작자 정보 (copyright 푸터)
+    const creatorName = creator?.name || '';
+    const creatorAffiliation = creator?.affiliation || '';
+    const copyrightParts = [];
+    if (creatorName) copyrightParts.push(creatorName);
+    if (creatorAffiliation) copyrightParts.push(creatorAffiliation);
+    const year = new Date().getFullYear();
+    const copyrightLine = copyrightParts.length > 0
+      ? `Copyright &copy; ${year} ${copyrightParts.join(' · ')} | <a href='https://eduflow-greatsong.fly.dev/'>EduFlow</a>로 제작`
+      : `Copyright &copy; ${year} | <a href='https://eduflow-greatsong.fly.dev/'>EduFlow</a>로 제작`;
+
+    const authorLine = copyrightParts.length > 0
+      ? `${copyrightParts.join(' · ')} (EduFlow)`
+      : 'EduFlow';
+
+    // 색상 테마 매핑
+    const COLOR_THEMES = {
+      indigo:  { primary: 'indigo', accent: 'deep purple' },
+      teal:    { primary: 'teal', accent: 'green' },
+      amber:   { primary: 'deep orange', accent: 'amber' },
+      blue:    { primary: 'blue', accent: 'cyan' },
+      rose:    { primary: 'pink', accent: 'red' },
+    };
+    const ct = COLOR_THEMES[colorTheme] || COLOR_THEMES.indigo;
 
     const config = `site_name: "${siteName}"
 site_description: "${desc}"
-site_author: Created with EduFlow
+site_author: "${authorLine}"
+copyright: "${copyrightLine}"
 
 theme:
   name: ${theme}
@@ -163,15 +258,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: deep purple
+      primary: ${ct.primary}
+      accent: ${ct.accent}
       toggle:
         icon: material/brightness-7
         name: "\uB2E4\uD06C \uBAA8\uB4DC\uB85C \uC804\uD658"
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: deep purple
+      primary: ${ct.primary}
+      accent: ${ct.accent}
       toggle:
         icon: material/brightness-4
         name: "\uB77C\uC774\uD2B8 \uBAA8\uB4DC\uB85C \uC804\uD658"
@@ -180,13 +275,18 @@ theme:
     code: JetBrains Mono
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.top
     - navigation.indexes
+    - navigation.instant
+    - navigation.path
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
     - content.code.annotate
+    - content.tabs.link
     - toc.follow
   icon:
     repo: fontawesome/brands/github
@@ -200,6 +300,8 @@ plugins:
 markdown_extensions:
   - admonition
   - codehilite
+  - footnotes
+  - abbr
   - toc:
       permalink: true
   - pymdownx.highlight:
@@ -215,6 +317,8 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.tasklist:
       custom_checkbox: true
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
@@ -225,6 +329,8 @@ markdown_extensions:
 extra_javascript:
   - https://unpkg.com/mermaid@10/dist/mermaid.min.js
   - javascripts/title-link.js
+  - javascripts/mermaid-config.js
+  - javascripts/scroll-progress.js
 
 extra_css:
   - stylesheets/custom.css
@@ -237,9 +343,9 @@ ${navYaml}`;
 
     await writeFile(join(this.projectPath, 'mkdocs.yml'), config, 'utf-8');
 
-    // index.md 생성 (없으면)
+    // index.md 생성 (항상 갱신 — 제작자 정보 반영)
     const indexPath = join(this.docsPath, 'index.md');
-    if (!existsSync(indexPath)) {
+    {
       let indexContent = `# ${siteName}\n\n${desc}\n\n`;
 
       if (tocData) {
@@ -252,6 +358,15 @@ ${navYaml}`;
             }
           }
         }
+      }
+
+      // 제작자 정보
+      if (creatorName || creatorAffiliation) {
+        indexContent += '\n---\n\n';
+        indexContent += '!!! info "제작 정보"\n';
+        if (creatorName) indexContent += `    **제작자**: ${creatorName}\n`;
+        if (creatorAffiliation) indexContent += `    **소속**: ${creatorAffiliation}\n`;
+        indexContent += `    **도구**: [EduFlow](https://eduflow-greatsong.fly.dev/) — AI 교육자료 생성 플랫폼\n`;
       }
 
       await writeFile(indexPath, indexContent, 'utf-8');
@@ -311,7 +426,7 @@ ${navYaml}`;
   }
 
   /**
-   * DOCX 생성 (pandoc)
+   * DOCX 생성 — pandoc 우선, 실패 시 JS 폴백
    */
   async generateDocx(title = '교육자료') {
     const chapters = await this.getChapterFiles();
@@ -338,19 +453,19 @@ ${navYaml}`;
       combined += content + '\n\n---\n\n';
     }
 
-    const tempMd = join(this.projectPath, 'temp_combined.md');
     const outputFile = join(this.outputPath, `${title}.docx`);
 
+    // 1차: pandoc 시도
     try {
+      const tempMd = join(this.projectPath, 'temp_combined.md');
       await writeFile(tempMd, combined, 'utf-8');
 
       const { cmd: pCmd, args: pArgs } = await this._resolveCmd('pandoc');
       await execa(pCmd, [...pArgs,
         tempMd, '-o', outputFile,
         '--toc', '--highlight-style', 'tango',
-      ], { timeout: 120000, shell: true });
+      ], { timeout: 120000 });
 
-      // 임시 파일 삭제
       try { await unlink(tempMd); } catch { /* skip */ }
 
       const fileStat = await stat(outputFile);
@@ -361,10 +476,33 @@ ${navYaml}`;
         file_path: outputFile,
         file_name: `${title}.docx`,
         size_mb: Math.round(sizeMb * 100) / 100,
+        engine: 'pandoc',
       };
-    } catch (e) {
-      try { await unlink(tempMd); } catch { /* skip */ }
-      return { success: false, message: e.shortMessage || e.message, error: e.stderr };
+    } catch (pandocErr) {
+      console.warn('[Deployment] pandoc 실패, JS 폴백 사용:', pandocErr.shortMessage || pandocErr.message);
+    }
+
+    // 2차: JS 기반 DOCX 생성 폴백
+    try {
+      const buffer = await markdownToDocx(combined, title);
+      await writeFile(outputFile, buffer);
+
+      const fileStat = await stat(outputFile);
+      const sizeMb = fileStat.size / 1024 / 1024;
+
+      return {
+        success: true,
+        file_path: outputFile,
+        file_name: `${title}.docx`,
+        size_mb: Math.round(sizeMb * 100) / 100,
+        engine: 'js',
+      };
+    } catch (jsErr) {
+      return {
+        success: false,
+        message: `DOCX 생성 실패: ${jsErr.message}`,
+        error: jsErr.stack,
+      };
     }
   }
 
@@ -383,7 +521,7 @@ ${navYaml}`;
   /**
    * 포트폴리오 저장소(eduflow-portfolio)의 projects.json 자동 갱신
    */
-  async updatePortfolio(repoName, siteUrl, repoUrl, username) {
+  async updatePortfolio(repoName, siteUrl, repoUrl, username, creator = null) {
     const portfolioRepo = `${username}/eduflow-portfolio`;
 
     try {
@@ -433,6 +571,8 @@ ${navYaml}`;
         isEduflow: true,
         chapters: chapters.length,
         pages,
+        ...(creator?.name && { creatorName: creator.name }),
+        ...(creator?.affiliation && { creatorAffiliation: creator.affiliation }),
       };
 
       const idx = projects.findIndex((p) => p.name === repoName);
@@ -461,468 +601,10 @@ ${navYaml}`;
     }
   }
 
-  // =============================================
-  // Starlight 관련 메서드
-  // =============================================
-
-  /**
-   * 마크다운을 Starlight 호환 형식으로 변환
-   */
-  _convertToStarlight(markdown) {
-    let content = markdown;
-
-    // pymdownx admonition -> Starlight aside
-    content = content.replace(
-      /^!!! (\w+)(?: "([^"]*)")?\s*\n((?:    .+\n?)*)/gm,
-      (_, type, title, body) => {
-        const typeMap = { note: 'note', tip: 'tip', warning: 'caution', danger: 'danger', info: 'note', success: 'tip', example: 'note' };
-        const starlightType = typeMap[type] || 'note';
-        const cleanBody = body.replace(/^    /gm, '');
-        return title
-          ? `:::${starlightType}[${title}]\n${cleanBody}:::\n`
-          : `:::${starlightType}\n${cleanBody}:::\n`;
-      }
-    );
-
-    // ??? collapsible admonition -> aside
-    content = content.replace(
-      /^\?\?\?[+]? (\w+)(?: "([^"]*)")?\s*\n((?:    .+\n?)*)/gm,
-      (_, type, title, body) => {
-        const typeMap = { note: 'note', tip: 'tip', warning: 'caution', danger: 'danger', info: 'note' };
-        const starlightType = typeMap[type] || 'note';
-        const cleanBody = body.replace(/^    /gm, '');
-        return title
-          ? `:::${starlightType}[${title}]\n${cleanBody}:::\n`
-          : `:::${starlightType}\n${cleanBody}:::\n`;
-      }
-    );
-
-    return content;
-  }
-
-  /**
-   * frontmatter 추가/갱신
-   */
-  _addFrontmatter(content, title, order) {
-    const stripped = content.replace(/^---\n[\s\S]*?\n---\n*/, '');
-    const fm = `---\ntitle: "${title.replace(/"/g, '\\"')}"\nsidebar:\n  order: ${order}\n---\n\n`;
-    return fm + stripped;
-  }
-
-  /**
-   * Starlight 프로젝트 스캐폴딩 생성
-   */
-  async generateStarlightProject(siteName, repoName, username) {
-    const tocFile = join(this.projectPath, 'toc.json');
-    let tocData = null;
-    if (existsSync(tocFile)) {
-      try { tocData = JSON.parse(await readFile(tocFile, 'utf-8')); } catch { /* skip */ }
-    }
-
-    const chapters = await this.getChapterFiles();
-    if (chapters.length === 0) {
-      return { success: false, message: '챕터 파일이 없습니다' };
-    }
-
-    const slPath = this.starlightPath;
-
-    // node_modules 보존을 위해 src/ 만 재생성
-    const srcPath = join(slPath, 'src');
-    if (existsSync(srcPath)) {
-      await rm(srcPath, { recursive: true, force: true });
-    }
-    await mkdir(join(slPath, 'src', 'content', 'docs'), { recursive: true });
-    await mkdir(join(slPath, 'src', 'styles'), { recursive: true });
-
-    // 파트별 디렉토리 생성 + 챕터 복사
-    let globalOrder = 1;
-
-    if (tocData) {
-      for (const part of tocData.parts || []) {
-        const partDir = `part-${part.part_number}`;
-        const partPath = join(slPath, 'src', 'content', 'docs', partDir);
-        await mkdir(partPath, { recursive: true });
-
-        let chapterOrder = 1;
-        for (const ch of part.chapters || []) {
-          const srcFile = join(this.docsPath, `${ch.chapter_id}.md`);
-          if (!existsSync(srcFile)) continue;
-
-          let content = await readFile(srcFile, 'utf-8');
-          content = this._convertToStarlight(content);
-          content = this._addFrontmatter(content, ch.chapter_title, chapterOrder);
-
-          const destFile = join(partPath, `${ch.chapter_id}.md`);
-          await writeFile(destFile, content, 'utf-8');
-          chapterOrder++;
-          globalOrder++;
-        }
-      }
-    } else {
-      for (const ch of chapters) {
-        let content = await readFile(ch.path, 'utf-8');
-        content = this._convertToStarlight(content);
-        content = this._addFrontmatter(content, ch.title, globalOrder);
-        const destFile = join(slPath, 'src', 'content', 'docs', `${ch.id}.md`);
-        await writeFile(destFile, content, 'utf-8');
-        globalOrder++;
-      }
-    }
-
-    // sidebar config
-    const sidebarEntries = [];
-    if (tocData) {
-      for (const part of tocData.parts || []) {
-        const partDir = `part-${part.part_number}`;
-        const label = `Part ${part.part_number}: ${part.part_title}`;
-        sidebarEntries.push(`          {\n            label: '${label.replace(/'/g, "\\'")}',\n            autogenerate: { directory: '${partDir}' },\n          }`);
-      }
-    } else {
-      sidebarEntries.push(`          {\n            label: '목차',\n            autogenerate: { directory: '.' },\n          }`);
-    }
-
-    const basePath = repoName ? `/${repoName}` : '';
-    const siteUrlBase = username ? `https://${username}.github.io` : 'https://example.github.io';
-
-    // astro.config.mjs
-    const astroConfig = `import { defineConfig } from 'astro/config';
-import starlight from '@astrojs/starlight';
-
-export default defineConfig({
-  site: '${siteUrlBase}',
-  base: '${basePath}',
-  integrations: [
-    starlight({
-      title: '${siteName.replace(/'/g, "\\'")}',
-      defaultLocale: 'root',
-      locales: {
-        root: { label: '한국어', lang: 'ko' },
-      },
-      sidebar: [
-${sidebarEntries.join(',\n')}
-      ],
-      customCss: ['./src/styles/custom.css'],
-    }),
-  ],
-});
-`;
-    await writeFile(join(slPath, 'astro.config.mjs'), astroConfig, 'utf-8');
-
-    // package.json
-    const pkgJson = {
-      name: repoName || 'starlight-docs',
-      type: 'module',
-      version: '0.0.1',
-      scripts: {
-        dev: 'astro dev',
-        start: 'astro dev',
-        build: 'astro build',
-        preview: 'astro preview',
-        astro: 'astro',
-      },
-      dependencies: {
-        astro: '^5.6.0',
-        '@astrojs/starlight': '^0.34.0',
-        sharp: '^0.33.0',
-      },
-    };
-    await writeFile(join(slPath, 'package.json'), JSON.stringify(pkgJson, null, 2), 'utf-8');
-
-    // tsconfig.json
-    await writeFile(join(slPath, 'tsconfig.json'), JSON.stringify({
-      extends: 'astro/tsconfigs/strict',
-    }, null, 2), 'utf-8');
-
-    // content.config.ts
-    const contentConfig = `import { defineCollection } from 'astro:content';
-import { docsSchema } from '@astrojs/starlight/schema';
-
-export const collections = {
-  docs: defineCollection({ schema: docsSchema() }),
-};
-`;
-    await writeFile(join(slPath, 'src', 'content.config.ts'), contentConfig, 'utf-8');
-
-    // custom.css (ai-physical-computing 디자인 기반)
-    const customCss = `@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
-
-:root {
-  /* 메인 색상 */
-  --sl-color-accent-low: #0d3d38;
-  --sl-color-accent: #4ECDC4;
-  --sl-color-accent-high: #a8e6e1;
-
-  /* 폰트 */
-  --sl-font: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
-  --sl-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-
-  /* 텍스트 */
-  --sl-text-2xl: 1.75rem;
-  --sl-text-3xl: 2rem;
-  --sl-text-4xl: 2.5rem;
-
-  /* 콘텐츠 너비 */
-  --sl-content-width: 48rem;
-}
-
-/* 다크 모드 색상 */
-:root[data-theme='dark'] {
-  --sl-color-accent-low: #0d3d38;
-  --sl-color-accent: #4ECDC4;
-  --sl-color-accent-high: #a8e6e1;
-}
-
-/* 팁 박스 */
-.tip-box {
-  border-left: 4px solid #FFE66D;
-  background: rgba(255, 230, 109, 0.08);
-  padding: 1rem 1.25rem;
-  border-radius: 0 0.5rem 0.5rem 0;
-  margin: 1rem 0;
-}
-
-/* 질문 박스 */
-.question-box {
-  border-left: 4px solid #4ECDC4;
-  background: rgba(78, 205, 196, 0.08);
-  padding: 1rem 1.25rem;
-  border-radius: 0 0.5rem 0.5rem 0;
-  margin: 1rem 0;
-  font-style: italic;
-}
-
-/* 난이도 표시 */
-.difficulty-dots span.filled {
-  color: #4ECDC4;
-}
-.difficulty-dots span.empty {
-  color: #4a5568;
-}
-
-/* 체크리스트 진행 바 */
-.progress-bar {
-  background: rgba(78, 205, 196, 0.2);
-  border-radius: 9999px;
-  height: 0.5rem;
-  overflow: hidden;
-}
-.progress-bar-fill {
-  background: #4ECDC4;
-  height: 100%;
-  transition: width 0.3s ease;
-}
-
-/* 코드 블록 줄별 해설 */
-.code-annotation {
-  background: rgba(78, 205, 196, 0.1);
-  border-left: 2px solid #4ECDC4;
-  padding: 0.25rem 0.75rem;
-  margin: 0.25rem 0;
-  font-size: 0.85rem;
-  border-radius: 0 0.25rem 0.25rem 0;
-}
-
-/* 메타 뱃지 */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-.badge-mint {
-  background: rgba(78, 205, 196, 0.15);
-  color: #4ECDC4;
-}
-.badge-coral {
-  background: rgba(255, 107, 107, 0.15);
-  color: #FF6B6B;
-}
-.badge-yellow {
-  background: rgba(255, 230, 109, 0.15);
-  color: #d4a810;
-}
-.badge-slate {
-  background: rgba(148, 163, 184, 0.15);
-  color: #94a3b8;
-}
-`;
-    await writeFile(join(slPath, 'src', 'styles', 'custom.css'), customCss, 'utf-8');
-
-    // index.mdx (splash page)
-    const desc = tocData?.description || siteName;
-    const firstChapterId = tocData?.parts?.[0]?.chapters?.[0]?.chapter_id;
-    const startLink = firstChapterId
-      ? `${basePath}/part-1/${firstChapterId}/`.replace(/\/+/g, '/')
-      : '#';
-
-    let indexContent = `---
-title: "${siteName.replace(/"/g, '\\"')}"
-template: splash
-hero:
-  tagline: "${desc.replace(/"/g, '\\"')}"
-  actions:
-    - text: 학습 시작
-      link: ${startLink}
-      icon: right-arrow
----
-
-## 목차
-
-`;
-
-    if (tocData) {
-      for (const part of tocData.parts || []) {
-        indexContent += `### Part ${part.part_number}: ${part.part_title}\n\n`;
-        for (const ch of part.chapters || []) {
-          if (existsSync(join(this.docsPath, `${ch.chapter_id}.md`))) {
-            indexContent += `- [${ch.chapter_title}](${basePath}/part-${part.part_number}/${ch.chapter_id}/)\n`;
-          }
-        }
-        indexContent += '\n';
-      }
-    }
-
-    await writeFile(join(slPath, 'src', 'content', 'docs', 'index.mdx'), indexContent, 'utf-8');
-
-    return {
-      success: true,
-      starlightPath: slPath,
-      chapterCount: globalOrder - 1,
-      message: `Starlight 프로젝트 생성 완료 (${globalOrder - 1}개 챕터)`,
-    };
-  }
-
-  /**
-   * Starlight npm install
-   */
-  async installStarlight() {
-    try {
-      await execa('npm', ['install'], {
-        cwd: this.starlightPath,
-        timeout: 300000,
-      });
-      return { success: true, message: '의존성 설치 완료' };
-    } catch (e) {
-      return { success: false, message: e.shortMessage || e.message };
-    }
-  }
-
-  /**
-   * Starlight 빌드
-   */
-  async buildStarlight() {
-    try {
-      const astroCache = join(this.starlightPath, '.astro');
-      if (existsSync(astroCache)) {
-        await rm(astroCache, { recursive: true, force: true });
-      }
-
-      const result = await execa('npm', ['run', 'build'], {
-        cwd: this.starlightPath,
-        timeout: 300000,
-      });
-      return { success: true, message: '빌드 성공', stdout: result.stdout };
-    } catch (e) {
-      return { success: false, message: e.shortMessage || e.message, error: e.stderr };
-    }
-  }
-
-  /**
-   * Starlight 로컬 프리뷰
-   */
-  async serveStarlight(port = 4321) {
-    try {
-      try {
-        const { stdout } = await execa('lsof', ['-ti', `:${port}`]);
-        if (stdout.trim()) {
-          for (const pid of stdout.trim().split('\n')) {
-            try { process.kill(Number(pid), 'SIGTERM'); } catch { /* ignore */ }
-          }
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      } catch { /* 포트 사용 중인 프로세스 없음 */ }
-
-      const subprocess = execa('npm', ['run', 'preview', '--', '--port', String(port)], {
-        cwd: this.starlightPath,
-        detached: true,
-        stdio: 'ignore',
-      });
-      subprocess.catch(() => {});
-      subprocess.unref();
-      return { success: true, url: `http://localhost:${port}`, pid: subprocess.pid };
-    } catch (e) {
-      return { success: false, message: e.message };
-    }
-  }
-
-  /**
-   * Starlight GitHub Pages 배포
-   */
-  async deployStarlightToGitHub(repoName) {
-    const userResult = await this.getGitHubUser();
-    if (!userResult.success) {
-      return { success: false, message: userResult.message };
-    }
-    const username = userResult.username;
-
-    const distPath = join(this.starlightPath, 'dist');
-    if (!existsSync(distPath)) {
-      return { success: false, message: '빌드된 파일이 없습니다. 먼저 빌드를 실행하세요.' };
-    }
-
-    try {
-      let repoExists = false;
-      try {
-        await execa('gh', ['repo', 'view', `${username}/${repoName}`]);
-        repoExists = true;
-      } catch { /* 없음 */ }
-
-      if (!repoExists) {
-        await execa('gh', ['repo', 'create', repoName, '--public']);
-      }
-
-      const gitDir = join(distPath, '.git');
-      if (existsSync(gitDir)) {
-        await rm(gitDir, { recursive: true, force: true });
-      }
-
-      await execa('git', ['init'], { cwd: distPath });
-      await execa('git', ['add', '.'], { cwd: distPath });
-      await execa('git', ['commit', '-m', 'Deploy Starlight site'], { cwd: distPath });
-      await execa('git', ['branch', '-M', 'gh-pages'], { cwd: distPath });
-      await execa('git', ['remote', 'add', 'origin', `https://github.com/${username}/${repoName}.git`], { cwd: distPath });
-      await execa('git', ['push', '-f', 'origin', 'gh-pages'], { cwd: distPath });
-
-      try {
-        await execa('gh', ['api', '-X', 'PUT', `repos/${username}/${repoName}/pages`,
-          '-f', 'source[branch]=gh-pages', '-f', 'source[path]=/',
-        ]);
-      } catch {
-        try {
-          await execa('gh', ['api', '-X', 'POST', `repos/${username}/${repoName}/pages`,
-            '-f', 'source[branch]=gh-pages', '-f', 'source[path]=/',
-          ]);
-        } catch { /* Pages가 이미 활성화됨 */ }
-      }
-
-      const siteUrl = `https://${username}.github.io/${repoName}/`;
-      return {
-        success: true,
-        site_url: siteUrl,
-        repo_url: `https://github.com/${username}/${repoName}`,
-        username,
-      };
-    } catch (e) {
-      return { success: false, message: e.shortMessage || e.message, error: e.stderr };
-    }
-  }
-
   /**
    * GitHub Pages 배포
    */
-  async deployToGitHub(repoName) {
+  async deployToGitHub(repoName, creator = null) {
     const userResult = await this.getGitHubUser();
     if (!userResult.success) {
       return { success: false, message: userResult.message };
@@ -930,6 +612,27 @@ hero:
     const username = userResult.username;
 
     try {
+      // README.md 생성
+      const readmePath = join(this.projectPath, 'README.md');
+      const configPath = join(this.projectPath, 'config.json');
+      let projConfig = {};
+      if (existsSync(configPath)) {
+        try { projConfig = JSON.parse(await readFile(configPath, 'utf-8')); } catch { /* skip */ }
+      }
+      const projTitle = projConfig.title || repoName;
+      const projDesc = projConfig.description || '';
+      let readme = `# ${projTitle}\n\n`;
+      if (projDesc) readme += `${projDesc}\n\n`;
+      if (creator?.name || creator?.affiliation) {
+        readme += `## 제작 정보\n\n`;
+        if (creator.name) readme += `- **제작자**: ${creator.name}\n`;
+        if (creator.affiliation) readme += `- **소속**: ${creator.affiliation}\n`;
+        readme += `- **도구**: [EduFlow](https://eduflow-greatsong.fly.dev/) — AI 교육자료 생성 플랫폼\n`;
+        readme += `- **생성일**: ${new Date().toLocaleDateString('ko-KR')}\n`;
+      }
+      readme += `\n---\n\n> 이 교육자료는 [EduFlow](https://eduflow-greatsong.fly.dev/)를 사용하여 제작되었습니다.\n`;
+      await writeFile(readmePath, readme, 'utf-8');
+
       // Git 초기화 (없으면)
       if (!existsSync(join(this.projectPath, '.git'))) {
         await execa('git', ['init'], { cwd: this.projectPath });

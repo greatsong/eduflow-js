@@ -6,6 +6,7 @@ import { useProjectStore } from '../stores/projectStore';
 import { useChatStore } from '../stores/chatStore';
 import { apiFetch, apiStreamPost } from '../api/client';
 import ChatInterface from '../components/ChatInterface';
+import ModelSelector from '../components/ModelSelector';
 
 export default function Discussion() {
   const navigate = useNavigate();
@@ -15,17 +16,8 @@ export default function Discussion() {
   const [summary, setSummary] = useState(null);
   const [summaryStreaming, setSummaryStreaming] = useState(false);
   const [summaryText, setSummaryText] = useState('');
-  const [model, setModel] = useState('claude-sonnet-4-20250514');
-  const [models, setModels] = useState([]);
+  const [model, setModel] = useState('claude-sonnet-4-6');
   const [loadedProject, setLoadedProject] = useState(null);
-
-  // 모델 목록 로드
-  useEffect(() => {
-    apiFetch('/api/models').then((d) => {
-      setModels(d.models);
-      apiFetch('/api/models/default/conversation').then((r) => setModel(r.modelId));
-    }).catch(() => {});
-  }, []);
 
   // 프로젝트 변경 시 대화 로드
   useEffect(() => {
@@ -121,15 +113,11 @@ export default function Discussion() {
           <p className="text-sm text-gray-500">Claude와 대화하며 교육자료의 방향성을 논의합니다.</p>
         </div>
         {/* 모델 선택 */}
-        <select
+        <ModelSelector
           value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white"
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
+          onChange={setModel}
+          defaultPurpose="conversation"
+        />
       </div>
 
       <div className="flex-1 flex gap-6 min-h-0">

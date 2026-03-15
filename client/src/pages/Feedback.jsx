@@ -5,6 +5,25 @@ import { useChatStore } from '../stores/chatStore';
 import { apiFetch, apiStreamPost } from '../api/client';
 import ChatInterface from '../components/ChatInterface';
 
+// AI 응답에서 json:toc-update 코드블록 감지
+function extractTocUpdate(text) {
+  const match = text.match(/```json:toc-update\s*([\s\S]*?)```/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    if (parsed.parts && Array.isArray(parsed.parts)) return parsed;
+  } catch {}
+  return null;
+}
+
+// json:toc-update 블록을 짧은 안내문으로 교체 (렌더링용)
+function stripTocUpdateBlock(content) {
+  return content.replace(
+    /```json:toc-update\s*[\s\S]*?```/g,
+    '> 📋 **수정된 목차 JSON** — 아래 버튼으로 적용할 수 있습니다.'
+  );
+}
+
 export default function Feedback() {
   const navigate = useNavigate();
   const { currentProject, refreshProgress } = useProjectStore();
@@ -12,9 +31,14 @@ export default function Feedback() {
 
   const [toc, setToc] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
-  const [model, setModel] = useState('claude-sonnet-4-20250514');
+  const [model, setModel] = useState('claude-sonnet-4-6');
   const [models, setModels] = useState([]);
   const [loadedProject, setLoadedProject] = useState(null);
+  const [applyingToc, setApplyingToc] = useState(false);
+  const [tocAppliedMsgIdx, setTocAppliedMsgIdx] = useState(new Set());
+  const [guidelines, setGuidelines] = useState('');
+  const [guidelinesSaved, setGuidelinesSaved] = useState(true);
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   // 모델 목록 로드
   useEffect(() => {
@@ -24,25 +48,27 @@ export default function Feedback() {
     }).catch(() => {});
   }, []);
 
-  // 프로젝트 변경 시 데이터 로드
+  // TOC는 페이지 방문할 때마다 최신으로 로드 (Step 2에서 재생성 반영)
   useEffect(() => {
-    if (!currentProject || currentProject.name === loadedProject) return;
-    setLoadedProject(currentProject.name);
-
-    // TOC 로드
+    if (!currentProject) return;
     apiFetch(`/api/projects/${currentProject.name}/toc`)
       .then((d) => setToc(d.toc))
       .catch(() => setToc(null));
-
-    // Step 3 대화 로드
-    apiFetch(`/api/projects/${currentProject.name}/discussions/3`)
-      .then((d) => setMessages(d.messages || []))
-      .catch(() => setMessages([]));
-
-    // 확정 상태 확인
     apiFetch(`/api/projects/${currentProject.name}/progress`)
       .then((d) => setConfirmed(d.step3_confirmed || false))
       .catch(() => setConfirmed(false));
+    apiFetch(`/api/projects/${currentProject.name}/toc/guidelines`)
+      .then((d) => { setGuidelines(d.guidelines || ''); setGuidelinesSaved(true); })
+      .catch(() => {});
+  }, [currentProject]);
+
+  // 대화는 프로젝트 변경 시에만 로드 (채팅 상태 유지)
+  useEffect(() => {
+    if (!currentProject || currentProject.name === loadedProject) return;
+    setLoadedProject(currentProject.name);
+    apiFetch(`/api/projects/${currentProject.name}/discussions/3`)
+      .then((d) => setMessages(d.messages || []))
+      .catch(() => setMessages([]));
   }, [currentProject]);
 
   // 채팅 전송
@@ -79,6 +105,41 @@ export default function Feedback() {
     if (!currentProject) return;
     await apiFetch(`/api/projects/${currentProject.name}/discussions/3`, { method: 'DELETE' });
     clearMessages();
+  };
+
+  // AI 응답에서 목차 수정 적용
+  const handleApplyTocUpdate = async (tocData, msgIdx) => {
+    if (!currentProject || applyingToc) return;
+    setApplyingToc(true);
+    try {
+      await apiFetch(`/api/projects/${currentProject.name}/toc`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toc: tocData }),
+      });
+      setToc(tocData);
+      setTocAppliedMsgIdx((prev) => new Set([...prev, msgIdx]));
+      setConfirmed(false); // 목차 변경 시 확정 상태 리셋
+    } catch (e) {
+      alert(`목차 적용 실패: ${e.message}`);
+    } finally {
+      setApplyingToc(false);
+    }
+  };
+
+  // 가이드라인 저장
+  const handleSaveGuidelines = async () => {
+    if (!currentProject) return;
+    try {
+      await apiFetch(`/api/projects/${currentProject.name}/toc/guidelines`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guidelines }),
+      });
+      setGuidelinesSaved(true);
+    } catch (e) {
+      alert(`저장 실패: ${e.message}`);
+    }
   };
 
   // 목차 확정
@@ -140,6 +201,34 @@ export default function Feedback() {
             onSend={handleSend}
             onClear={handleClear}
             placeholder="목차에 대한 의견을 말씀해주세요..."
+            contentTransform={stripTocUpdateBlock}
+            renderAfterMessage={(msg, idx) => {
+              if (msg.role !== 'assistant') return null;
+              const tocUpdate = extractTocUpdate(msg.content || '');
+              if (!tocUpdate) return null;
+              const applied = tocAppliedMsgIdx.has(idx);
+              return (
+                <div className={`mt-2 p-3 rounded-lg border ${applied ? 'bg-green-50 border-green-200' : 'bg-indigo-50 border-indigo-200'}`}>
+                  {applied ? (
+                    <p className="text-sm text-green-700 font-medium">✅ 수정된 목차가 적용되었습니다!</p>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm text-indigo-700 flex-1">
+                        📋 AI가 수정된 목차를 제안했습니다 ({tocUpdate.parts?.length || 0}개 Part,{' '}
+                        {(tocUpdate.parts || []).reduce((s, p) => s + (p.chapters || []).length, 0)}개 Chapter)
+                      </p>
+                      <button
+                        onClick={() => handleApplyTocUpdate(tocUpdate, idx)}
+                        disabled={applyingToc}
+                        className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                      >
+                        {applyingToc ? '적용 중...' : '✏️ 목차에 적용'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }}
           />
         </div>
 
@@ -173,6 +262,42 @@ export default function Feedback() {
                 ))}
               </div>
             ))}
+          </div>
+
+          {/* 생성 가이드라인 */}
+          <div className="border-t border-gray-200 pt-3 mb-3">
+            <button
+              onClick={() => setShowGuidelines(!showGuidelines)}
+              className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+            >
+              <span>{showGuidelines ? '▼' : '▶'}</span>
+              <span>📝 콘텐츠 생성 가이드라인</span>
+              {guidelines.trim() && <span className="text-xs text-indigo-400">(작성됨)</span>}
+            </button>
+            {showGuidelines && (
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-gray-500">
+                  챕터 생성 시 AI가 참고할 지침을 작성하세요. (예: 톤, 에피소드, 금지 사항 등)
+                </p>
+                <textarea
+                  value={guidelines}
+                  onChange={(e) => { setGuidelines(e.target.value); setGuidelinesSaved(false); }}
+                  placeholder="예시:&#10;- 교양과학 베스트셀러 톤으로 작성&#10;- 각 챕터마다 재미있는 에피소드 포함&#10;- 코드 블록 사용 금지&#10;- 힌튼-불 가문 연결고리 언급"
+                  className="w-full h-28 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+                <button
+                  onClick={handleSaveGuidelines}
+                  disabled={guidelinesSaved}
+                  className={`w-full py-2 text-sm font-medium rounded-lg transition-colors ${
+                    guidelinesSaved
+                      ? 'bg-gray-100 text-gray-400 cursor-default'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  }`}
+                >
+                  {guidelinesSaved ? '✅ 저장됨' : '💾 가이드라인 저장'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 확정 버튼 */}

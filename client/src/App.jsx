@@ -8,7 +8,6 @@ import Feedback from './pages/Feedback';
 import ChapterCreation from './pages/ChapterCreation';
 import Deployment from './pages/Deployment';
 import Portfolio from './pages/Portfolio';
-import BetaDeploy from './pages/BetaDeploy';
 import ModelCompare from './pages/ModelCompare';
 
 export default function App() {
@@ -23,7 +22,6 @@ export default function App() {
         <Route path="/chapters" element={<ChapterCreation />} />
         <Route path="/deploy" element={<Deployment />} />
         <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/beta" element={<BetaDeploy />} />
         <Route path="/compare" element={<ModelCompare />} />
       </Route>
     </Routes>

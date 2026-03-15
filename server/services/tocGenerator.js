@@ -85,6 +85,7 @@ ${templateAddition}
     const apiKey = resolveApiKey(provider, this.apiKeys);
     let responseText = '';
     let stopReason = null;
+    let inputTokens = 0, outputTokens = 0;
 
     if (res) {
       // SSE 스트리밍 모드
@@ -95,6 +96,8 @@ ${templateAddition}
       });
       responseText = result.content;
       stopReason = result.stopReason;
+      inputTokens = result.inputTokens || 0;
+      outputTokens = result.outputTokens || 0;
     } else {
       const result = await chat({
         provider, apiKey, model,
@@ -103,6 +106,8 @@ ${templateAddition}
       });
       responseText = result.content;
       stopReason = result.stopReason;
+      inputTokens = result.inputTokens || 0;
+      outputTokens = result.outputTokens || 0;
     }
 
     // 토큰 제한 확인
@@ -143,6 +148,8 @@ ${templateAddition}
 
     tocData.generated_at = new Date().toISOString();
     tocData.model = model;
+    // 토큰 정보 첨부 (toc 저장 시에는 제외됨, 라우트에서 사용)
+    tocData._tokenInfo = { inputTokens, outputTokens, provider, model };
 
     return tocData;
   }

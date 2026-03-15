@@ -81,7 +81,7 @@ export class ConversationManager {
   /**
    * 대화를 요약하여 저장. SSE res 객체를 전달하면 스트리밍.
    */
-  async summarizeConversation(step, model = 'claude-sonnet-4-20250514', res = null) {
+  async summarizeConversation(step, model = 'claude-sonnet-4-6', res = null) {
     const messages = await this.loadConversation(step);
     if (!messages.length) return '대화 내용이 없습니다.';
 
@@ -167,6 +167,7 @@ ${conversationText}
     const provider = detectProvider(model);
     const apiKey = resolveApiKey(provider, this.apiKeys);
     let summary = '';
+    let inputTokens = 0, outputTokens = 0;
 
     if (res) {
       // SSE 스트리밍 모드
@@ -176,6 +177,8 @@ ${conversationText}
         maxTokens: 2048, res,
       });
       summary = result.content;
+      inputTokens = result.inputTokens || 0;
+      outputTokens = result.outputTokens || 0;
     } else {
       const result = await chat({
         provider, apiKey, model,
@@ -183,6 +186,8 @@ ${conversationText}
         maxTokens: 2048,
       });
       summary = result.content;
+      inputTokens = result.inputTokens || 0;
+      outputTokens = result.outputTokens || 0;
     }
 
     // 파일 저장
@@ -198,6 +203,6 @@ ${conversationText}
       await writeFile(summaryFile, content, 'utf-8');
     }
 
-    return summary;
+    return { summary, inputTokens, outputTokens, provider, model };
   }
 }

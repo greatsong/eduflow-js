@@ -10,10 +10,13 @@ import { TOCGenerator } from '../services/tocGenerator.js';
 import { ReferenceManager } from '../services/referenceManager.js';
 import { ConversationManager } from '../services/conversationManager.js';
 import { ProgressManager } from '../services/progressManager.js';
+import { TokenUsageManager } from '../services/tokenUsageManager.js';
 import { sanitizeId } from '../middleware/sanitize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
+const tokenUsage = new TokenUsageManager(DATA_DIR);
 
 const router = Router({ mergeParams: true });
 
@@ -84,6 +87,20 @@ router.post('/generate', requireApiKey, asyncHandler(async (req, res) => {
       res
     );
 
+    // 토큰 사용량 기록
+    if (tocData._tokenInfo) {
+      const ti = tocData._tokenInfo;
+      tokenUsage.record({
+        userId: req.user?.googleId, userName: req.user?.name,
+        userEmail: req.user?.email,
+        projectId: req.params.id, action: 'toc',
+        provider: ti.provider, model: ti.model,
+        inputTokens: ti.inputTokens, outputTokens: ti.outputTokens,
+        keySource: req.headers[`x-${ti.provider}-key`] ? 'user' : 'server',
+      });
+      delete tocData._tokenInfo; // 저장 시 제외
+    }
+
     // 저장
     await tg.saveToc(tocData);
     await tg.generateOutlines(tocData);
@@ -99,6 +116,24 @@ router.post('/generate', requireApiKey, asyncHandler(async (req, res) => {
   }
 
   res.end();
+}));
+
+// GET /api/projects/:id/toc/guidelines - 생성 가이드라인 로드
+router.get('/guidelines', asyncHandler(async (req, res) => {
+  const filePath = join(projectPath(req.params.id), 'generation_guidelines.md');
+  let guidelines = '';
+  if (existsSync(filePath)) {
+    guidelines = await readFile(filePath, 'utf-8');
+  }
+  res.json({ guidelines });
+}));
+
+// PUT /api/projects/:id/toc/guidelines - 생성 가이드라인 저장
+router.put('/guidelines', asyncHandler(async (req, res) => {
+  const { guidelines } = req.body;
+  const filePath = join(projectPath(req.params.id), 'generation_guidelines.md');
+  await writeFile(filePath, guidelines || '', 'utf-8');
+  res.json({ success: true });
 }));
 
 // POST /api/projects/:id/toc/confirm - 목차 확정
@@ -193,7 +228,7 @@ router.post('/parse-md', requireApiKey, asyncHandler(async (req, res) => {
     }
 
     // AI API로 MD → JSON TOC 변환 (멀티 프로바이더)
-    const useModel = model || 'claude-sonnet-4-20250514';
+    const useModel = model || 'claude-sonnet-4-6';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
 
@@ -243,6 +278,16 @@ ${content.slice(0, 50000)}
     });
 
     const responseText = result.content;
+
+    // 토큰 사용량 기록
+    tokenUsage.record({
+      userId: req.user?.googleId, userName: req.user?.name,
+      userEmail: req.user?.email,
+      projectId: req.params.id, action: 'toc',
+      provider, model: useModel,
+      inputTokens: result.inputTokens || 0, outputTokens: result.outputTokens || 0,
+      keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
+    });
 
     // JSON 추출
     const jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/) || responseText.match(/\{[\s\S]*\}/);

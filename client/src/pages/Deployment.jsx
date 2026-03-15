@@ -2,20 +2,25 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { apiFetch } from '../api/client';
+// 로컬 버전: 사용자 인증 없음 (웹 배포 버전에서는 EntryForm에서 import)
+const getUserInfo = () => null;
 
-const TABS = ['⭐ Starlight 웹사이트', '🌐 MkDocs 웹사이트', '📄 DOCX 문서', '🔍 미리보기'];
+const TABS = ['🌐 MkDocs 웹사이트', '📄 DOCX 문서', '🔍 미리보기'];
 
 export default function Deployment() {
   const navigate = useNavigate();
   const { currentProject } = useProjectStore();
   const [activeTab, setActiveTab] = useState(0);
   const [status, setStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(true);
 
   useEffect(() => {
     if (!currentProject) return;
+    setStatusLoading(true);
     apiFetch(`/api/projects/${currentProject.name}/deploy/status`)
       .then(setStatus)
-      .catch(() => setStatus(null));
+      .catch(() => setStatus(null))
+      .finally(() => setStatusLoading(false));
   }, [currentProject]);
 
   if (!currentProject) {
@@ -72,10 +77,9 @@ export default function Deployment() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {activeTab === 0 && <StarlightTab project={currentProject} status={status} />}
-        {activeTab === 1 && <MkDocsTab project={currentProject} status={status} />}
-        {activeTab === 2 && <DocxTab project={currentProject} status={status} />}
-        {activeTab === 3 && <PreviewTab project={currentProject} status={status} />}
+        {activeTab === 0 && <MkDocsTab project={currentProject} status={status} statusLoading={statusLoading} />}
+        {activeTab === 1 && <DocxTab project={currentProject} status={status} statusLoading={statusLoading} />}
+        {activeTab === 2 && <PreviewTab project={currentProject} status={status} statusLoading={statusLoading} />}
       </div>
 
       {/* 포트폴리오로 */}
@@ -92,30 +96,33 @@ export default function Deployment() {
 }
 
 // =============================================
-// 탭 0: Starlight 웹사이트
+// 탭 1: MkDocs 웹사이트
 // =============================================
-
-// 레포 이름 추천 함수 (공용)
+// 레포 이름 추천 함수
 function suggestRepoNames(projectName) {
   const sanitize = (name) =>
     name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
   const suggestions = [];
 
+  // 1. 프로젝트 이름 그대로 (30자 이하)
   if (projectName && projectName.length <= 30) {
     suggestions.push(sanitize(projectName));
   }
 
+  // 2. 날짜 접미사 제거 (-260207 등)
   const withoutDate = projectName.replace(/-\d{6}$/, '');
   if (withoutDate !== projectName && withoutDate.length >= 3) {
     suggestions.push(sanitize(withoutDate));
   }
 
+  // 3. 숫자 접미사 제거 (-000 등)
   const withoutNum = projectName.replace(/-\d+$/, '');
   if (withoutNum !== projectName && withoutNum !== withoutDate && withoutNum.length >= 3) {
     suggestions.push(sanitize(withoutNum));
   }
 
+  // 4. 너무 길면 첫 2~3 세그먼트만
   if (projectName.length > 30) {
     const segments = projectName.split('-');
     if (segments.length > 2) {
@@ -124,217 +131,28 @@ function suggestRepoNames(projectName) {
     }
   }
 
+  // 5. -book 또는 -course 변형
   const base = sanitize(withoutDate.length >= 3 ? withoutDate : projectName);
   if (base.length <= 20 && !base.includes('book') && !base.includes('course')) {
     suggestions.push(`${base}-book`);
   }
 
+  // 중복 제거 + 빈 문자열 제거 + 최대 3개
   return [...new Set(suggestions)].filter(Boolean).slice(0, 3);
 }
 
-function StarlightTab({ project, status }) {
-  const [siteName, setSiteName] = useState('');
-  const [repoName, setRepoName] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState('');
-  const [result, setResult] = useState(null);
-  const resultRef = useRef(null);
+const COLOR_THEMES = [
+  { id: 'indigo', label: '인디고/퍼플', primary: 'indigo', accent: 'deep purple', colors: ['#4f46e5', '#7c3aed'], desc: '고급스럽고 세련된' },
+  { id: 'teal', label: '에메랄드/틸', primary: 'teal', accent: 'green', colors: ['#0d9488', '#10b981'], desc: '자연적이고 차분한' },
+  { id: 'amber', label: '앰버/오렌지', primary: 'deep orange', accent: 'amber', colors: ['#ea580c', '#f59e0b'], desc: '따뜻하고 친근한' },
+  { id: 'blue', label: '블루/스카이', primary: 'blue', accent: 'cyan', colors: ['#2563eb', '#0ea5e9'], desc: '신뢰감 있는 클래식' },
+  { id: 'rose', label: '로즈/핑크', primary: 'pink', accent: 'red', colors: ['#e11d48', '#f43f5e'], desc: '부드럽고 감성적인' },
+];
 
-  useEffect(() => {
-    apiFetch(`/api/projects/${project.name}/toc`)
-      .then((d) => setSiteName(d.toc?.title || '교육자료'))
-      .catch(() => setSiteName('교육자료'));
-
-    const names = suggestRepoNames(project.name);
-    setSuggestions(names);
-    if (!repoName && names.length > 0) setRepoName(names[0]);
-  }, [project]);
-
-  const handleOneDeploy = async () => {
-    if (!repoName.trim()) return;
-    setLoading(true);
-    setResult(null);
-    setStep('프로젝트 생성 → 의존성 설치 → 빌드 → 배포');
-
-    try {
-      const res = await apiFetch(`/api/projects/${project.name}/deploy/starlight/github`, {
-        method: 'POST',
-        body: JSON.stringify({ siteName, repoName: repoName.trim() }),
-      });
-      setResult(res);
-      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
-    } catch (e) {
-      setResult({ success: false, message: e.message });
-      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
-    }
-    setStep('');
-    setLoading(false);
-  };
-
-  const handleBuildOnly = async () => {
-    setLoading(true);
-    setResult(null);
-
-    try {
-      setStep('프로젝트 생성');
-      await apiFetch(`/api/projects/${project.name}/deploy/starlight/config`, {
-        method: 'POST',
-        body: JSON.stringify({ siteName, repoName: repoName.trim() }),
-      });
-
-      setStep('의존성 설치');
-      await apiFetch(`/api/projects/${project.name}/deploy/starlight/install`, {
-        method: 'POST',
-      });
-
-      setStep('빌드');
-      const buildRes = await apiFetch(`/api/projects/${project.name}/deploy/starlight/build`, {
-        method: 'POST',
-      });
-
-      setResult(buildRes.success
-        ? { success: true, buildOnly: true, message: '빌드 완료! 미리보기 탭에서 확인하세요.' }
-        : { success: false, message: buildRes.message }
-      );
-    } catch (e) {
-      setResult({ success: false, message: e.message });
-    }
-    setStep('');
-    setLoading(false);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 p-5">
-        <h3 className="font-semibold text-indigo-900 mb-1">⭐ Astro Starlight</h3>
-        <p className="text-sm text-indigo-700 mb-4">
-          최신 문서 프레임워크로 검색, 다크모드, 반응형이 기본 제공됩니다.
-        </p>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">사이트 제목</label>
-            <input
-              type="text"
-              value={siteName}
-              onChange={(e) => setSiteName(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">저장소 이름</label>
-            <input
-              type="text"
-              value={repoName}
-              onChange={(e) => setRepoName(e.target.value)}
-              placeholder="my-education-site"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-            {suggestions.length > 0 && (
-              <div className="flex gap-2 mt-2 items-center">
-                <span className="text-xs text-gray-400">추천:</span>
-                {suggestions.map((name) => (
-                  <button
-                    key={name}
-                    onClick={() => setRepoName(name)}
-                    className={`px-2.5 py-0.5 text-xs rounded-full border transition-colors ${
-                      repoName === name
-                        ? 'bg-indigo-100 border-indigo-300 text-indigo-700'
-                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {repoName && status?.ghUser && (
-          <p className="text-xs text-indigo-500 mb-4">
-            🌐 https://{status.ghUser}.github.io/{repoName}/
-          </p>
-        )}
-
-        <div className="flex gap-3">
-          <button
-            onClick={handleOneDeploy}
-            disabled={loading || !repoName.trim() || !status?.tools?.gh || !status?.ghUser}
-            className="px-5 py-2.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 font-medium"
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                배포 중...
-              </span>
-            ) : '⭐ Starlight로 배포'}
-          </button>
-          <button
-            onClick={handleBuildOnly}
-            disabled={loading}
-            className="px-4 py-2.5 border border-gray-300 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-50"
-          >
-            📦 빌드만
-          </button>
-        </div>
-
-        {loading && step && (
-          <div className="mt-4 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-            <div className="flex items-center gap-3">
-              <span className="inline-block w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-indigo-700 font-medium">{step}...</span>
-            </div>
-          </div>
-        )}
-
-        {result && (
-          <div ref={resultRef} className={`mt-4 p-4 rounded-xl border-2 ${result.success ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
-            {result.success ? (
-              result.buildOnly ? (
-                <p className="text-sm text-green-700 font-medium">✅ {result.message}</p>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-green-800">✅ Starlight 배포 완료!</p>
-                    <a href={result.site_url} target="_blank" rel="noopener noreferrer"
-                      className="text-green-700 underline font-medium text-sm">
-                      🌐 {result.site_url}
-                    </a>
-                    <p className="text-xs text-gray-500 mt-1">GitHub Pages 반영까지 1~2분 소요될 수 있습니다.</p>
-                  </div>
-                  <a href={result.site_url} target="_blank" rel="noopener noreferrer"
-                    className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 whitespace-nowrap">
-                    사이트 열기 →
-                  </a>
-                </div>
-              )
-            ) : (
-              <div>
-                <p className="font-semibold text-red-800">❌ 실패</p>
-                <p className="text-sm text-red-700 mt-1">{result.message}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {!status?.ghUser && (
-          <p className="mt-3 text-sm text-amber-600">
-            ⚠️ GitHub 배포에는 로그인이 필요합니다. <code className="bg-amber-100 px-1 rounded">gh auth login</code>
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// =============================================
-// 탭 1: MkDocs 웹사이트
-// =============================================
-function MkDocsTab({ project, status }) {
+function MkDocsTab({ project, status, statusLoading }) {
   const [siteName, setSiteName] = useState('');
   const [theme, setTheme] = useState('material');
+  const [colorTheme, setColorTheme] = useState('indigo');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [repoName, setRepoName] = useState('');
@@ -343,10 +161,12 @@ function MkDocsTab({ project, status }) {
   const deployResultRef = useRef(null);
 
   useEffect(() => {
+    // TOC에서 제목 가져오기
     apiFetch(`/api/projects/${project.name}/toc`)
       .then((d) => setSiteName(d.toc?.title || '교육자료'))
       .catch(() => setSiteName('교육자료'));
 
+    // 레포 이름 추천 생성
     const names = suggestRepoNames(project.name);
     setSuggestions(names);
     if (!repoName && names.length > 0) {
@@ -358,9 +178,11 @@ function MkDocsTab({ project, status }) {
     setLoading(true);
     setMessage(null);
     try {
+      const user = getUserInfo();
+      const creator = user ? { name: user.name, affiliation: user.affiliation } : null;
       const result = await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/config`, {
         method: 'POST',
-        body: JSON.stringify({ siteName, theme }),
+        body: JSON.stringify({ siteName, theme, colorTheme, creator }),
       });
       setMessage(result.success
         ? { type: 'success', text: '✅ MkDocs 설정 생성 완료!' }
@@ -387,33 +209,16 @@ function MkDocsTab({ project, status }) {
     setLoading(false);
   };
 
-  const handleServe = async () => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const result = await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/serve`, {
-        method: 'POST',
-        body: JSON.stringify({ port: 8000 }),
-      });
-      if (result.success) {
-        setMessage({ type: 'success', text: `✅ 서버 실행됨! 브라우저에서 ${result.url} 을 열어주세요 (PID: ${result.pid})` });
-      } else {
-        setMessage({ type: 'error', text: result.message });
-      }
-    } catch (e) {
-      setMessage({ type: 'error', text: e.message });
-    }
-    setLoading(false);
-  };
-
   const handleDeploy = async () => {
     if (!repoName.trim()) return;
     setLoading(true);
     setDeployResult(null);
     try {
+      const user = getUserInfo();
+      const creator = user ? { name: user.name, affiliation: user.affiliation } : null;
       const result = await apiFetch(`/api/projects/${project.name}/deploy/github`, {
         method: 'POST',
-        body: JSON.stringify({ repoName: repoName.trim() }),
+        body: JSON.stringify({ repoName: repoName.trim(), creator }),
       });
       setDeployResult(result);
       setTimeout(() => deployResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
@@ -424,10 +229,19 @@ function MkDocsTab({ project, status }) {
     setLoading(false);
   };
 
+  if (statusLoading) {
+    return (
+      <div className="text-center py-16">
+        <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-gray-500 text-sm">배포 도구 상태 확인 중...</p>
+      </div>
+    );
+  }
+
   if (!status?.tools?.mkdocs) {
     return (
       <div className="bg-amber-50 rounded-xl p-6">
-        <h3 className="font-semibold text-amber-800 mb-2">⚠️ MkDocs가 설치되지 않았습니다</h3>
+        <h3 className="font-semibold text-amber-800 mb-2">MkDocs가 설치되지 않았습니다</h3>
         <p className="text-sm text-amber-700 mb-3">
           MkDocs를 설치하면 마크다운을 아름다운 웹사이트로 변환할 수 있습니다.
         </p>
@@ -453,24 +267,40 @@ function MkDocsTab({ project, status }) {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             />
           </div>
-          <div className="w-48">
-            <label className="block text-xs text-gray-500 mb-1">테마</label>
-            <select
-              value={theme}
-              onChange={(e) => setTheme(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
-            >
-              <option value="material">Material (추천)</option>
-              <option value="readthedocs">Read the Docs</option>
-              <option value="mkdocs">MkDocs 기본</option>
-            </select>
+        </div>
+
+        {/* 색상 테마 선택 */}
+        <div className="mb-4">
+          <label className="block text-xs text-gray-500 mb-2">색상 테마</label>
+          <div className="flex gap-2 flex-wrap">
+            {COLOR_THEMES.map((ct) => (
+              <button
+                key={ct.id}
+                onClick={() => setColorTheme(ct.id)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
+                  colorTheme === ct.id
+                    ? 'border-gray-400 shadow-md ring-2 ring-offset-1 ring-gray-300 scale-105'
+                    : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                }`}
+              >
+                <div className="flex -space-x-1">
+                  {ct.colors.map((c, i) => (
+                    <div key={i} className="w-4 h-4 rounded-full border border-white shadow-sm" style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+                <span>{ct.label}</span>
+              </button>
+            ))}
           </div>
+          <p className="text-xs text-gray-400 mt-1">
+            {COLOR_THEMES.find(ct => ct.id === colorTheme)?.desc} 느낌의 디자인
+          </p>
         </div>
 
         <button
           onClick={handleGenerateConfig}
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm rounded-xl font-medium hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 transition-all shadow-sm"
         >
           {loading ? '생성 중...' : '🔨 MkDocs 프로젝트 생성'}
         </button>
@@ -482,26 +312,20 @@ function MkDocsTab({ project, status }) {
         )}
       </div>
 
-      {/* 빌드 & 미리보기 */}
+      {/* 빌드 */}
       {status?.hasMkdocsYml && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">📋 빌드 & 미리보기</h3>
-          <div className="flex gap-3">
-            <button
-              onClick={handleServe}
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              🔍 로컬 미리보기
-            </button>
-            <button
-              onClick={handleBuild}
-              disabled={loading}
-              className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              📦 빌드
-            </button>
-          </div>
+          <h3 className="font-semibold text-gray-900 mb-4">📋 빌드</h3>
+          <p className="text-sm text-gray-500 mb-3">
+            빌드 후 "미리보기" 탭에서 결과를 확인할 수 있습니다.
+          </p>
+          <button
+            onClick={handleBuild}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? '빌드 중...' : '📦 빌드'}
+          </button>
         </div>
       )}
 
@@ -509,6 +333,13 @@ function MkDocsTab({ project, status }) {
       {status?.hasMkdocsYml && status?.tools?.gh && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h3 className="font-semibold text-gray-900 mb-4">🚀 GitHub Pages 배포</h3>
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+            <p className="text-sm text-blue-800">
+              에듀플로 웹 버전으로 만든 교육자료는 <strong>greatsong</strong>의 GitHub에 함께 배포됩니다.
+              제작자 정보(이름, 소속)가 사이트 푸터와 README에 자동으로 표시됩니다.
+              <br /><span className="text-blue-600">(로컬 버전은 선생님의 GitHub를 통해 배포됩니다)</span>
+            </p>
+          </div>
           {status.ghUser ? (
             <>
               <p className="text-sm text-gray-500 mb-3">
@@ -614,7 +445,7 @@ function MkDocsTab({ project, status }) {
 // =============================================
 // 탭 2: DOCX 문서
 // =============================================
-function DocxTab({ project, status }) {
+function DocxTab({ project, status, statusLoading }) {
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -625,10 +456,19 @@ function DocxTab({ project, status }) {
       .catch(() => setTitle('교육자료'));
   }, [project]);
 
+  if (statusLoading) {
+    return (
+      <div className="text-center py-16">
+        <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-gray-500 text-sm">배포 도구 상태 확인 중...</p>
+      </div>
+    );
+  }
+
   if (!status?.tools?.pandoc) {
     return (
       <div className="bg-amber-50 rounded-xl p-6">
-        <h3 className="font-semibold text-amber-800 mb-2">⚠️ Pandoc이 설치되지 않았습니다</h3>
+        <h3 className="font-semibold text-amber-800 mb-2">Pandoc이 설치되지 않았습니다</h3>
         <p className="text-sm text-amber-700 mb-3">
           Pandoc을 설치하면 마크다운을 DOCX 문서로 변환할 수 있습니다.
         </p>
@@ -715,96 +555,83 @@ function DocxTab({ project, status }) {
 }
 
 // =============================================
-// 탭 3: 미리보기 (Starlight / MkDocs 자동 선택)
+// 탭 3: 미리보기 (빌드 결과를 Express로 서빙)
 // =============================================
-function PreviewTab({ project, status }) {
-  const [serveState, setServeState] = useState('idle');
-  const [serveUrl, setServeUrl] = useState(null);
+function PreviewTab({ project, status, statusLoading }) {
+  const [previewState, setPreviewState] = useState('idle'); // idle | building | ready | error
   const [errorMsg, setErrorMsg] = useState('');
   const [retryCount, setRetryCount] = useState(0);
-  const [engine, setEngine] = useState('auto');
+  const previewUrl = `/api/projects/${project.name}/deploy/preview/index.html`;
 
-  const effectiveEngine = engine === 'auto'
-    ? (status?.hasStarlightDist ? 'starlight' : 'mkdocs')
-    : engine;
-
-  const startServe = async (cancelled = { current: false }) => {
-    setServeState('starting');
+  const buildAndPreview = async (cancelled = { current: false }) => {
+    setPreviewState('building');
     try {
-      if (effectiveEngine === 'starlight') {
-        const result = await apiFetch(`/api/projects/${project.name}/deploy/starlight/serve`, {
-          method: 'POST',
-          body: JSON.stringify({ port: 4321 }),
-        });
-        if (cancelled.current) return;
-        if (result.success) {
-          await new Promise((r) => setTimeout(r, 2000));
-          setServeUrl(result.url);
-          setServeState('running');
-        } else {
-          setErrorMsg(result.message || '서버 실행 실패');
-          setServeState('error');
-        }
-      } else {
-        await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/build`, { method: 'POST' });
-        if (cancelled.current) return;
+      const result = await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/build`, {
+        method: 'POST',
+      });
 
-        const result = await apiFetch(`/api/projects/${project.name}/deploy/mkdocs/serve`, {
-          method: 'POST',
-          body: JSON.stringify({ port: 8000 }),
-        });
-        if (cancelled.current) return;
-        if (result.success) {
-          await new Promise((r) => setTimeout(r, 2000));
-          setServeUrl(result.url);
-          setServeState('running');
-        } else {
-          setErrorMsg(result.message || '서버 실행 실패');
-          setServeState('error');
-        }
+      if (cancelled.current) return;
+
+      if (result.success) {
+        setPreviewState('ready');
+      } else {
+        setErrorMsg(result.message || result.error || '빌드 실패');
+        setPreviewState('error');
       }
     } catch (e) {
       if (!cancelled.current) {
         setErrorMsg(e.message);
-        setServeState('error');
+        setPreviewState('error');
       }
     }
   };
 
-  const hasAnyPreview = status?.hasStarlightDist || (status?.tools?.mkdocs && status?.hasMkdocsYml);
-
   useEffect(() => {
-    if (!hasAnyPreview) return;
+    if (statusLoading || !status?.tools?.mkdocs || !status?.hasMkdocsYml) return;
+
     const cancelled = { current: false };
-    startServe(cancelled);
+    buildAndPreview(cancelled);
     return () => { cancelled.current = true; };
-  }, [project, retryCount, effectiveEngine]);
+  }, [project, retryCount, statusLoading]);
 
-  if (!hasAnyPreview) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-gray-400 text-sm">
-          미리보기를 사용하려면 Starlight 빌드 또는 MkDocs 프로젝트가 필요합니다.
-        </p>
-      </div>
-    );
-  }
-
-  if (serveState === 'starting') {
+  if (statusLoading) {
     return (
       <div className="text-center py-16">
         <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-gray-500 text-sm">
-          {effectiveEngine === 'starlight' ? 'Starlight' : 'MkDocs'} 서버 시작 중...
-        </p>
+        <p className="text-gray-500 text-sm">상태 확인 중...</p>
       </div>
     );
   }
 
-  if (serveState === 'error') {
+  if (!status?.tools?.mkdocs) {
     return (
       <div className="text-center py-16">
-        <p className="text-red-500 text-sm mb-2">서버 실행 실패</p>
+        <p className="text-gray-400 text-sm">MkDocs가 설치되지 않았습니다.</p>
+      </div>
+    );
+  }
+
+  if (!status?.hasMkdocsYml) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-400 text-sm">먼저 "MkDocs 웹사이트" 탭에서 MkDocs 프로젝트를 생성하세요.</p>
+      </div>
+    );
+  }
+
+  if (previewState === 'building') {
+    return (
+      <div className="text-center py-16">
+        <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-gray-500 text-sm">MkDocs 빌드 중...</p>
+      </div>
+    );
+  }
+
+  if (previewState === 'error') {
+    return (
+      <div className="text-center py-16">
+        <p className="text-red-500 text-sm mb-2">빌드 실패</p>
         <p className="text-gray-400 text-xs">{errorMsg}</p>
         <button
           onClick={() => { setErrorMsg(''); setRetryCount((c) => c + 1); }}
@@ -816,45 +643,25 @@ function PreviewTab({ project, status }) {
     );
   }
 
-  if (serveState === 'running' && serveUrl) {
-    const bothAvailable = status?.hasStarlightDist && status?.tools?.mkdocs && status?.hasMkdocsYml;
-
+  if (previewState === 'ready') {
     return (
       <div className="h-full flex flex-col">
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-green-600">
-              {effectiveEngine === 'starlight' ? '⭐ Starlight' : '🌐 MkDocs'} 서버: {serveUrl}
-            </span>
-            {bothAvailable && (
-              <select
-                value={engine}
-                onChange={(e) => { setEngine(e.target.value); setServeState('idle'); setRetryCount((c) => c + 1); }}
-                className="text-xs border border-gray-300 rounded px-2 py-0.5 bg-white"
-              >
-                <option value="auto">자동</option>
-                <option value="starlight">Starlight</option>
-                <option value="mkdocs">MkDocs</option>
-              </select>
-            )}
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setRetryCount((c) => c + 1)}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              새로고침
-            </button>
-            <a href={serveUrl} target="_blank" rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:underline">
-              새 탭에서 열기 →
-            </a>
-          </div>
+          <span className="text-xs text-green-600">
+            빌드된 사이트 미리보기
+          </span>
+          <button
+            onClick={() => setRetryCount((c) => c + 1)}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            새로고침
+          </button>
         </div>
         <iframe
-          src={serveUrl}
+          src={previewUrl}
           className="flex-1 w-full rounded-xl border border-gray-200"
-          title="Preview"
+          style={{ minHeight: '500px' }}
+          title="MkDocs Preview"
         />
       </div>
     );

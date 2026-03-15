@@ -91,7 +91,7 @@ router.post('/', asyncHandler(async (req, res) => {
     title,
     author: author || '',
     description: description || '',
-    claude_model: claude_model || 'claude-sonnet-4-20250514',
+    claude_model: claude_model || 'claude-sonnet-4-6',
     settings: {
       batch_generation_enabled: settings?.batch_generation_enabled ?? true,
       auto_save: settings?.auto_save ?? true,

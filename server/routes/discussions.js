@@ -10,10 +10,13 @@ import { ConversationManager } from '../services/conversationManager.js';
 import { ReferenceManager } from '../services/referenceManager.js';
 import { ProgressManager } from '../services/progressManager.js';
 import { TOCGenerator } from '../services/tocGenerator.js';
+import { TokenUsageManager } from '../services/tokenUsageManager.js';
 import { sanitizeId } from '../middleware/sanitize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
+const tokenUsage = new TokenUsageManager(DATA_DIR);
 
 const router = Router({ mergeParams: true }); // mergeParams로 :id 접근
 
@@ -69,7 +72,18 @@ router.post('/:step/summarize', requireApiKey, asyncHandler(async (req, res) => 
 
   try {
     const cm = new ConversationManager(projPath, req.apiKeys);
-    await cm.summarizeConversation(step, model || 'claude-sonnet-4-20250514', res);
+    const useModel = model || 'claude-sonnet-4-6';
+    const result = await cm.summarizeConversation(step, useModel, res);
+
+    // 토큰 사용량 기록
+    tokenUsage.record({
+      userId: req.user?.googleId, userName: req.user?.name,
+      userEmail: req.user?.email,
+      projectId: req.params.id, action: 'summarize',
+      provider: result.provider, model: result.model || useModel,
+      inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+      keySource: req.headers[`x-${result.provider}-key`] ? 'user' : 'server',
+    });
 
     // Step 1이면 진행 상태 업데이트
     if (step === '1') {
@@ -172,8 +186,28 @@ ${tocJsonText}
 
 - 구체적이고 실행 가능한 조언
 - 긍정적인 부분도 함께 언급
-- 수정이 필요하면 구체적인 JSON 수정안 제시
 - 사용자의 의도를 존중하며 제안
+
+# 🔧 목차 수정 기능
+
+**당신은 목차를 직접 수정할 수 있습니다!**
+
+사용자가 목차 수정을 요청하면:
+1. 수정 내용을 설명한 뒤
+2. **수정된 전체 목차 JSON**을 아래 형식으로 출력하세요:
+
+\`\`\`json:toc-update
+{수정된 전체 목차 JSON}
+\`\`\`
+
+⚠️ 중요 규칙:
+- 반드시 \`json:toc-update\` 태그를 사용하세요 (일반 \`json\`이 아님)
+- 전체 목차 JSON을 빠짐없이 포함하세요 (부분 수정 X)
+- 기존 구조(title, target_audience, parts, chapters 등)를 유지하세요
+- chapter_id는 chapter01, chapter02 형식을 유지하세요
+- 사용자가 수정을 원할 때만 toc-update를 사용하세요
+
+이 JSON이 출력되면 사용자 화면에 "적용" 버튼이 나타나 클릭 한 번으로 목차가 업데이트됩니다.
 
 친근하고 격려하는 톤으로 대화하세요.`;
     } else {
@@ -209,19 +243,32 @@ ${referencesText}
     const allMessages = clientMessages || await cm.loadConversation(step);
 
     // AI 스트리밍 호출 (멀티 프로바이더)
-    const useModel = model || 'claude-sonnet-4-20250514';
+    const useModel = model || 'claude-sonnet-4-6';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
+
+    // Step 3은 목차 JSON 출력이 필요하므로 토큰 여유 확보
+    const chatMaxTokens = step === '3' ? 8192 : 2048;
 
     const result = await streamChat({
       provider, apiKey, model: useModel,
       messages: allMessages,
       system: systemPrompt,
-      maxTokens: 2048, res,
+      maxTokens: chatMaxTokens, res,
     });
 
     // 어시스턴트 응답 저장
     await cm.saveMessage(step, 'assistant', result.content);
+
+    // 토큰 사용량 기록
+    tokenUsage.record({
+      userId: req.user?.googleId, userName: req.user?.name,
+      userEmail: req.user?.email,
+      projectId: req.params.id, action: 'chat',
+      provider, model: useModel,
+      inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+      keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
+    });
 
     res.write(`data: ${JSON.stringify({ type: 'done', content: result.content })}\n\n`);
   } catch (e) {

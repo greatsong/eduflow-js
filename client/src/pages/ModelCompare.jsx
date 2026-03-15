@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { apiFetch, API_BASE } from '../api/client';
+import { apiFetch, API_BASE, getApiKey } from '../api/client';
 import ReactMarkdown from 'react-markdown';
 
 // 정보·AI 교육 특화 평가 프리셋
@@ -119,19 +119,22 @@ export default function ModelCompare() {
   const batchAbortRef = useRef(false);
   const printRef = useRef(null);
 
+  const [serverProviders, setServerProviders] = useState({});
+
   useEffect(() => {
     apiFetch('/api/models').then(({ models }) => setAllModels(models)).catch(() => {});
+    apiFetch('/api/auth/status').then((d) => setServerProviders(d.serverProviders || {})).catch(() => {});
   }, []);
 
   const availableModels = useMemo(() => {
     const keys = {
-      anthropic: !!localStorage.getItem('eduflow_api_key'),
-      openai: !!localStorage.getItem('eduflow_openai_key'),
-      google: !!localStorage.getItem('eduflow_google_key'),
-      upstage: !!localStorage.getItem('eduflow_upstage_key'),
+      anthropic: serverProviders.anthropic || !!getApiKey('anthropic'),
+      openai: serverProviders.openai || !!getApiKey('openai'),
+      google: serverProviders.google || !!getApiKey('google'),
+      upstage: serverProviders.upstage || !!getApiKey('upstage'),
     };
     return allModels.filter((m) => keys[m.provider]);
-  }, [allModels]);
+  }, [allModels, serverProviders]);
 
   const blind = mode === 'blind';
   const modelsToRun = useMemo(() => {

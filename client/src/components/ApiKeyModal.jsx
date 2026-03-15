@@ -36,6 +36,8 @@ export default function ApiKeyModal({ open, onClose, onSaved }) {
   const [keys, setKeys] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [serverProviders, setServerProviders] = useState({});
+  const [apiMode, setApiMode] = useState('user');
 
   useEffect(() => {
     if (open) {
@@ -45,6 +47,14 @@ export default function ApiKeyModal({ open, onClose, onSaved }) {
       }
       setKeys(loaded);
       setError('');
+
+      // 서버 제공 API 키 상태 확인 (공개 키만 "서버 제공" 표시)
+      apiFetch('/api/auth/status')
+        .then((data) => {
+          setServerProviders(data.sharedProviders || data.serverProviders || {});
+          setApiMode(data.apiMode || 'user');
+        })
+        .catch(() => {});
     }
   }, [open]);
 
@@ -93,34 +103,61 @@ export default function ApiKeyModal({ open, onClose, onSaved }) {
           사용할 AI 프로바이더의 API 키를 입력하세요. 키는 브라우저에만 저장됩니다.
         </p>
 
-        <div className="space-y-3">
-          {PROVIDERS.map((p) => (
-            <div key={p.id}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.color}`}>
-                  {p.name}
-                </span>
-                <a
-                  href={p.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-500 hover:underline"
-                >
-                  키 발급
-                </a>
-              </div>
-              <input
-                type="password"
-                value={keys[p.id] || ''}
-                onChange={(e) => {
-                  setKeys((prev) => ({ ...prev, [p.id]: e.target.value }));
-                  setError('');
-                }}
-                placeholder={p.placeholder}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
-              />
+        {/* 서버 제공 API 안내 */}
+        {apiMode === 'server' && Object.values(serverProviders).some(Boolean) && (
+          <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+            <p className="text-sm font-medium text-green-800 mb-1.5">🔑 서버 제공 API</p>
+            <div className="flex flex-wrap gap-1.5">
+              {PROVIDERS.map((p) =>
+                serverProviders[p.id] ? (
+                  <span key={p.id} className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+                    ✅ {p.name}
+                  </span>
+                ) : null
+              )}
             </div>
-          ))}
+            <p className="text-xs text-green-600 mt-1.5">
+              위 API는 관리자가 제공하므로 별도 키 입력 없이 사용 가능합니다.
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {PROVIDERS.map((p) => {
+            const isServerProvided = apiMode === 'server' && serverProviders[p.id];
+            return (
+              <div key={p.id}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.color}`}>
+                    {p.name}
+                  </span>
+                  {isServerProvided && (
+                    <span className="text-xs text-green-600 font-medium">서버 제공</span>
+                  )}
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-500 hover:underline"
+                  >
+                    키 발급
+                  </a>
+                </div>
+                <input
+                  type="password"
+                  value={keys[p.id] || ''}
+                  onChange={(e) => {
+                    setKeys((prev) => ({ ...prev, [p.id]: e.target.value }));
+                    setError('');
+                  }}
+                  placeholder={isServerProvided ? '서버에서 제공됨 (직접 입력하면 우선 사용)' : p.placeholder}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono ${
+                    isServerProvided ? 'border-green-300 bg-green-50/50' : 'border-gray-300'
+                  }`}
+                />
+              </div>
+            );
+          })}
         </div>
 
         {error && (

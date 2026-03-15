@@ -6,10 +6,13 @@ import { requireApiKey } from '../middleware/apiKey.js';
 import { ChapterGenerator } from '../services/chapterGenerator.js';
 import { ProgressManager } from '../services/progressManager.js';
 import { streamChat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
+import { TokenUsageManager } from '../services/tokenUsageManager.js';
 import { sanitizeId } from '../middleware/sanitize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
+const tokenUsage = new TokenUsageManager(DATA_DIR);
 
 const router = Router({ mergeParams: true });
 
@@ -116,7 +119,7 @@ router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
     const report = await gen.generateAllChapters(
       tocData,
       model || 'claude-opus-4-6',
-      maxTokens || 8000,
+      maxTokens || 12000,
       concurrent || 1,
       progressCallback,
       skipCompleted !== false,
@@ -124,11 +127,22 @@ router.post('/generate-all', requireApiKey, asyncHandler(async (req, res) => {
       chapterIds || null  // 특정 챕터만 생성 (null이면 전체)
     );
 
-    // 성공한 챕터 진행 상태 업데이트
+    // 성공한 챕터 진행 상태 업데이트 + 토큰 사용량 기록
     const pm = new ProgressManager(projPath);
+    const useModel = model || 'claude-opus-4-6';
+    const provider = detectProvider(useModel);
     for (const ch of report.chapters || []) {
       if (ch.success) {
         await pm.markChapterCompleted(ch.chapter_id);
+        // 개별 챕터 토큰 기록
+        tokenUsage.record({
+          userId: req.user?.googleId, userName: req.user?.name,
+          userEmail: req.user?.email,
+          projectId: req.params.id, action: 'chapter',
+          provider, model: useModel,
+          inputTokens: ch.input_tokens || 0, outputTokens: ch.output_tokens || 0,
+          keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
+        });
       }
     }
 
@@ -152,12 +166,13 @@ router.post('/:chapterId/generate', requireApiKey, asyncHandler(async (req, res)
   // TOC에서 챕터 정보 조회
   const info = await gen.findChapterInToc(chapterId);
 
+  const useModel = model || 'claude-opus-4-6';
   const result = await gen.generateChapter(
     chapterId,
     info.chapter_title || chapterId,
     info.part_context || '',
-    model || 'claude-opus-4-6',
-    maxTokens || 8000,
+    useModel,
+    maxTokens || 12000,
     null,
     info.estimated_time || '',
     info.total_chapters || 0,
@@ -167,6 +182,17 @@ router.post('/:chapterId/generate', requireApiKey, asyncHandler(async (req, res)
   if (result.success) {
     const pm = new ProgressManager(projPath);
     await pm.markChapterCompleted(chapterId);
+
+    // 토큰 사용량 기록
+    const provider = detectProvider(useModel);
+    tokenUsage.record({
+      userId: req.user?.googleId, userName: req.user?.name,
+      userEmail: req.user?.email,
+      projectId: req.params.id, action: 'chapter',
+      provider, model: useModel,
+      inputTokens: result.input_tokens, outputTokens: result.output_tokens,
+      keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
+    });
   }
 
   res.json(result);
@@ -218,15 +244,25 @@ ${currentContent.slice(0, 3000) || '(아직 작성되지 않음)'}
     }));
     apiMessages.push({ role: 'user', content: message });
 
-    const useModel = model || 'claude-sonnet-4-20250514';
+    const useModel = model || 'claude-sonnet-4-6';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
 
-    await streamChat({
+    const result = await streamChat({
       provider, apiKey, model: useModel,
       messages: apiMessages,
       system: systemPrompt,
       maxTokens: 4096, res,
+    });
+
+    // 토큰 사용량 기록
+    tokenUsage.record({
+      userId: req.user?.googleId, userName: req.user?.name,
+      userEmail: req.user?.email,
+      projectId: req.params.id, action: 'chat',
+      provider, model: useModel,
+      inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+      keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
     });
 
     sseSend(res, { type: 'done' });
