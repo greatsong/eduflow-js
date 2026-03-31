@@ -45,7 +45,7 @@ export default function Feedback() {
     apiFetch('/api/models').then((d) => {
       setModels(d.models);
       apiFetch('/api/models/default/conversation').then((r) => setModel(r.modelId));
-    }).catch(() => {});
+    }).catch((err) => console.error('모델 목록 로드 실패', err));
   }, []);
 
   // TOC는 페이지 방문할 때마다 최신으로 로드 (Step 2에서 재생성 반영)
@@ -53,13 +53,21 @@ export default function Feedback() {
     if (!currentProject) return;
     apiFetch(`/api/projects/${currentProject.name}/toc`)
       .then((d) => setToc(d.toc))
-      .catch(() => setToc(null));
+      .catch(() => {
+        setToc(null);
+        console.error('목차 로드 실패');
+      });
     apiFetch(`/api/projects/${currentProject.name}/progress`)
       .then((d) => setConfirmed(d.step3_confirmed || false))
-      .catch(() => setConfirmed(false));
+      .catch(() => {
+        setConfirmed(false);
+        console.error('확인 상태 로드 실패');
+      });
     apiFetch(`/api/projects/${currentProject.name}/toc/guidelines`)
       .then((d) => { setGuidelines(d.guidelines || ''); setGuidelinesSaved(true); })
-      .catch(() => {});
+      .catch(() => {
+        console.error('가이드라인 로드 실패');
+      });
   }, [currentProject]);
 
   // 대화는 프로젝트 변경 시에만 로드 (채팅 상태 유지)

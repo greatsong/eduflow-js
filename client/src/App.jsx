@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import ProjectManager from './pages/ProjectManager';
@@ -12,18 +13,20 @@ import ModelCompare from './pages/ModelCompare';
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Home />} />
-        <Route path="/projects" element={<ProjectManager />} />
-        <Route path="/discussion" element={<Discussion />} />
-        <Route path="/toc" element={<TableOfContents />} />
-        <Route path="/feedback" element={<Feedback />} />
-        <Route path="/chapters" element={<ChapterCreation />} />
-        <Route path="/deploy" element={<Deployment />} />
-        <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/compare" element={<ModelCompare />} />
-      </Route>
-    </Routes>
+    <ErrorBoundary>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Home />} />
+          <Route path="/projects" element={<ProjectManager />} />
+          <Route path="/discussion" element={<Discussion />} />
+          <Route path="/toc" element={<TableOfContents />} />
+          <Route path="/feedback" element={<Feedback />} />
+          <Route path="/chapters" element={<ChapterCreation />} />
+          <Route path="/deploy" element={<Deployment />} />
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/compare" element={<ModelCompare />} />
+        </Route>
+      </Routes>
+    </ErrorBoundary>
   );
 }

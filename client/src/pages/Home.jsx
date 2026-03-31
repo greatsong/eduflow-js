@@ -3,58 +3,334 @@ import { Link } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { apiFetch, getApiKey } from '../api/client';
 
+const RELEASE_NOTES = [
+  {
+    version: 'v0.4.0',
+    date: '2026-03-28',
+    highlights: '2축 템플릿 · AI 이미지 · 평가 단계 · 대화 저장',
+    sections: [
+      {
+        title: '2축 템플릿 시스템',
+        icon: '🎯',
+        items: [
+          '교과 영역(WHAT) 7종 × 교육 모델(HOW) 6종 조합',
+          '기능 옵션 7종 자유 선택 (코드, 수식, Mermaid, 이미지 등)',
+          '교과별 최적화 프롬프트 자동 적용',
+        ],
+      },
+      {
+        title: 'AI 이미지 생성',
+        icon: '🖼️',
+        items: [
+          'Gemini API로 교육용 일러스트 자동 생성',
+          '이미지 갤러리 + 라이트박스 + 재생성',
+          '이미지 컨셉 가이드로 스타일 통일',
+        ],
+      },
+      {
+        title: '평가 단계 옵션 (0~4)',
+        icon: '📊',
+        items: [
+          '0: 평가 없음 → 4: 인터랙티브 채점+피드백+재도전',
+          '퀴즈 엔진(quiz-engine.js) 자동 포함',
+          '프로젝트별 평가 수준 설정',
+        ],
+      },
+      {
+        title: '대화 기록 서버 저장',
+        icon: '💬',
+        items: [
+          '챕터별 대화가 서버에 자동 저장',
+          '탭/브라우저 전환 후에도 유지',
+        ],
+      },
+      {
+        title: 'MkDocs 교재 개선',
+        icon: '📖',
+        items: [
+          '사이드바 접기 토글 (상태 기억)',
+          '이전/다음 챕터 카드형 네비게이션',
+          '발행인·검토자·발행일 메타데이터',
+        ],
+      },
+      {
+        title: '분량 제어 · 안정성',
+        icon: '🔧',
+        items: [
+          'TOC 과다 생성 방지 (6차시→20차시 현상 차단)',
+          '챕터 잘림 방지 안전 버퍼',
+          '권(Volume) → Part+Chapter 구조 통일',
+          '프로젝트 설정 저장 안정성 개선',
+        ],
+      },
+    ],
+  },
+];
+
 export default function Home() {
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
+
   return (
-    <div className="max-w-3xl mx-auto py-12">
-      {/* 히어로 */}
-      <div className="text-center mb-10">
-        <div className="flex justify-center mb-4">
-          <Logo size={100} />
-        </div>
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent mb-3">
-          에듀플로
-        </h1>
-        <p className="text-lg text-gray-600 mb-2">
-          AI와 함께, 교육 콘텐츠를 물 흐르듯 만들어보세요
-        </p>
-        <p className="text-sm text-gray-400 italic">
-          "좋은 수업 아이디어를 체계적인 교육자료로"
-        </p>
-      </div>
+    <div className="max-w-5xl mx-auto py-8 px-4">
+      {/* 히어로 섹션 */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-600 text-white px-8 py-16 md:px-16 mb-12">
+        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full bg-teal-400/20 blur-2xl" />
+        <div className="absolute top-10 right-[30%] w-32 h-32 rounded-full bg-emerald-300/10 blur-xl" />
 
-      {/* 기능 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        {[
-          { icon: '💬', title: '방향성 논의', desc: 'AI와 대화하며 교재 방향 설정', color: 'from-indigo-500 to-indigo-600' },
-          { icon: '📋', title: '자동 목차 생성', desc: '레퍼런스 기반 구조화', color: 'from-purple-500 to-purple-600' },
-          { icon: '✍️', title: '챕터 자동 작성', desc: '병렬 생성으로 빠르게', color: 'from-amber-500 to-orange-500' },
-          { icon: '🚀', title: '웹 배포', desc: 'MkDocs로 즉시 배포', color: 'from-emerald-500 to-teal-600' },
-        ].map((item) => (
-          <div key={item.title} className="group p-5 bg-white rounded-2xl border border-gray-100 hover:border-indigo-200 hover:shadow-lg hover:-translate-y-1 transition-all duration-200">
-            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center text-2xl mb-4 shadow-sm group-hover:scale-110 transition-transform duration-200`}>
-              {item.icon}
+        <div className="relative z-10 flex flex-col md:flex-row items-center gap-10">
+          <div className="flex-1 text-center md:text-left">
+            <button
+              onClick={() => setShowReleaseNotes(true)}
+              className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur rounded-full text-xs font-medium mb-5 border border-white/20 hover:bg-white/25 transition-colors cursor-pointer"
+            >
+              <span className="w-2 h-2 bg-emerald-300 rounded-full animate-pulse" />
+              v0.4 — 2축 템플릿 · 멀티 AI · 오픈소스
+            </button>
+            <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4 tracking-tight">
+              에듀플로
+              <span className="block text-emerald-200 text-2xl md:text-3xl font-semibold mt-1">
+                EduFlow
+              </span>
+            </h1>
+            <p className="text-lg text-emerald-100/90 mb-2 leading-relaxed max-w-lg">
+              선생님과 AI가 함께 만드는 오픈소스 교육자료 생성 플랫폼
+            </p>
+            <p className="text-sm text-emerald-200/70 italic mb-8">
+              "좋은 수업 아이디어를 체계적인 교육자료로"
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center md:justify-start">
+              <Link
+                to="/projects"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-white text-emerald-700 rounded-xl font-bold text-base hover:bg-emerald-50 transition-all shadow-lg shadow-emerald-900/20 hover:shadow-xl hover:-translate-y-0.5"
+              >
+                시작하기 →
+              </Link>
+              <Link
+                to="/compare"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white/10 backdrop-blur text-white rounded-xl font-medium text-sm border border-white/20 hover:bg-white/20 transition-all"
+              >
+                AI 모델 비교
+              </Link>
             </div>
-            <h3 className="font-semibold text-gray-900 mb-1">{item.title}</h3>
-            <p className="text-sm text-gray-500">{item.desc}</p>
           </div>
-        ))}
-      </div>
 
-      {/* 멀티 AI 안내 */}
-      <MultiAIBanner />
+          <div className="relative shrink-0 hidden md:block">
+            <div className="relative">
+              <div className="absolute inset-0 bg-white/10 rounded-3xl blur-xl scale-110" />
+              <div className="relative bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/20">
+                <Logo size={120} />
+              </div>
+            </div>
+            <div className="absolute -bottom-4 -left-8 bg-white rounded-xl shadow-xl px-3 py-2 text-xs font-medium text-gray-700 animate-[float_3s_ease-in-out_infinite]">
+              💬 AI 대화형 생성
+            </div>
+            <div className="absolute -top-3 -right-6 bg-white rounded-xl shadow-xl px-3 py-2 text-xs font-medium text-gray-700 animate-[float_3s_ease-in-out_infinite_0.5s]">
+              🚀 원클릭 배포
+            </div>
+          </div>
+        </div>
+      </section>
 
-      {/* 시작하기 */}
-      <div className="text-center mb-16">
+      {/* 핵심 가치 — 헌법에서 추출한 3가지 핵심 */}
+      <section className="mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-all">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-xl mb-4">👩‍🏫</div>
+            <h3 className="font-bold text-gray-900 mb-2">교사가 창작자</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              AI는 제안하고, 선생님이 결정합니다. 모든 단계에서 수정, 거부, 재생성할 수 있습니다.
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-all">
+            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-xl mb-4">🔄</div>
+            <h3 className="font-bold text-gray-900 mb-2">끊기지 않는 흐름</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              아이디어부터 학생 손에 닿는 교재까지. 구상 → 구조화 → 생성 → 배포, 중간에 끊기지 않습니다.
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg transition-all">
+            <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center text-xl mb-4">💬</div>
+            <h3 className="font-bold text-gray-900 mb-2">대화형 협력</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              일방적 생성이 아니라, AI와의 대화를 통해 선생님의 교육 철학을 교재에 녹여냅니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 6단계 워크플로우 */}
+      <section className="mb-12">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">6단계 워크플로우</h2>
+          <p className="text-sm text-gray-500">아이디어부터 배포까지, 물 흐르듯 이어집니다</p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { step: 1, icon: '💬', title: '방향성 논의', desc: 'AI와 대화하며 교재 구상', color: 'from-emerald-500 to-emerald-600' },
+            { step: 2, icon: '📋', title: '목차 작성', desc: '체계적 구조 자동 생성', color: 'from-green-500 to-green-600' },
+            { step: 3, icon: '✅', title: '피드백', desc: '목차 검토 및 확정', color: 'from-teal-500 to-teal-600' },
+            { step: 4, icon: '✍️', title: '챕터 제작', desc: '배치/개별 자동 작성', color: 'from-cyan-500 to-cyan-600' },
+            { step: 5, icon: '🚀', title: '배포', desc: 'MkDocs · DOCX · 웹', color: 'from-sky-500 to-sky-600' },
+            { step: 6, icon: '📊', title: '포트폴리오', desc: '완성된 교재 모아보기', color: 'from-violet-500 to-violet-600' },
+          ].map((item) => (
+            <div key={item.step} className="group relative overflow-hidden bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-default">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${item.color} flex items-center justify-center text-white text-xs font-bold shadow-sm`}>
+                  {item.step}
+                </div>
+                <span className="text-xl">{item.icon}</span>
+              </div>
+              <h3 className="font-bold text-gray-900 text-sm mb-1">{item.title}</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
+              <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${item.color} scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left`} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 핵심 기능 — 벤토 그리드 */}
+      <section className="mb-12">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">주요 기능</h2>
+          <p className="text-sm text-gray-500">어떤 교과든, 어떤 형식이든</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 대형 카드: 멀티 AI */}
+          <div className="md:col-span-2 bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl" />
+            <div className="relative z-10">
+              <span className="text-2xl mb-3 block">🤖</span>
+              <h3 className="text-lg font-bold mb-2">멀티 AI 프로바이더</h3>
+              <p className="text-gray-300 text-sm leading-relaxed mb-4">
+                Claude, GPT, Gemini, Solar — 4개 AI를 자유롭게 선택하고 비교하세요.
+                특정 AI에 종속되지 않는 열린 구조입니다.
+              </p>
+              <MultiAIBanner />
+            </div>
+          </div>
+
+          {/* 소형 카드들 */}
+          <div className="space-y-4">
+            <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-2xl p-5 border border-emerald-100">
+              <span className="text-2xl mb-2 block">📐</span>
+              <h3 className="font-bold text-gray-900 text-sm mb-1">2축 템플릿 시스템</h3>
+              <p className="text-xs text-gray-600 leading-relaxed">교과 전문성(WHAT) × 교육 모델(HOW) + 기능 옵션을 자유롭게 조합</p>
+            </div>
+            <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-5 border border-teal-100">
+              <span className="text-2xl mb-2 block">🌐</span>
+              <h3 className="font-bold text-gray-900 text-sm mb-1">원클릭 웹 배포</h3>
+              <p className="text-xs text-gray-600 leading-relaxed">MkDocs + GitHub Pages로 교재 사이트를 즉시 배포. 교사 컴퓨터에만 머무르지 않습니다.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* 추가 기능 카드 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          <div className="bg-white rounded-xl border border-gray-100 p-4 text-center hover:shadow-md transition-all">
+            <span className="text-xl block mb-2">📎</span>
+            <h4 className="font-bold text-gray-900 text-xs mb-1">참고자료 업로드</h4>
+            <p className="text-[10px] text-gray-400">PDF · DOCX · HWP · 복붙</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 text-center hover:shadow-md transition-all">
+            <span className="text-xl block mb-2">📊</span>
+            <h4 className="font-bold text-gray-900 text-xs mb-1">시각화</h4>
+            <p className="text-[10px] text-gray-400">Mermaid · KaTeX · SVG</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 text-center hover:shadow-md transition-all">
+            <span className="text-xl block mb-2">👥</span>
+            <h4 className="font-bold text-gray-900 text-xs mb-1">사용자 관리</h4>
+            <p className="text-[10px] text-gray-400">가입 승인 · 역할 · 통계</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 text-center hover:shadow-md transition-all">
+            <span className="text-xl block mb-2">📖</span>
+            <h4 className="font-bold text-gray-900 text-xs mb-1">포트폴리오</h4>
+            <p className="text-[10px] text-gray-400">완성된 교재 모아보기</p>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="text-center mb-12">
         <Link
           to="/projects"
-          className="inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg shadow-indigo-200 hover:shadow-xl hover:shadow-indigo-300 hover:-translate-y-0.5"
+          className="inline-flex items-center gap-2 px-10 py-4 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-2xl font-bold text-lg hover:from-emerald-700 hover:to-green-700 transition-all shadow-lg shadow-emerald-200 hover:shadow-xl hover:shadow-emerald-300 hover:-translate-y-0.5"
         >
-          시작하기 →
+          교육자료 만들기 시작 →
         </Link>
-      </div>
+      </section>
 
-      {/* 개발자 편지 - 스크롤 아래에 위치 */}
+      {/* 오픈소스 안내 */}
+      <section className="text-center mb-16 space-y-3">
+        <div className="inline-flex flex-col sm:flex-row items-center gap-3">
+          <a
+            href="/install-guide.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-sm text-emerald-700 hover:bg-emerald-100 transition-colors font-medium"
+          >
+            <span>📖</span>
+            <span>에듀플로 설치 및 사용 가이드</span>
+          </a>
+          <a
+            href="https://github.com/greatsong/eduflow-js"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-emerald-600 transition-colors"
+          >
+            <span>⭐</span>
+            <span className="underline underline-offset-2">GitHub 바로가기</span>
+          </a>
+        </div>
+        <p className="text-xs text-gray-400">오픈소스로 공개되어 있습니다 · MIT License</p>
+      </section>
+
+      {/* 개발자 편지 */}
       <DeveloperLetter />
+
+      {/* 릴리즈 노트 모달 */}
+      {showReleaseNotes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowReleaseNotes(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">🎉 새로운 소식</h2>
+                  <p className="text-emerald-100 text-xs mt-0.5">{RELEASE_NOTES[0].version} · {RELEASE_NOTES[0].date}</p>
+                </div>
+                <button onClick={() => setShowReleaseNotes(false)} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-sm transition-colors">✕</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-[60vh] px-6 py-4 space-y-4">
+              {RELEASE_NOTES[0].sections.map((section, idx) => (
+                <div key={idx}>
+                  <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-2">
+                    <span className="text-base">{section.icon}</span>
+                    {section.title}
+                  </h3>
+                  <ul className="space-y-1 ml-7">
+                    {section.items.map((item, i) => (
+                      <li key={i} className="text-xs text-gray-600 leading-relaxed flex items-start gap-1.5">
+                        <span className="text-emerald-400 mt-0.5 shrink-0">•</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 text-center">
+              <button onClick={() => setShowReleaseNotes(false)} className="px-6 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors">확인</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -78,72 +354,40 @@ function MultiAIBanner() {
         setServerP(d.serverProviders || {});
         setApiMode(d.apiMode || 'user');
       })
-      .catch(() => {});
+      .catch((err) => console.error('인증 상태 로드 실패', err));
   }, []);
 
-  // 공개 / 비공개(관리자) / 내 키 구분
   const providerStatus = PROVIDER_INFO.map((p) => {
     const shared = !!sharedP[p.id];
     const adminOnly = !shared && !!serverP[p.id];
     const user = !serverP[p.id] && !!getApiKey(p.id);
     return { ...p, shared, adminOnly, user, available: shared || adminOnly || user };
   });
-  const sharedCount = providerStatus.filter((p) => p.shared).length;
-  const adminOnlyCount = providerStatus.filter((p) => p.adminOnly).length;
-  const userCount = providerStatus.filter((p) => p.user).length;
 
   return (
-    <div className="mb-10 p-5 bg-gradient-to-r from-slate-50 to-indigo-50/50 rounded-2xl border border-indigo-100/60">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xl">🤖</span>
-        <h3 className="text-base font-bold text-gray-800">멀티 AI 지원</h3>
-        {sharedCount > 0 && (
-          <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full font-medium">
-            🌐 공개 {sharedCount}개
-          </span>
-        )}
-        {adminOnlyCount > 0 && (
-          <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full font-medium">
-            🔒 비공개 {adminOnlyCount}개
-          </span>
-        )}
-        {userCount > 0 && (
-          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full font-medium">
-            👤 내 키 {userCount}개
-          </span>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-        {providerStatus.map((p) => (
-          <div
-            key={p.id}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
-              p.available
-                ? p.color
-                : 'bg-gray-50 text-gray-400 border-gray-200'
-            }`}
-          >
-            <span>{p.icon}</span>
-            <span>{p.name}</span>
-            {p.shared ? (
-              <span className="ml-auto text-emerald-500" title="공개 (모든 사용자)">🌐</span>
-            ) : p.adminOnly ? (
-              <span className="ml-auto text-amber-500" title="비공개 (관리자만)">🔒</span>
-            ) : p.user ? (
-              <span className="ml-auto text-blue-500" title="내 키">👤</span>
-            ) : (
-              <span className="ml-auto text-gray-300">—</span>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <p className="text-xs text-gray-500">
-        {apiMode === 'server'
-          ? '🌐 = 공개 (무료), 🔒 = 비공개 (관리자), 👤 = 내 키. 사이드바 🔑 AI API 키에서 설정하세요.'
-          : 'AI를 사용하려면 사이드바 하단의 🔑 AI API 키에서 API 키를 입력하세요.'}
-      </p>
+    <div className="flex flex-wrap gap-2">
+      {providerStatus.map((p) => (
+        <div
+          key={p.id}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+            p.available
+              ? 'bg-white/10 border-white/20 text-white'
+              : 'bg-white/5 border-white/10 text-white/40'
+          }`}
+        >
+          <span>{p.icon}</span>
+          <span>{p.name}</span>
+          {p.shared ? (
+            <span className="text-emerald-300" title="공개">🌐</span>
+          ) : p.adminOnly ? (
+            <span className="text-amber-300" title="비공개">🔒</span>
+          ) : p.user ? (
+            <span className="text-blue-300" title="내 키">👤</span>
+          ) : (
+            <span className="text-white/20">—</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -153,16 +397,13 @@ function DeveloperLetter() {
 
   return (
     <div className="max-w-2xl mx-auto pb-10">
-      {/* 봉투 클릭 영역 */}
       <div
         onClick={() => setIsOpen(!isOpen)}
         className="cursor-pointer group"
       >
-        {/* 봉투 본체 */}
         <div className={`relative bg-gradient-to-br from-amber-100 to-orange-100 border-2 border-amber-300 shadow-lg transition-all duration-300 ${
           isOpen ? 'rounded-t-xl border-b-0' : 'rounded-xl hover:shadow-xl hover:scale-[1.01]'
         }`}>
-          {/* 봉투 뚜껑 - SVG로 구현 */}
           <svg
             className={`absolute -top-[1px] left-0 right-0 w-full transition-all duration-500 ${
               isOpen ? 'opacity-0 -translate-y-2' : 'opacity-100'
@@ -185,7 +426,6 @@ function DeveloperLetter() {
             </defs>
           </svg>
 
-          {/* 봉투 내용 */}
           <div className={`flex items-center justify-center transition-all duration-300 ${
             isOpen ? 'py-4' : 'py-8'
           }`}>
@@ -197,7 +437,6 @@ function DeveloperLetter() {
         </div>
       </div>
 
-      {/* 편지 내용 (열린 상태) */}
       <div
         className={`overflow-hidden transition-all duration-500 ease-out ${
           isOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
@@ -212,9 +451,9 @@ function DeveloperLetter() {
             <strong className="text-gray-800"> AI로 풀 수 있는 가치있는 문제</strong>를 찾고 해결하고 있습니다!
           </p>
           <p className="text-gray-600 text-sm mb-3 leading-relaxed">
-            이번 프로젝트에서는 선생님들께서 수업 아이디어를 구상할 때 도움이 되고,
-            또 완성된 아이디어가 마음에 들 경우 웹으로 바로 배포할 수 있는
-            <strong className="text-gray-800"> 「수업 자료 개발 및 배포 자동화 시스템, 에듀플로(EduFlow)」</strong>를 만들어보았습니다!
+            에듀플로는 선생님의 수업 아이디어를 AI와 대화하며 구체화하고,
+            완성된 교재를 웹으로 바로 배포할 수 있는
+            <strong className="text-gray-800"> 오픈소스 교육자료 생성 플랫폼</strong>입니다.
           </p>
           <p className="text-gray-600 text-sm mb-4 leading-relaxed">
             사용해보시고 피드백 주시면 적극 반영하겠습니다!
@@ -227,6 +466,7 @@ function DeveloperLetter() {
           </p>
         </div>
       </div>
+
     </div>
   );
 }

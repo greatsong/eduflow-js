@@ -11,6 +11,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 
+// 기본 타임아웃 (120초) — 모든 프로바이더에 공통 적용
+const DEFAULT_TIMEOUT = 120000;
+
 // 프로바이더별 기본 API 키 환경변수 매핑
 const ENV_KEY_MAP = {
   anthropic: 'ANTHROPIC_API_KEY',
@@ -27,7 +30,9 @@ export function detectProvider(modelId) {
   if (modelId.startsWith('gpt-') || modelId.startsWith('o1') || modelId.startsWith('o3') || modelId.startsWith('o4')) return 'openai';
   if (modelId.startsWith('gemini-')) return 'google';
   if (modelId.startsWith('solar-')) return 'upstage';
-  return 'anthropic'; // 기본값
+  // 알 수 없는 모델 — 기본 anthropic으로 처리하되 경고 로깅
+  console.warn(`[aiProvider] 알 수 없는 모델 ID: "${modelId}" — 기본 프로바이더(anthropic)로 처리`);
+  return 'anthropic';
 }
 
 /**
@@ -40,8 +45,9 @@ export function resolveApiKey(provider, keys = {}) {
   if (keys[provider]) return keys[provider];
   // 범용 키 (헤더에서 온 것)
   if (keys._default) return keys._default;
-  // 환경변수
-  return process.env[ENV_KEY_MAP[provider]] || '';
+  // 환경변수 — 빈 문자열이면 null 반환하여 호출자가 누락을 감지할 수 있도록
+  const envKey = process.env[ENV_KEY_MAP[provider]] || '';
+  return envKey.trim() || null;
 }
 
 /**
@@ -90,7 +96,7 @@ export async function streamChat({ provider, apiKey, model, messages, system, ma
  * chapterGenerator 등에서 stream 객체가 필요할 때 사용
  */
 export function createAnthropicStream({ apiKey, model, messages, system, maxTokens, timeout }) {
-  const client = new Anthropic({ apiKey, timeout });
+  const client = new Anthropic({ apiKey, timeout: timeout || DEFAULT_TIMEOUT });
   const opts = { model, max_tokens: maxTokens, messages };
   if (system) opts.system = system;
   return client.messages.stream(opts);
@@ -101,7 +107,7 @@ export function createAnthropicStream({ apiKey, model, messages, system, maxToke
 // ============================================================
 
 async function _anthropicChat({ apiKey, model, messages, system, maxTokens }) {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: DEFAULT_TIMEOUT });
   const opts = { model, max_tokens: maxTokens, messages };
   if (system) opts.system = system;
 
@@ -115,7 +121,7 @@ async function _anthropicChat({ apiKey, model, messages, system, maxTokens }) {
 }
 
 async function _anthropicStream({ apiKey, model, messages, system, maxTokens, res, onText }) {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: DEFAULT_TIMEOUT });
   const opts = { model, max_tokens: maxTokens, messages };
   if (system) opts.system = system;
 
@@ -153,7 +159,7 @@ function _buildOpenAIMessages(messages, system) {
 }
 
 async function _openaiChat({ apiKey, model, messages, system, maxTokens, baseURL }) {
-  const client = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
+  const client = new OpenAI({ apiKey, timeout: DEFAULT_TIMEOUT, ...(baseURL && { baseURL }) });
   const response = await client.chat.completions.create({
     model,
     messages: _buildOpenAIMessages(messages, system),
@@ -170,7 +176,7 @@ async function _openaiChat({ apiKey, model, messages, system, maxTokens, baseURL
 }
 
 async function _openaiStream({ apiKey, model, messages, system, maxTokens, res, onText, baseURL }) {
-  const client = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
+  const client = new OpenAI({ apiKey, timeout: DEFAULT_TIMEOUT, ...(baseURL && { baseURL }) });
   const stream = await client.chat.completions.create({
     model,
     messages: _buildOpenAIMessages(messages, system),
@@ -220,7 +226,7 @@ function _buildGeminiMessages(messages) {
 }
 
 async function _googleChat({ apiKey, model, messages, system, maxTokens }) {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: DEFAULT_TIMEOUT } });
   const config = { maxOutputTokens: maxTokens };
   if (system) config.systemInstruction = system;
 
@@ -240,7 +246,7 @@ async function _googleChat({ apiKey, model, messages, system, maxTokens }) {
 }
 
 async function _googleStream({ apiKey, model, messages, system, maxTokens, res, onText }) {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: DEFAULT_TIMEOUT } });
   const config = { maxOutputTokens: maxTokens };
   if (system) config.systemInstruction = system;
 

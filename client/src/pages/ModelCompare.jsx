@@ -120,10 +120,13 @@ export default function ModelCompare() {
   const printRef = useRef(null);
 
   const [serverProviders, setServerProviders] = useState({});
+  const [modelsLoading, setModelsLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch('/api/models').then(({ models }) => setAllModels(models)).catch(() => {});
-    apiFetch('/api/auth/status').then((d) => setServerProviders(d.serverProviders || {})).catch(() => {});
+    Promise.all([
+      apiFetch('/api/models').then(({ models }) => setAllModels(models)).catch((err) => console.error('모델 목록 로드 실패', err)),
+      apiFetch('/api/auth/status').then((d) => setServerProviders(d.serverProviders || {})).catch((err) => console.error('인증 상태 로드 실패', err)),
+    ]).finally(() => setModelsLoading(false));
   }, []);
 
   const availableModels = useMemo(() => {
@@ -168,6 +171,8 @@ export default function ModelCompare() {
     for (const m of ordered) init[m] = { text: '', status: 'waiting', elapsed: null, charCount: null };
     setResults(init);
 
+    // 이전 요청이 남아 있으면 중단
+    if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     try {
@@ -280,6 +285,8 @@ export default function ModelCompare() {
     for (const m of modelIds) init[m] = { text: '', status: 'waiting', elapsed: null, charCount: null };
     setResults(init);
 
+    // 이전 요청이 남아 있으면 중단
+    if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     let evalResult = null;
@@ -473,6 +480,12 @@ export default function ModelCompare() {
       {/* 모드 토글 */}
       {phase === 'idle' && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
+          {modelsLoading && (
+            <div className="flex items-center gap-2 text-sm text-gray-400 mb-3">
+              <span className="inline-block w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+              모델 목록 로딩 중...
+            </div>
+          )}
           <div className="flex items-center gap-4 flex-wrap">
             <span className="text-sm font-medium text-gray-700">비교 방식</span>
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">

@@ -17,7 +17,7 @@ const router = Router();
  * 여러 모델에 동일한 프롬프트를 보내고 결과를 SSE로 스트리밍
  * body: { models: ["claude-sonnet-4-6", "gpt-5.1"], prompt: "...", systemPrompt?: "..." }
  */
-router.post('/', requireApiKey, asyncHandler(async (req, res) => {
+router.post('/', requireApiKey,  asyncHandler(async (req, res) => {
   const { models, prompt, systemPrompt } = req.body;
 
   if (!models || !Array.isArray(models) || models.length < 2) {
@@ -105,7 +105,7 @@ router.post('/', requireApiKey, asyncHandler(async (req, res) => {
  * body: { models: [...], prompt: "...", judgeModel: "claude-sonnet-4-6" }
  * SSE: generate → evaluate → rank
  */
-router.post('/auto-evaluate', requireApiKey, asyncHandler(async (req, res) => {
+router.post('/auto-evaluate', requireApiKey,  asyncHandler(async (req, res) => {
   const { models, prompt, judgeModel = 'claude-sonnet-4-6' } = req.body;
 
   if (!models || !Array.isArray(models) || models.length < 2) {
@@ -263,10 +263,21 @@ ${responsesText}
       keySource: req.headers[`x-${judgeProvider}-key`] ? 'user' : 'server',
     });
 
-    // JSON 파싱 시도
+    // BUG-005: JSON 파싱 시도 — jsonMatch null 및 파싱 실패 방어
     const jsonMatch = evaluateText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const evaluation = JSON.parse(jsonMatch[0]);
+      let evaluation;
+      try {
+        evaluation = JSON.parse(jsonMatch[0]);
+      } catch (parseErr) {
+        // JSON 파싱 실패 시 안전하게 에러 전달
+        console.error('[compare/auto-evaluate] JSON 파싱 실패:', parseErr.message);
+        send({ type: 'evaluate-error', message: 'AI 평가 결과 JSON을 파싱할 수 없습니다.' });
+        send({ type: 'done' });
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+      }
 
       // 라벨을 실제 모델 ID로 변환
       const result = {

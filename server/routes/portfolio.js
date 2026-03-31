@@ -14,27 +14,46 @@ const router = Router();
 async function loadProjectData(projectPath, projectName) {
   const data = { name: projectName };
 
-  // config.json
+  // config.json (필수 — 없으면 건너뜀)
   const configPath = join(projectPath, 'config.json');
   if (!existsSync(configPath)) return null;
-  data.config = JSON.parse(await readFile(configPath, 'utf-8'));
+  try {
+    data.config = JSON.parse(await readFile(configPath, 'utf-8'));
+  } catch (e) {
+    // BUG-011: config.json 파싱 실패 시 해당 프로젝트 건너뛰기
+    console.error(`[portfolio] config.json 파싱 실패 (${projectName}):`, e.message);
+    return null;
+  }
 
-  // toc.json
+  // toc.json (선택)
   const tocPath = join(projectPath, 'toc.json');
   if (existsSync(tocPath)) {
-    data.toc = JSON.parse(await readFile(tocPath, 'utf-8'));
+    try {
+      data.toc = JSON.parse(await readFile(tocPath, 'utf-8'));
+    } catch (e) {
+      console.error(`[portfolio] toc.json 파싱 실패 (${projectName}):`, e.message);
+      // 파싱 실패 시 toc 없이 진행
+    }
   }
 
-  // progress.json
+  // progress.json (선택)
   const progressPath = join(projectPath, 'progress.json');
   if (existsSync(progressPath)) {
-    data.progress = JSON.parse(await readFile(progressPath, 'utf-8'));
+    try {
+      data.progress = JSON.parse(await readFile(progressPath, 'utf-8'));
+    } catch (e) {
+      console.error(`[portfolio] progress.json 파싱 실패 (${projectName}):`, e.message);
+    }
   }
 
-  // generation_report.json
+  // generation_report.json (선택)
   const reportPath = join(projectPath, 'generation_report.json');
   if (existsSync(reportPath)) {
-    data.report = JSON.parse(await readFile(reportPath, 'utf-8'));
+    try {
+      data.report = JSON.parse(await readFile(reportPath, 'utf-8'));
+    } catch (e) {
+      console.error(`[portfolio] generation_report.json 파싱 실패 (${projectName}):`, e.message);
+    }
   }
 
   // docs/ 챕터 파일

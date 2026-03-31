@@ -39,7 +39,13 @@ export default function Deployment() {
       </div>
 
       {/* 도구 상태 */}
-      {status && (
+      {statusLoading && (
+        <div className="mb-4 flex items-center gap-2 text-sm text-gray-400">
+          <span className="inline-block w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+          배포 도구 상태 확인 중...
+        </div>
+      )}
+      {status?.tools && (
         <div className="mb-4 flex items-center gap-4 text-xs text-gray-500">
           <span>도구 상태:</span>
           <span className={status.tools.mkdocs ? 'text-green-600' : 'text-red-500'}>
@@ -54,7 +60,7 @@ export default function Deployment() {
           <span className={status.tools.gh ? 'text-green-600' : 'text-red-500'}>
             {status.tools.gh ? '✅' : '❌'} gh
           </span>
-          <span className="ml-auto">📁 챕터: {status.chapterCount}개</span>
+          <span className="ml-auto">📁 챕터: {status.chapterCount ?? 0}개</span>
           {status.ghUser && <span>👤 {status.ghUser}</span>}
         </div>
       )}

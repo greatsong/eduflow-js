@@ -52,7 +52,7 @@ export default function TableOfContents() {
   useEffect(() => {
     apiFetch('/api/models/default/chapter_generation')
       .then((r) => setModel(r.modelId))
-      .catch(() => {});
+      .catch((err) => console.error('기본 챕터 생성 모델 로드 실패', err));
   }, []);
 
   // 프로젝트 변경 시 TOC 로드
@@ -127,8 +127,8 @@ export default function TableOfContents() {
     );
   }
 
-  const totalChapters = toc
-    ? (toc.parts || []).reduce((sum, p) => sum + (p.chapters || []).length, 0)
+  const totalChapters = toc?.parts
+    ? toc.parts.reduce((sum, p) => sum + (p.chapters?.length || 0), 0)
     : 0;
 
   return (
@@ -349,6 +349,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
 
   // 깊은 복사 후 상태 업데이트
   const updateToc = (updater) => {
+    if (!toc) return;
     const newToc = JSON.parse(JSON.stringify(toc));
     updater(newToc);
     setToc(newToc);
@@ -373,7 +374,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
 
   // Part 삭제
   const deletePart = (partIdx) => {
-    if (!confirm(`Part ${toc.parts[partIdx].part_number}를 삭제하시겠습니까?`)) return;
+    if (!confirm(`Part ${toc?.parts?.[partIdx]?.part_number ?? partIdx + 1}를 삭제하시겠습니까?`)) return;
     updateToc((t) => {
       t.parts.splice(partIdx, 1);
       // part_number 재정렬
@@ -429,7 +430,8 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
   // Chapter 순서 변경
   const moveChapter = (partIdx, chIdx, direction) => {
     const newIdx = chIdx + direction;
-    if (newIdx < 0 || newIdx >= toc.parts[partIdx].chapters.length) return;
+    const chapters = toc?.parts?.[partIdx]?.chapters;
+    if (!chapters || newIdx < 0 || newIdx >= chapters.length) return;
     updateToc((t) => {
       const chapters = t.parts[partIdx].chapters;
       [chapters[chIdx], chapters[newIdx]] = [chapters[newIdx], chapters[chIdx]];

@@ -10,32 +10,54 @@ const PROVIDER_KEYS = {
 
 /** 프로바이더별 API 키 가져오기 */
 export function getApiKey(provider = 'anthropic') {
-  return localStorage.getItem(PROVIDER_KEYS[provider] || PROVIDER_KEYS.anthropic) || '';
+  try {
+    return localStorage.getItem(PROVIDER_KEYS[provider] || PROVIDER_KEYS.anthropic) || '';
+  } catch (e) {
+    // localStorage 접근 불가 시 (프라이빗 브라우징 등) 빈 문자열 반환
+    console.warn('[client] localStorage 읽기 실패:', e);
+    return '';
+  }
 }
 
 /** 프로바이더별 API 키 저장 */
 export function setApiKey(key, provider = 'anthropic') {
   const storageKey = PROVIDER_KEYS[provider] || PROVIDER_KEYS.anthropic;
-  if (key) {
-    localStorage.setItem(storageKey, key);
-  } else {
-    localStorage.removeItem(storageKey);
+  try {
+    if (key) {
+      localStorage.setItem(storageKey, key);
+    } else {
+      localStorage.removeItem(storageKey);
+    }
+  } catch (e) {
+    // localStorage 쓰기 실패 시 (용량 초과, 프라이빗 브라우징 등)
+    console.warn('[client] localStorage 쓰기 실패:', e);
   }
 }
 
 /** 설정된 모든 프로바이더 키 조회 */
 export function getAllApiKeys() {
   const keys = {};
-  for (const [provider, storageKey] of Object.entries(PROVIDER_KEYS)) {
-    const val = localStorage.getItem(storageKey);
-    if (val) keys[provider] = val;
+  try {
+    for (const [provider, storageKey] of Object.entries(PROVIDER_KEYS)) {
+      const val = localStorage.getItem(storageKey);
+      if (val) keys[provider] = val;
+    }
+  } catch (e) {
+    // localStorage 접근 불가 시 빈 객체 반환
+    console.warn('[client] localStorage 읽기 실패:', e);
   }
   return keys;
 }
 
 /** 아무 API 키라도 설정되어 있는지 확인 */
 export function hasApiKey() {
-  return Object.values(PROVIDER_KEYS).some((k) => !!localStorage.getItem(k));
+  try {
+    return Object.values(PROVIDER_KEYS).some((k) => !!localStorage.getItem(k));
+  } catch (e) {
+    // localStorage 접근 불가 시 false 반환
+    console.warn('[client] localStorage 읽기 실패:', e);
+    return false;
+  }
 }
 
 /** 공통 헤더 생성 — 모든 프로바이더 키를 각각의 헤더로 전송 */
@@ -136,32 +158,49 @@ export async function apiStreamPost(path, body, { onText, onProgress, onError, o
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  // onError 호출 후 onDone 중복 호출 방지 플래그
+  let errored = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const raw = line.slice(6);
-      if (raw === '[DONE]') { onDone?.(); return; }
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6);
+        if (raw === '[DONE]') { if (!errored) onDone?.(); return; }
 
-      try {
-        const data = JSON.parse(raw);
-        switch (data.type) {
-          case 'text': onText?.(data.content); break;
-          case 'progress': onProgress?.(data); break;
-          case 'report': onProgress?.(data); break;
-          case 'error': onError?.(new Error(data.message)); return;
-          case 'done': onDone?.(data); return;
+        try {
+          const data = JSON.parse(raw);
+          switch (data.type) {
+            case 'text': onText?.(data.content); break;
+            case 'progress': onProgress?.(data); break;
+            case 'report': onProgress?.(data); break;
+            case 'error':
+              errored = true;
+              onError?.(new Error(data.message));
+              return;
+            case 'done':
+              if (!errored) onDone?.(data);
+              return;
+          }
+        } catch (e) {
+          // SSE 데이터 JSON 파싱 실패 — 불완전한 청크일 수 있음
+          console.warn('[apiStreamPost] SSE 데이터 파싱 실패:', raw, e);
         }
-      } catch (e) {
-        // 파싱 실패 무시
       }
     }
+  } catch (networkErr) {
+    // 네트워크 에러 (연결 끊김, 타임아웃 등)
+    errored = true;
+    onError?.(networkErr);
   }
+
+  // 스트림 정상 종료 시 (서버가 [DONE] 없이 종료한 경우)
+  if (!errored) onDone?.();
 }

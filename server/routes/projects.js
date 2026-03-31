@@ -6,10 +6,10 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { ProgressManager } from '../services/progressManager.js';
-import { TemplateManager } from '../services/templateManager.js';
+import { TemplateManager, TemplateComposer } from '../services/templateManager.js';
 import { ReferenceManager } from '../services/referenceManager.js';
 import { sanitizeId } from '../middleware/sanitize.js';
-import { PEDAGOGICAL_DEVICES, DEVICE_CATEGORIES, RECOMMENDED_SETS } from '../../shared/pedagogicalDevices.js';
+import { TIER_CONFIG, TEMPLATE_VERSION } from '../../shared/constants.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -32,14 +32,20 @@ async function loadConfig(id) {
   const configFile = join(projectPath(id), 'config.json');
   if (!existsSync(configFile)) return null;
   const raw = await readFile(configFile, 'utf-8');
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    // JSON 파싱 실패 시 null 반환 (손상된 config.json 방어)
+    console.error(`[loadConfig] JSON 파싱 실패 (id: ${id}):`, e.message);
+    return null;
+  }
 }
 
 // ============================================================
 // 프로젝트 CRUD
 // ============================================================
 
-// GET /api/projects - 프로젝트 목록
+// GET /api/projects - 프로젝트 목록 (자기 프로젝트만 또는 전체)
 router.get('/', asyncHandler(async (req, res) => {
   if (!existsSync(PROJECTS_DIR)) {
     await mkdir(PROJECTS_DIR, { recursive: true });
@@ -56,17 +62,56 @@ router.get('/', asyncHandler(async (req, res) => {
     }
   }
 
+  // 사용자별 필터링: owner가 설정된 프로젝트는 본인 것만, 미설정은 모두에게 표시
+  // NOTE(BUG-021): 로컬 버전에서는 인증 미들웨어를 거치지 않을 수 있어 req.user가 없는 것이 정상.
+  // 이 경우 모든 프로젝트를 반환한다. 멀티유저 배포 시 인증 필수화가 필요함.
+  const userGoogleId = req.user?.googleId;
+  const filtered = userGoogleId
+    ? projects.filter(p => !p.owner || p.owner.googleId === userGoogleId)
+    : projects;
+
   // 최신순 정렬
-  projects.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-  res.json(projects);
+  filtered.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  res.json(filtered);
 }));
 
 // POST /api/projects - 프로젝트 생성
 router.post('/', asyncHandler(async (req, res) => {
-  const { name, title, author, description, claude_model, settings, template_id, template_vars, custom_prompt_config } = req.body;
+  const { name, title, author, description, claude_model, settings, template_id, template_vars, custom_prompt_config, include_hw_diagrams, image_generation_enabled, assessment_level } = req.body;
 
   if (!name || !title) {
     return res.status(400).json({ message: '프로젝트 ID와 제목은 필수입니다' });
+  }
+
+  // 프로젝트 한도 체크 (등급 기반)
+  const userTier = req.userTier || 'starter';
+  const maxProjects = TIER_CONFIG[userTier]?.maxProjects || 1;
+
+  if (req.user?.googleId) {
+    // 현재 프로젝트 수 카운트
+    if (existsSync(PROJECTS_DIR)) {
+      const entries = await readdir(PROJECTS_DIR, { withFileTypes: true });
+      let count = 0;
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name === 'template') continue;
+        const configFile = join(PROJECTS_DIR, entry.name, 'config.json');
+        if (!existsSync(configFile)) continue;
+        try {
+          const raw = await readFile(configFile, 'utf-8');
+          const config = JSON.parse(raw);
+          if (config.owner?.googleId === req.user.googleId) count++;
+        } catch { /* skip */ }
+      }
+
+      if (count >= maxProjects) {
+        return res.status(403).json({
+          message: `프로젝트 한도에 도달했습니다 (${count}/${maxProjects}개). 등급 업그레이드를 요청하세요.`,
+          currentCount: count,
+          maxProjects,
+          currentTier: userTier,
+        });
+      }
+    }
   }
 
   const projPath = projectPath(name);
@@ -85,19 +130,27 @@ router.post('/', asyncHandler(async (req, res) => {
     await mkdir(join(projPath, 'logs'), { recursive: true });
   }
 
-  // config.json 작성
+  // config.json 작성 (owner 정보 포함)
   const config = {
     name,
     title,
     author: author || '',
     description: description || '',
     claude_model: claude_model || 'claude-sonnet-4-6',
+    owner: req.user ? {
+      googleId: req.user.googleId,
+      email: req.user.email,
+      name: req.user.name,
+    } : null,
     settings: {
       batch_generation_enabled: settings?.batch_generation_enabled ?? true,
       auto_save: settings?.auto_save ?? true,
       max_tokens: settings?.max_tokens ?? 16000,
       temperature: 1.0,
     },
+    include_hw_diagrams: include_hw_diagrams || false,
+    image_generation_enabled: image_generation_enabled || false,
+    assessment_level: assessment_level ?? 2,
     deployment: {
       auto_commit: false,
       auto_deploy: false,
@@ -111,7 +164,14 @@ router.post('/', asyncHandler(async (req, res) => {
   await writeFile(join(projPath, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
 
   // 템플릿 적용
-  if (template_id) {
+  const { what_id, how_id, features: featureIds, context_answers } = req.body;
+
+  if (what_id && how_id) {
+    // ── v2: 3축 조합 시스템 ──
+    const tc = new TemplateComposer();
+    await tc.applyV2(projPath, what_id, how_id, featureIds || [], context_answers || {});
+  } else if (template_id) {
+    // ── v1: 레거시 단일 템플릿 ──
     const tm = new TemplateManager();
     const success = await tm.applyTemplate(template_id, projPath, template_vars || {});
 
@@ -121,7 +181,6 @@ router.post('/', asyncHandler(async (req, res) => {
       if (existsSync(infoFile)) {
         const raw = await readFile(infoFile, 'utf-8');
         const info = JSON.parse(raw);
-        // 템플릿 기본값 대신 사용자 커스텀 프롬프트로 오버라이드
         if (custom_prompt_config.toc_prompt_addition !== undefined) {
           info.toc_prompt_addition = custom_prompt_config.toc_prompt_addition;
         }
@@ -148,6 +207,109 @@ router.get('/templates/list', asyncHandler(async (req, res) => {
   res.json(templates);
 }));
 
+// ── v2 3축 템플릿 API ──
+
+// GET /api/projects/templates/whats - 교과 전문성 목록
+router.get('/templates/whats', asyncHandler(async (req, res) => {
+  const tc = new TemplateComposer();
+  const whats = await tc.listWhats();
+  res.json(whats);
+}));
+
+// GET /api/projects/templates/hows - 교육 모델 목록
+router.get('/templates/hows', asyncHandler(async (req, res) => {
+  const tc = new TemplateComposer();
+  const hows = await tc.listHows();
+  res.json(hows);
+}));
+
+// GET /api/projects/templates/features - 기능 옵션 목록
+router.get('/templates/features', asyncHandler(async (req, res) => {
+  const tc = new TemplateComposer();
+  const features = await tc.listFeatures();
+  res.json(features);
+}));
+
+// POST /api/projects/templates/compose-preview - 조합 미리보기
+router.post('/templates/compose-preview', asyncHandler(async (req, res) => {
+  const { what_id, how_id, features } = req.body;
+  if (!how_id) return res.status(400).json({ message: 'how_id는 필수입니다' });
+  const tc = new TemplateComposer();
+  const composed = await tc.compose(what_id || '_default', how_id, features || []);
+  res.json({
+    persona: composed.persona,
+    templateName: composed.templateName,
+    compatibility: composed.compatibility,
+    tocAdditionPreview: composed.tocAddition.slice(0, 500),
+    chapterAdditionPreview: composed.chapterAddition.slice(0, 500),
+  });
+}));
+
+// GET /api/projects/templates/check-compatibility - 호환성 검사
+router.get('/templates/check-compatibility', asyncHandler(async (req, res) => {
+  const { what_id, how_id, features } = req.query;
+  if (!what_id || !how_id) return res.status(400).json({ message: 'what_id와 how_id는 필수입니다' });
+  const tc = new TemplateComposer();
+  const what = await tc.loadWhat(what_id);
+  const how = await tc.loadHow(how_id);
+  if (!what || !how) return res.status(404).json({ message: '템플릿을 찾을 수 없습니다' });
+  const featureList = features ? (typeof features === 'string' ? features.split(',') : features) : [];
+  const result = tc.checkCompatibility(what, how, featureList);
+  res.json(result);
+}));
+
+// GET /api/projects/templates/samples/:templateId - 템플릿 샘플 챕터 조회
+router.get('/templates/samples/:templateId', asyncHandler(async (req, res) => {
+  const samplesFile = join(__dirname, '..', '..', 'samples', 'template-samples.md');
+  if (!existsSync(samplesFile)) {
+    return res.status(404).json({ message: '샘플 파일을 찾을 수 없습니다' });
+  }
+
+  const templateId = req.params.templateId;
+
+  // 템플릿 ID → 샘플 섹션 매핑
+  const sectionMap = {
+    'storytelling': '1.',
+    'school-textbook': '2.',
+    'programming-course': '3.',
+    'self-directed-learning': '4.',
+    'business-education': '5.',
+    'teacher-guide-4c': '6.',
+    'workshop-material': '7.',
+    'class-preview': '8.',
+    'lesson-per-session': '9.',
+  };
+
+  const sectionPrefix = sectionMap[templateId];
+  if (!sectionPrefix) {
+    return res.status(404).json({ message: '해당 템플릿의 샘플이 없습니다' });
+  }
+
+  const raw = await readFile(samplesFile, 'utf-8');
+  const sections = raw.split(/\n---\n/);
+
+  // 해당 섹션 번호로 시작하는 ## 헤더를 가진 섹션 찾기
+  let sample = null;
+  for (const section of sections) {
+    const trimmed = section.trim();
+    // "## 1. 스토리텔링 교육자료" 같은 패턴 매칭
+    if (trimmed.startsWith(`## ${sectionPrefix}`) || trimmed.match(new RegExp(`^##\\s+${sectionPrefix.replace('.', '\\.')}`))) {
+      sample = trimmed;
+      break;
+    }
+  }
+
+  if (!sample) {
+    return res.status(404).json({ message: '해당 템플릿의 샘플을 찾을 수 없습니다' });
+  }
+
+  // ## 헤더에서 제목 추출
+  const titleMatch = sample.match(/^##\s+\d+\.\s+(.+?)(?:\s*—\s*(.+))?$/m);
+  const title = titleMatch ? (titleMatch[2] || titleMatch[1]) : templateId;
+
+  res.json({ templateId, title, content: sample });
+}));
+
 // GET /api/projects/:id - 프로젝트 상세
 router.get('/:id', asyncHandler(async (req, res) => {
   const config = await loadConfig(req.params.id);
@@ -165,7 +327,14 @@ router.put('/:id', asyncHandler(async (req, res) => {
   }
 
   const raw = await readFile(configFile, 'utf-8');
-  const config = JSON.parse(raw);
+  let config;
+  try {
+    config = JSON.parse(raw);
+  } catch (e) {
+    // 손상된 config.json 방어
+    console.error(`[PUT /:id] config.json 파싱 실패:`, e.message);
+    return res.status(422).json({ message: '프로젝트 설정 파일이 손상되었습니다' });
+  }
   const updates = req.body;
 
   // 허용된 필드만 업데이트
@@ -175,6 +344,9 @@ router.put('/:id', asyncHandler(async (req, res) => {
   if (updates.target_audience !== undefined) config.target_audience = updates.target_audience;
   if (updates.claude_model !== undefined) config.claude_model = updates.claude_model;
   if (updates.settings) config.settings = { ...config.settings, ...updates.settings };
+  if (updates.include_hw_diagrams !== undefined) config.include_hw_diagrams = updates.include_hw_diagrams;
+  if (updates.image_generation_enabled !== undefined) config.image_generation_enabled = updates.image_generation_enabled;
+  if (updates.assessment_level !== undefined) config.assessment_level = updates.assessment_level;
   config.updated_at = new Date().toISOString();
 
   await writeFile(configFile, JSON.stringify(config, null, 2), 'utf-8');
@@ -239,6 +411,41 @@ router.post('/:id/references', upload.array('files', 20), asyncHandler(async (re
   res.status(201).json({ saved, count: saved.length });
 }));
 
+// POST /api/projects/:id/references/paste - 텍스트/HTML 복붙
+router.post('/:id/references/paste', asyncHandler(async (req, res) => {
+  const { title, content, format } = req.body;
+  if (!title || !content) {
+    return res.status(400).json({ message: '제목과 내용은 필수입니다' });
+  }
+
+  const rm = new ReferenceManager(projectPath(req.params.id));
+  const sanitizedTitle = title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ_\-\s]/g, '_').trim().slice(0, 100);
+
+  let finalContent = content;
+  let ext = '.md';
+
+  if (format === 'html') {
+    // HTML → Markdown 변환
+    try {
+      const TurndownService = (await import('turndown')).default;
+      const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+      finalContent = td.turndown(content);
+    } catch (e) {
+      // 변환 실패 시 원본 HTML에서 태그 제거
+      finalContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+  } else if (format === 'text') {
+    ext = '.txt';
+  }
+  // format === 'markdown' 또는 기본값: .md 그대로
+
+  const filename = `${sanitizedTitle}${ext}`;
+  const buffer = Buffer.from(finalContent, 'utf-8');
+  const path = await rm.saveFile(buffer, filename);
+
+  res.status(201).json({ saved: { name: filename, path }, message: '참고자료로 저장되었습니다' });
+}));
+
 // GET /api/projects/:id/references/search - 검색 (/:filename보다 먼저 등록)
 router.get('/:id/references/search', asyncHandler(async (req, res) => {
   const rm = new ReferenceManager(projectPath(req.params.id));
@@ -246,14 +453,20 @@ router.get('/:id/references/search', asyncHandler(async (req, res) => {
   res.json({ files });
 }));
 
-// GET /api/projects/:id/references/:filename - 내용 읽기
+// GET /api/projects/:id/references/:filename - 내용 읽기 (모든 포맷 지원)
 router.get('/:id/references/:filename', asyncHandler(async (req, res) => {
   const rm = new ReferenceManager(projectPath(req.params.id));
-  const content = await rm.readFile(req.params.filename);
-  if (content === null) {
-    return res.status(404).json({ message: '파일을 찾을 수 없거나 텍스트 파일이 아닙니다' });
+  const result = await rm.readFileContent(req.params.filename);
+
+  if (result.status === 'not_found') {
+    return res.status(404).json({ message: '파일을 찾을 수 없습니다' });
   }
-  res.json({ filename: req.params.filename, content });
+  if (result.status === 'parse_error' || result.status === 'unsupported') {
+    // 파싱 실패 또는 미지원 포맷은 422 상태코드로 반환 (BUG-017)
+    const statusCode = result.status === 'parse_error' ? 422 : 415;
+    return res.status(statusCode).json({ filename: req.params.filename, content: null, status: result.status, error: result.error });
+  }
+  res.json({ filename: req.params.filename, content: result.content, status: 'ok', format: result.format });
 }));
 
 // DELETE /api/projects/:id/references/:filename - 삭제
@@ -298,7 +511,7 @@ router.put('/:id/template-info', asyncHandler(async (req, res) => {
     info = JSON.parse(await readFile(infoFile, 'utf-8'));
   }
 
-  const { toc_prompt_addition, chapter_prompt_addition } = req.body;
+  const { toc_prompt_addition, chapter_prompt_addition, what_id, how_id, features, context_answers } = req.body;
   if (toc_prompt_addition !== undefined) {
     info.toc_prompt_addition = toc_prompt_addition;
   }
@@ -306,6 +519,12 @@ router.put('/:id/template-info', asyncHandler(async (req, res) => {
     info.chapter_prompt_addition = chapter_prompt_addition;
   }
   info.custom_prompt_config = { toc_prompt_addition, chapter_prompt_addition };
+
+  // v2 필드 업데이트
+  if (what_id !== undefined) info.what_id = what_id;
+  if (how_id !== undefined) info.how_id = how_id;
+  if (features !== undefined) info.features = features;
+  if (context_answers !== undefined) info.context_answers = context_answers;
 
   await writeFile(infoFile, JSON.stringify(info, null, 2), 'utf-8');
   res.json({ success: true, ...info });
@@ -341,39 +560,6 @@ router.put('/:id/context', asyncHandler(async (req, res) => {
   await pm.markStep1Completed();
 
   res.json({ success: true, message: '저장 완료' });
-}));
-
-// ============================================================
-// 교육적 장치 (Pedagogical Devices)
-// ============================================================
-
-// GET /api/projects/devices/catalog - 교육적 장치 카탈로그
-router.get('/devices/catalog', (req, res) => {
-  res.json({
-    categories: DEVICE_CATEGORIES,
-    devices: PEDAGOGICAL_DEVICES.map(({ id, name, description, category }) => ({ id, name, description, category })),
-    recommendedSets: RECOMMENDED_SETS,
-  });
-});
-
-// GET /api/projects/:id/devices - 프로젝트의 선택된 장치 목록
-router.get('/:id/devices', asyncHandler(async (req, res) => {
-  const config = await loadConfig(req.params.id);
-  if (!config) return res.status(404).json({ message: '프로젝트를 찾을 수 없습니다' });
-  res.json({ devices: config.pedagogical_devices || [] });
-}));
-
-// PUT /api/projects/:id/devices - 프로젝트의 교육적 장치 설정
-router.put('/:id/devices', asyncHandler(async (req, res) => {
-  const projPath = projectPath(req.params.id);
-  const configFile = join(projPath, 'config.json');
-  if (!existsSync(configFile)) return res.status(404).json({ message: '프로젝트를 찾을 수 없습니다' });
-
-  const config = JSON.parse(await readFile(configFile, 'utf-8'));
-  config.pedagogical_devices = req.body.devices || [];
-  await writeFile(configFile, JSON.stringify(config, null, 2), 'utf-8');
-
-  res.json({ success: true, devices: config.pedagogical_devices });
 }));
 
 export default router;

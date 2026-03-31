@@ -192,7 +192,7 @@ export default function Portfolio() {
         setProjects(d.projects);
         setStats(d.stats);
       })
-      .catch(() => {})
+      .catch((err) => console.error('포트폴리오 목록 로드 실패', err))
       .finally(() => setLoading(false));
   };
 

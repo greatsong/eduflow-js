@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, rename } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
@@ -13,7 +13,20 @@ export class ProgressManager {
       return this._initProgress();
     }
     const raw = await readFile(this.progressFile, 'utf-8');
-    return JSON.parse(raw);
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      // JSON 파싱 실패 시: 손상된 파일 백업 후 기본값 반환 (BUG-012)
+      console.warn(`[ProgressManager] progress.json 파싱 실패, 백업 후 초기화: ${e.message}`);
+      const backupPath = this.progressFile + `.corrupt.${Date.now()}`;
+      try {
+        await rename(this.progressFile, backupPath);
+        console.warn(`[ProgressManager] 손상된 파일 백업: ${backupPath}`);
+      } catch (renameErr) {
+        console.warn(`[ProgressManager] 백업 파일 생성 실패: ${renameErr.message}`);
+      }
+      return this._initProgress();
+    }
   }
 
   _initProgress() {
@@ -122,10 +135,17 @@ export class ProgressManager {
   async getOverallStatus() {
     const progress = await this._loadProgress();
     const summary = await this.getChaptersSummary();
+    // step4: 1개 이상 챕터 완료 시
+    const step4Done = summary.completed > 0;
+    // step5: mkdocs.yml 존재 시 (빌드 완료)
+    const step5Done = existsSync(join(this.projectPath, 'mkdocs.yml'));
     return {
+      project_created: true, // 프로젝트가 존재하면 항상 true
       step1_completed: progress.step1_completed || false,
       step2_completed: progress.step2_completed || false,
       step3_confirmed: progress.step3_confirmed || false,
+      step4_completed: step4Done,
+      step5_completed: step5Done,
       chapters_completed: summary.completed,
       chapters_in_progress: summary.in_progress,
       chapters_total: summary.total,

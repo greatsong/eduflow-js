@@ -24,9 +24,11 @@ export const useProjectStore = create((set, get) => ({
 
   // 프로젝트 선택
   selectProject: async (projectId) => {
+    if (!projectId) return;
     try {
       const project = await apiFetch(`/api/projects/${projectId}`);
-      const progress = await apiFetch(`/api/projects/${projectId}/progress`);
+      // 프로젝트 로드 성공 시 진행 상태도 로드 시도
+      const progress = await apiFetch(`/api/projects/${projectId}/progress`).catch(() => null);
       set({ currentProject: project, progress });
       localStorage.setItem(STORAGE_KEY, projectId);
     } catch (e) {
@@ -46,7 +48,8 @@ export const useProjectStore = create((set, get) => ({
     if (!savedId) return;
     try {
       const project = await apiFetch(`/api/projects/${savedId}`);
-      const progress = await apiFetch(`/api/projects/${savedId}/progress`);
+      // 프로젝트 로드 성공 시 진행 상태도 로드 시도
+      const progress = await apiFetch(`/api/projects/${savedId}/progress`).catch(() => null);
       set({ currentProject: project, progress });
     } catch {
       // 프로젝트가 삭제되었으면 저장된 ID 제거
@@ -57,7 +60,7 @@ export const useProjectStore = create((set, get) => ({
   // 진행 상태 새로고침
   refreshProgress: async () => {
     const { currentProject } = get();
-    if (!currentProject) return;
+    if (!currentProject?.name) return;
     try {
       const progress = await apiFetch(`/api/projects/${currentProject.name}/progress`);
       set({ progress });

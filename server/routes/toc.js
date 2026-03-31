@@ -48,7 +48,7 @@ router.put('/', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/projects/:id/toc/generate - 목차 자동 생성 (SSE)
-router.post('/generate', requireApiKey, asyncHandler(async (req, res) => {
+router.post('/generate', requireApiKey,  asyncHandler(async (req, res) => {
   const { model, maxTokens } = req.body;
   const projPath = projectPath(req.params.id);
 
@@ -68,13 +68,25 @@ router.post('/generate', requireApiKey, asyncHandler(async (req, res) => {
       return;
     }
 
-    // 참고자료 로드
+    // 참고자료 로드 (PDF, DOCX, XLSX, HWP 등 모든 포맷 지원)
     const refManager = new ReferenceManager(projPath);
     const refs = await refManager.listFiles();
     const referencesContent = [];
     for (const ref of refs) {
-      const content = await refManager.readFile(ref.name);
-      if (content) referencesContent.push(content);
+      try {
+        const result = await refManager.readFileContent(ref.name);
+        if (result.status === 'ok' && result.content) referencesContent.push(result.content);
+      } catch { /* skip */ }
+    }
+
+    // BUG-013: 목차 생성 전 API 키 검증
+    const useGenModel = model || 'claude-opus-4-5-20251101';
+    const genProvider = detectProvider(useGenModel);
+    const genApiKey = resolveApiKey(genProvider, req.apiKeys);
+    if (!genApiKey) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: `${genProvider} API 키가 설정되지 않았습니다. 설정에서 API 키를 확인해주세요.` })}\n\n`);
+      res.end();
+      return;
     }
 
     // 목차 생성 (SSE 스트리밍)
@@ -132,6 +144,24 @@ router.get('/guidelines', asyncHandler(async (req, res) => {
 router.put('/guidelines', asyncHandler(async (req, res) => {
   const { guidelines } = req.body;
   const filePath = join(projectPath(req.params.id), 'generation_guidelines.md');
+  await writeFile(filePath, guidelines || '', 'utf-8');
+  res.json({ success: true });
+}));
+
+// GET /api/projects/:id/toc/image-guidelines - 이미지 생성 가이드라인 로드
+router.get('/image-guidelines', asyncHandler(async (req, res) => {
+  const filePath = join(projectPath(req.params.id), 'image_guidelines.md');
+  let guidelines = '';
+  if (existsSync(filePath)) {
+    guidelines = await readFile(filePath, 'utf-8');
+  }
+  res.json({ guidelines });
+}));
+
+// PUT /api/projects/:id/toc/image-guidelines - 이미지 생성 가이드라인 저장
+router.put('/image-guidelines', asyncHandler(async (req, res) => {
+  const { guidelines } = req.body;
+  const filePath = join(projectPath(req.params.id), 'image_guidelines.md');
   await writeFile(filePath, guidelines || '', 'utf-8');
   res.json({ success: true });
 }));
@@ -195,7 +225,7 @@ router.post('/direct', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/projects/:id/toc/parse-md - MD 파일 내용을 Claude로 분석하여 TOC 생성 (SSE)
-router.post('/parse-md', requireApiKey, asyncHandler(async (req, res) => {
+router.post('/parse-md', requireApiKey,  asyncHandler(async (req, res) => {
   const { content, model, saveAsReference } = req.body;
   if (!content) {
     return res.status(400).json({ message: 'content가 필요합니다' });
@@ -277,6 +307,13 @@ ${content.slice(0, 50000)}
 - 반드시 유효한 JSON만 출력하세요 (설명 텍스트 없이 JSON 코드블록만)` }],
     });
 
+    // BUG-013: AI 호출 결과 검증
+    if (!result || !result.content) {
+      sseSend({ type: 'error', message: 'AI 응답이 비어 있습니다. 잠시 후 다시 시도해주세요.' });
+      res.end();
+      return;
+    }
+
     const responseText = result.content;
 
     // 토큰 사용량 기록
@@ -289,15 +326,22 @@ ${content.slice(0, 50000)}
       keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
     });
 
-    // JSON 추출
+    // JSON 추출 — 파싱 실패 방어 (BUG-013)
     const jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/) || responseText.match(/\{[\s\S]*\}/);
     let tocData;
 
-    if (jsonMatch) {
-      const jsonStr = jsonMatch[1] || jsonMatch[0];
-      tocData = JSON.parse(jsonStr);
-    } else {
-      tocData = JSON.parse(responseText);
+    try {
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        tocData = JSON.parse(jsonStr);
+      } else {
+        tocData = JSON.parse(responseText);
+      }
+    } catch (parseErr) {
+      console.error('[toc/parse-md] JSON 파싱 실패:', parseErr.message);
+      sseSend({ type: 'error', message: 'AI 응답에서 유효한 JSON을 추출할 수 없습니다. 다시 시도해주세요.' });
+      res.end();
+      return;
     }
 
     sseSend({ type: 'progress', message: `✅ 목차 분석 완료: ${tocData.parts?.length || 0}개 Part` });

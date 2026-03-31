@@ -59,7 +59,7 @@ router.get('/:step/summary', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/projects/:id/discussions/:step/summarize - 요약 생성 (SSE)
-router.post('/:step/summarize', requireApiKey, asyncHandler(async (req, res) => {
+router.post('/:step/summarize', requireApiKey,  asyncHandler(async (req, res) => {
   const { model } = req.body;
   const projPath = projectPath(req.params.id);
   const step = req.params.step;
@@ -100,7 +100,7 @@ router.post('/:step/summarize', requireApiKey, asyncHandler(async (req, res) => 
 }));
 
 // POST /api/projects/:id/discussions/:step/chat - 스트리밍 채팅 (SSE)
-router.post('/:step/chat', requireApiKey, asyncHandler(async (req, res) => {
+router.post('/:step/chat', requireApiKey,  asyncHandler(async (req, res) => {
   const { message, model, messages: clientMessages } = req.body;
   const projPath = projectPath(req.params.id);
   const step = req.params.step;
@@ -122,11 +122,15 @@ router.post('/:step/chat', requireApiKey, asyncHandler(async (req, res) => {
     const configFile = join(projPath, 'config.json');
     if (existsSync(configFile)) {
       const config = JSON.parse(await readFile(configFile, 'utf-8'));
-      projectInfoText = `
-# 프로젝트 기본 정보
-- 프로젝트 제목: ${config.title || ''}
-- 작성자: ${config.author || ''}
-- 설명: ${config.description || ''}`;
+      const parts = [
+        `# 프로젝트 기본 정보`,
+        `- 제목: ${config.title || ''}`,
+        config.author ? `- 작성자: ${config.author}` : null,
+        config.target_audience ? `- 대상 독자: ${config.target_audience}` : null,
+        config.description ? `- 설명: ${config.description}` : null,
+        config.pedagogical_context ? `\n## 교과 상세 정보 (사용자가 입력한 내용)\n${config.pedagogical_context}` : null,
+      ].filter(Boolean);
+      projectInfoText = '\n' + parts.join('\n');
     }
 
     // master-context.md 로드
@@ -139,15 +143,19 @@ router.post('/:step/chat', requireApiKey, asyncHandler(async (req, res) => {
       }
     }
 
-    // 참고자료 로드
+    // 참고자료 로드 (PDF, DOCX, XLSX, HWP 등 모든 포맷 지원)
     let referencesText = '';
     const refManager = new ReferenceManager(projPath);
     const refs = await refManager.listFiles();
     if (refs.length > 0) {
       const refContents = [];
       for (const ref of refs) {
-        const content = await refManager.readFile(ref.name);
-        if (content) refContents.push(`[${ref.name}]\n${content}`);
+        try {
+          const result = await refManager.readFileContent(ref.name);
+          if (result.status === 'ok' && result.content) {
+            refContents.push(`[${ref.name}]\n${result.content}`);
+          }
+        } catch { /* skip */ }
       }
       if (refContents.length) {
         referencesText = '\n\n# 업로드된 참고자료\n\n' + refContents.join('\n\n---\n\n');
@@ -246,6 +254,13 @@ ${referencesText}
     const useModel = model || 'claude-sonnet-4-6';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
+
+    // BUG-006: API 키 검증 — 없으면 SSE 에러 전송 후 종료
+    if (!apiKey) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: `${provider} API 키가 설정되지 않았습니다. 설정에서 API 키를 확인해주세요.` })}\n\n`);
+      res.end();
+      return;
+    }
 
     // Step 3은 목차 JSON 출력이 필요하므로 토큰 여유 확보
     const chatMaxTokens = step === '3' ? 8192 : 2048;

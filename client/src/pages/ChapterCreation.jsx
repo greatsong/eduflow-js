@@ -3,14 +3,67 @@ import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useProjectStore } from '../stores/projectStore';
-import { apiFetch, apiStreamPost } from '../api/client';
+import { apiFetch, apiStreamPost, API_BASE } from '../api/client';
 import ModelSelector from '../components/ModelSelector';
 
 const TABS = ['💬 대화형 모드', '🤖 배치 자동화', '✏️ 챕터 편집'];
 
+// 이미지 라이트박스 모달
+function ImageLightbox({ src, alt, onClose }) {
+  if (!src) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-pointer"
+      onClick={onClose}
+    >
+      <div className="relative max-w-5xl max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <img src={src} alt={alt} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
+        <p className="text-white/80 text-sm text-center mt-2 px-4">{alt}</p>
+        <button
+          onClick={onClose}
+          className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full text-gray-800 text-lg flex items-center justify-center shadow-lg hover:bg-gray-100"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// 전역 라이트박스 상태를 위한 이벤트
+let _openLightbox = null;
+
+// 마크다운 이미지를 API 경로로 변환하는 커스텀 컴포넌트
+function makeMarkdownComponents(projectName) {
+  return {
+    img: ({ src, alt, ...props }) => {
+      if (src && src.startsWith('images/')) {
+        const apiSrc = `${API_BASE}/api/projects/${projectName}/chapters/images/${src.replace('images/', '')}`;
+        return (
+          <img
+            src={apiSrc} alt={alt}
+            style={{ maxWidth: '100%', borderRadius: 8, cursor: 'pointer' }}
+            onClick={() => _openLightbox?.({ src: apiSrc, alt })}
+            title="클릭하여 크게 보기"
+            {...props}
+          />
+        );
+      }
+      return <img src={src} alt={alt} {...props} />;
+    },
+  };
+}
+
 export default function ChapterCreation() {
   const { currentProject, refreshProgress } = useProjectStore();
   const [activeTab, setActiveTab] = useState(0);
+  const [lightboxImg, setLightboxImg] = useState(null);
+
+  // 전역 라이트박스 열기 함수 등록 (cleanup 시 확실히 해제)
+  useEffect(() => {
+    _openLightbox = setLightboxImg;
+    return () => { _openLightbox = undefined; };
+  }, []);
 
   if (!currentProject) {
     return (
@@ -22,6 +75,15 @@ export default function ChapterCreation() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* 이미지 라이트박스 */}
+      {lightboxImg && (
+        <ImageLightbox
+          src={lightboxImg.src}
+          alt={lightboxImg.alt}
+          onClose={() => setLightboxImg(null)}
+        />
+      )}
+
       <div className="mb-4">
         <h2 className="text-2xl font-bold text-gray-900">✍️ Step 4: 챕터 제작</h2>
         <p className="text-sm text-gray-500">대화형으로 챕터를 작성하거나, 여러 챕터를 자동으로 생성하세요.</p>
@@ -35,7 +97,7 @@ export default function ChapterCreation() {
             onClick={() => setActiveTab(i)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === i
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-emerald-600 text-emerald-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -57,6 +119,22 @@ export default function ChapterCreation() {
 // =============================================
 // 탭 1: 대화형 모드
 // =============================================
+// 대화 기록 서버 저장 헬퍼
+async function saveChatToServer(projectName, chapterId, messages) {
+  if (!chapterId) return;
+  try {
+    await apiFetch(`/api/projects/${projectName}/chapters/chat-history`, {
+      method: 'PUT',
+      body: JSON.stringify({ chapterId, messages }),
+    });
+  } catch { /* fire-and-forget */ }
+}
+async function loadAllChatsFromServer(projectName) {
+  try {
+    return await apiFetch(`/api/projects/${projectName}/chapters/chat-history`);
+  } catch { return {}; }
+}
+
 function InteractiveTab({ project }) {
   const [chapters, setChapters] = useState([]);
   const [selectedChapter, setSelectedChapter] = useState(null);
@@ -78,15 +156,72 @@ function InteractiveTab({ project }) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  const chatHistoryRef = useRef({}); // { chapterId: messages[] } 캐시
+  const saveTimerRef = useRef(null);
+
+  // 프로젝트 로드 시 서버에서 전체 대화 기록 로드
+  useEffect(() => {
+    if (!project) return;
+    // 프로젝트 변경 시 이전 타이머 정리 보장
+    clearTimeout(saveTimerRef.current);
+    loadAllChatsFromServer(project.name).then((history) => {
+      chatHistoryRef.current = history || {};
+    });
+  }, [project]);
+
+  // 미저장 변경사항이 있을 때 페이지 이탈 경고
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // 스트리밍 중이거나 미저장 채팅이 있으면 경고
+      if (isStreaming || (selectedChapter && chatMessages.length > 0)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isStreaming, selectedChapter, chatMessages.length]);
+
+  // 대화 변경 시 서버에 디바운스 저장 (1초)
+  useEffect(() => {
+    if (!selectedChapter || isStreaming) return;
+    if (chatMessages.length > 0) {
+      chatHistoryRef.current[selectedChapter.chapter_id] = chatMessages;
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveChatToServer(project.name, selectedChapter.chapter_id, chatMessages);
+      }, 1000);
+    }
+    return () => clearTimeout(saveTimerRef.current);
+  }, [chatMessages, isStreaming, selectedChapter, project]);
+
   const handleSelectChapter = async (ch) => {
+    // 현재 챕터의 대화를 캐시에 저장
+    if (selectedChapter && chatMessages.length > 0) {
+      chatHistoryRef.current[selectedChapter.chapter_id] = chatMessages;
+      saveChatToServer(project.name, selectedChapter.chapter_id, chatMessages);
+    }
+
     setSelectedChapter(ch);
-    setChatMessages([]);
+
+    // 캐시에서 대화 복원
+    const savedMessages = chatHistoryRef.current[ch.chapter_id] || [];
+    setChatMessages(savedMessages);
+
     try {
       const data = await apiFetch(`/api/projects/${project.name}/chapters/${ch.chapter_id}`);
       setPreviewContent(data.content || '');
     } catch {
       setPreviewContent('');
     }
+  };
+
+  const handleClearChat = () => {
+    if (selectedChapter) {
+      chatHistoryRef.current[selectedChapter.chapter_id] = [];
+      saveChatToServer(project.name, selectedChapter.chapter_id, []);
+    }
+    setChatMessages([]);
   };
 
   const handleSend = useCallback(async (e) => {
@@ -108,22 +243,20 @@ function InteractiveTab({ project }) {
         {
           onText: (text) => {
             setChatMessages((prev) => {
+              if (prev.length === 0) return prev;
               const updated = [...prev];
-              updated[updated.length - 1] = {
-                ...updated[updated.length - 1],
-                content: updated[updated.length - 1].content + text,
-              };
+              const last = updated[updated.length - 1];
+              updated[updated.length - 1] = { ...last, content: (last.content || '') + text };
               return updated;
             });
           },
           onDone: () => setIsStreaming(false),
           onError: (err) => {
             setChatMessages((prev) => {
+              if (prev.length === 0) return prev;
               const updated = [...prev];
-              updated[updated.length - 1] = {
-                ...updated[updated.length - 1],
-                content: updated[updated.length - 1].content + `\n\n❌ 오류: ${err.message}`,
-              };
+              const last = updated[updated.length - 1];
+              updated[updated.length - 1] = { ...last, content: (last.content || '') + `\n\n❌ 오류: ${err.message}` };
               return updated;
             });
             setIsStreaming(false);
@@ -132,11 +265,10 @@ function InteractiveTab({ project }) {
       );
     } catch (err) {
       setChatMessages((prev) => {
+        if (prev.length === 0) return prev;
         const updated = [...prev];
-        updated[updated.length - 1] = {
-          ...updated[updated.length - 1],
-          content: `❌ 오류: ${err.message}`,
-        };
+        const last = updated[updated.length - 1];
+        updated[updated.length - 1] = { ...last, content: `❌ 오류: ${err.message}` };
         return updated;
       });
       setIsStreaming(false);
@@ -155,6 +287,9 @@ function InteractiveTab({ project }) {
     const extracted = extractMarkdown(lastAssistant.content);
     if (extracted) {
       setPreviewContent(extracted);
+    } else {
+      // 마크다운 코드블록이 없으면 사용자에게 안내
+      alert('응답에서 마크다운 블록(```markdown ... ```)을 찾을 수 없습니다.\nAI에게 마크다운 코드블록으로 감싸서 작성해달라고 요청해보세요.');
     }
   };
 
@@ -215,7 +350,7 @@ function InteractiveTab({ project }) {
               <div className="p-3 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">💬 Claude와 대화</span>
                 <button
-                  onClick={() => setChatMessages([])}
+                  onClick={handleClearChat}
                   className="text-xs text-gray-400 hover:text-gray-600"
                 >
                   초기화
@@ -231,7 +366,7 @@ function InteractiveTab({ project }) {
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm ${
                       msg.role === 'user'
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-emerald-600 text-white'
                         : 'bg-gray-100 text-gray-800'
                     }`}>
                       {msg.role === 'assistant' ? (
@@ -255,12 +390,12 @@ function InteractiveTab({ project }) {
                     type="text"
                     placeholder="챕터 내용에 대해 요청하세요..."
                     disabled={isStreaming}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     type="submit"
                     disabled={isStreaming}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50"
                   >
                     전송
                   </button>
@@ -279,7 +414,7 @@ function InteractiveTab({ project }) {
               <div className="flex-1 overflow-y-auto p-4">
                 {previewContent ? (
                   <div className="prose prose-sm max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{previewContent}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={makeMarkdownComponents(project.name)}>{previewContent}</ReactMarkdown>
                   </div>
                 ) : (
                   <p className="text-sm text-gray-400 text-center mt-8">아직 작성된 내용이 없습니다</p>
@@ -300,7 +435,7 @@ function InteractiveTab({ project }) {
             <button
               onClick={handleSaveChapter}
               disabled={!previewContent}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
             >
               💾 파일로 저장
             </button>
@@ -339,8 +474,8 @@ function ChapterStatusIcon({ hasContent, isGenerating }) {
   if (isGenerating) {
     return (
       <span className="relative flex h-3 w-3" title="생성 중...">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-        <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
       </span>
     );
   }
@@ -350,7 +485,7 @@ function ChapterStatusIcon({ hasContent, isGenerating }) {
 // =============================================
 // 파트별 챕터 진행 상태 목록
 // =============================================
-function ChapterProgressList({ chapters, currentGenerating, status, selectedChapters, onToggleSelect, onRegenerate, onSelectAll }) {
+function ChapterProgressList({ chapters, currentGenerating, status, selectedChapters, onToggleSelect, onRegenerate, onGenerateSelected, onSelectAll, onPreview }) {
   const parts = groupChaptersByPart(chapters);
   const [collapsedParts, setCollapsedParts] = useState({});
 
@@ -370,7 +505,7 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
             type="checkbox"
             checked={allSelected}
             onChange={() => onSelectAll?.(!allSelected)}
-            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+            className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600"
           />
           <span className="text-xs text-gray-500">
             {allSelected ? '전체 해제' : '전체 선택'} ({selectedCount}/{chapters.length})
@@ -398,7 +533,7 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
                 </span>
                 <div className="w-16 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
                   <div
-                    className="bg-blue-500 h-1.5 rounded-full transition-all"
+                    className="bg-emerald-500 h-1.5 rounded-full transition-all"
                     style={{ width: `${partTotal > 0 ? (partCompleted / partTotal) * 100 : 0}%` }}
                   />
                 </div>
@@ -414,7 +549,7 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
                         key={ch.chapter_id}
                         onClick={() => status !== 'running' && onToggleSelect?.(ch.chapter_id)}
                         className={`flex items-center gap-2 text-sm py-1 px-2 rounded cursor-pointer transition-colors ${
-                          isGenerating ? 'bg-blue-50' : isSelected ? 'bg-amber-50' : 'hover:bg-gray-50'
+                          isGenerating ? 'bg-emerald-50' : isSelected ? 'bg-amber-50' : 'hover:bg-gray-50'
                         }`}
                       >
                         {status !== 'running' && (
@@ -423,14 +558,23 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
                             checked={isSelected || false}
                             onChange={() => onToggleSelect?.(ch.chapter_id)}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 flex-shrink-0"
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 flex-shrink-0"
                           />
                         )}
                         <ChapterStatusIcon hasContent={ch.has_content} isGenerating={isGenerating} />
-                        <span className={`truncate ${isGenerating ? 'text-blue-700 font-medium' : 'text-gray-600'}`}>
+                        <span className={`truncate ${isGenerating ? 'text-emerald-700 font-medium' : 'text-gray-600'}`}>
                           {ch.chapter_id}: {ch.chapter_title}
                         </span>
-                        {ch.estimated_time && (
+                        {ch.has_content && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onPreview?.(ch.chapter_id); }}
+                            className="ml-auto text-xs text-emerald-500 hover:text-emerald-700 whitespace-nowrap flex-shrink-0"
+                            title="미리보기"
+                          >
+                            👁️
+                          </button>
+                        )}
+                        {ch.estimated_time && !ch.has_content && (
                           <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">{ch.estimated_time}</span>
                         )}
                       </div>
@@ -443,14 +587,20 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
         })}
       </div>
 
-      {/* 선택된 챕터 재생성 버튼 */}
+      {/* 선택한 챕터 생성/재생성 버튼 */}
       {selectedCount > 0 && status !== 'running' && (
-        <div className="pt-3 mt-2 border-t border-gray-100">
+        <div className="pt-3 mt-2 border-t border-gray-100 space-y-1.5">
+          <button
+            onClick={() => onGenerateSelected?.()}
+            className="w-full py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors"
+          >
+            ▶️ 선택한 {selectedCount}개 생성
+          </button>
           <button
             onClick={onRegenerate}
-            className="w-full py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+            className="w-full py-1.5 text-xs border border-amber-400 text-amber-600 rounded-lg hover:bg-amber-50 transition-colors"
           >
-            🔄 선택한 {selectedCount}개 챕터 재생성
+            🔄 선택한 {selectedCount}개 재생성 (덮어쓰기)
           </button>
         </div>
       )}
@@ -465,7 +615,8 @@ function BatchTab({ project, onComplete }) {
   const [chapters, setChapters] = useState([]);
   const [report, setReport] = useState(null);
   const [model, setModel] = useState('claude-opus-4-5-20251101');
-  const [maxTokens, setMaxTokens] = useState(12000);
+  const [charTarget, setCharTarget] = useState(6000); // 챕터당 목표 글자 수
+  const maxTokens = Math.round(charTarget * 1.15); // 한국어: 1토큰≈1자 + 15% 마크다운 버퍼
   const [concurrent, setConcurrent] = useState(5);
   const [tpmLimit, setTpmLimit] = useState(200000);
   const [status, setStatus] = useState('idle'); // idle, running, completed, cancelled
@@ -474,6 +625,7 @@ function BatchTab({ project, onComplete }) {
   const [selectedChapters, setSelectedChapters] = useState(new Set());
   const logEndRef = useRef(null);
   const pollRef = useRef(null);
+  const isStreamingRef = useRef(false); // SSE 스트리밍 중 폴링 동시 실행 방지
 
   // 샘플 챕터 관련 상태
   const [samplePhase, setSamplePhase] = useState('select'); // select, generating, review
@@ -482,17 +634,25 @@ function BatchTab({ project, onComplete }) {
   const [sampleTokens, setSampleTokens] = useState(null);
   const [guidelines, setGuidelines] = useState('');
   const [guidelinesSaved, setGuidelinesSaved] = useState(true);
+  const [imageGuidelines, setImageGuidelines] = useState('');
+  const [imageGuidelinesSaved, setImageGuidelinesSaved] = useState(true);
+  const [guideTab, setGuideTab] = useState('content');
   const [showSample, setShowSample] = useState(true);
   const [models, setModels] = useState([]);
+
+  // 실시간 미리보기: 완료된 챕터 내용 표시
+  const [previewChapterId, setPreviewChapterId] = useState(null);
+  const [previewContent, setPreviewContent] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // 기본 모델 + 모델 목록 로드
   useEffect(() => {
     apiFetch('/api/models/default/generation')
       .then((r) => setModel(r.modelId))
-      .catch(() => {});
+      .catch((err) => console.error('기본 생성 모델 로드 실패', err));
     apiFetch('/api/models')
       .then((r) => setModels(r.models || []))
-      .catch(() => {});
+      .catch((err) => console.error('모델 목록 로드 실패', err));
   }, []);
 
   const loadChapters = useCallback(async () => {
@@ -506,12 +666,42 @@ function BatchTab({ project, onComplete }) {
 
   useEffect(() => { loadChapters(); }, [loadChapters]);
 
+  // 완료된 챕터 내용 자동 로드 (실시간 미리보기)
+  const loadChapterPreview = useCallback(async (chapterId) => {
+    if (!project) return;
+    setPreviewChapterId(chapterId);
+    setPreviewLoading(true);
+    try {
+      const data = await apiFetch(`/api/projects/${project.name}/chapters/${chapterId}`);
+      setPreviewContent(data.content || '');
+    } catch {
+      setPreviewContent('⚠️ 챕터 내용을 불러올 수 없습니다.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [project]);
+
   // 가이드라인 로드
   useEffect(() => {
     if (!project) return;
     apiFetch(`/api/projects/${project.name}/toc/guidelines`)
       .then((r) => { setGuidelines(r.guidelines || ''); setGuidelinesSaved(true); })
-      .catch(() => {});
+      .catch((err) => console.error('콘텐츠 가이드라인 로드 실패', err));
+    apiFetch(`/api/projects/${project.name}/toc/image-guidelines`)
+      .then((r) => {
+        const defaultGuide = `애니메이션 스타일의 따뜻한 톤의 일러스트레이션
+- 친근하고 부드러운 캐릭터와 오브젝트
+- 파스텔 색상 + 따뜻한 하이라이트
+- 깔끔한 라인, 부드러운 그라데이션
+- 주요 요소에 한국어 라벨 포함
+- 밝고 따뜻한 배경
+- 교육 목적에 맞는 요소만 포함 (장식 불필요)
+- 워터마크/서명 없음
+- 가로 방향 (landscape)`;
+        setImageGuidelines(r.guidelines || defaultGuide);
+        setImageGuidelinesSaved(!!r.guidelines);
+      })
+      .catch((err) => console.error('이미지 가이드라인 로드 실패', err));
   }, [project]);
 
   // 샘플 챕터 생성
@@ -541,7 +731,7 @@ function BatchTab({ project, onComplete }) {
     }
   };
 
-  // 가이드라인 저장
+  // 내용 가이드라인 저장
   const handleSaveGuidelines = async () => {
     try {
       await apiFetch(`/api/projects/${project.name}/toc/guidelines`, {
@@ -551,6 +741,19 @@ function BatchTab({ project, onComplete }) {
       setGuidelinesSaved(true);
     } catch (err) {
       alert(`가이드라인 저장 실패: ${err.message}`);
+    }
+  };
+
+  // 이미지 가이드라인 저장
+  const handleSaveImageGuidelines = async () => {
+    try {
+      await apiFetch(`/api/projects/${project.name}/toc/image-guidelines`, {
+        method: 'PUT',
+        body: { guidelines: imageGuidelines },
+      });
+      setImageGuidelinesSaved(true);
+    } catch (err) {
+      alert(`이미지 가이드라인 저장 실패: ${err.message}`);
     }
   };
 
@@ -578,7 +781,7 @@ function BatchTab({ project, onComplete }) {
       if (genStatus.status === 'running') {
         setStatus('running');
         setLogs(genStatus.logs || []);
-        setCurrentGenerating(new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
+        setCurrentGenerating(() => new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
         startPolling();
       } else if (genStatus.status === 'completed' || genStatus.status === 'cancelled') {
         if (genStatus.logs?.length > 0) setLogs(genStatus.logs);
@@ -589,17 +792,21 @@ function BatchTab({ project, onComplete }) {
   };
 
   const startPolling = () => {
+    // SSE 스트리밍 중이면 폴링을 시작하지 않음
+    if (isStreamingRef.current) return;
     stopPolling();
     pollRef.current = setInterval(async () => {
+      // 폴링 중 SSE가 시작되었으면 폴링 중단
+      if (isStreamingRef.current) { stopPolling(); return; }
       try {
         const genStatus = await apiFetch(`/api/projects/${project.name}/chapters/generation-status`);
         setLogs(genStatus.logs || []);
-        setCurrentGenerating(new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
+        setCurrentGenerating(() => new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
 
         if (genStatus.status === 'completed' || genStatus.status === 'cancelled' || genStatus.status === 'failed') {
           setStatus(genStatus.status === 'failed' ? 'idle' : genStatus.status);
           if (genStatus.report) setReport(genStatus.report);
-          setCurrentGenerating(new Set());
+          setCurrentGenerating(() => new Set());
           loadChapters();
           onComplete?.();
           stopPolling();
@@ -616,7 +823,9 @@ function BatchTab({ project, onComplete }) {
     setStatus('running');
     setLogs([]);
     setReport(null);
-    setCurrentGenerating(new Set());
+    setCurrentGenerating(() => new Set());
+    isStreamingRef.current = true;
+    stopPolling(); // SSE 시작 전 기존 폴링 정리
 
     try {
       await apiStreamPost(
@@ -625,7 +834,7 @@ function BatchTab({ project, onComplete }) {
         {
           onProgress: (data) => {
             setLogs((prev) => [...prev, data.message]);
-            // SSE progress 메시지에서 현재 챕터 추가/제거
+            // SSE progress 메시지에서 현재 챕터 추가/제거 (함수형 업데이트)
             const startMatch = data.message?.match(/📖\s+(chapter\d+)\s+생성 시작/);
             if (startMatch) {
               setCurrentGenerating((prev) => new Set([...prev, startMatch[1]]));
@@ -636,6 +845,7 @@ function BatchTab({ project, onComplete }) {
               setChapters((prev) => prev.map((ch) =>
                 ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
               ));
+              loadChapterPreview(doneMatch[1]); // 완료된 챕터 실시간 미리보기
             }
             const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
             if (failMatch) {
@@ -643,22 +853,25 @@ function BatchTab({ project, onComplete }) {
             }
           },
           onDone: (data) => {
+            isStreamingRef.current = false;
             if (data?.report) setReport(data.report);
             const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
             setStatus(finalStatus);
-            setCurrentGenerating(new Set());
+            setCurrentGenerating(() => new Set());
             loadChapters();
             onComplete?.();
           },
           onError: (err) => {
+            isStreamingRef.current = false;
             setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
             setStatus('idle');
-            setCurrentGenerating(new Set());
+            setCurrentGenerating(() => new Set());
           },
         }
       );
     } catch (err) {
       // SSE 연결 끊어짐 → 폴링으로 전환
+      isStreamingRef.current = false;
       setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
       startPolling();
     }
@@ -669,9 +882,27 @@ function BatchTab({ project, onComplete }) {
       await apiFetch(`/api/projects/${project.name}/chapters/generation-cancel`, {
         method: 'POST',
       });
-      setLogs((prev) => [...prev, '🛑 취소 요청을 보냈습니다. 현재 생성 중인 챕터가 끝나면 중단됩니다...']);
+      setLogs((prev) => [...prev, '🛑 취소 요청을 보냈습니다...']);
+      // 5초 후에도 상태가 running이면 강제로 cancelled로 전환
+      setTimeout(() => {
+        setStatus((prev) => {
+          if (prev === 'running') {
+            isStreamingRef.current = false;
+            stopPolling();
+            setCurrentGenerating(() => new Set());
+            loadChapters();
+            return 'cancelled';
+          }
+          return prev;
+        });
+      }, 5000);
     } catch (err) {
       setLogs((prev) => [...prev, `❌ 취소 실패: ${err.message}`]);
+      // 취소 API 실패해도 UI는 풀어줌
+      isStreamingRef.current = false;
+      setStatus('cancelled');
+      setCurrentGenerating(() => new Set());
+      stopPolling();
     }
   };
 
@@ -692,6 +923,67 @@ function BatchTab({ project, onComplete }) {
     }
   };
 
+  // 선택한 챕터만 생성 (미완료만 — 이미 있는 것은 건너뜀)
+  const handleGenerateSelected = async () => {
+    if (selectedChapters.size === 0) return;
+    const ids = [...selectedChapters];
+    setSelectedChapters(new Set());
+    setStatus('running');
+    setLogs([]);
+    setReport(null);
+    setCurrentGenerating(() => new Set());
+    isStreamingRef.current = true;
+    stopPolling();
+
+    try {
+      await apiStreamPost(
+        `/api/projects/${project.name}/chapters/generate-all`,
+        { model, maxTokens, concurrent, skipCompleted: true, tpmLimit, chapterIds: ids },
+        {
+          onProgress: (data) => {
+            setLogs((prev) => [...prev, data.message]);
+            const startMatch = data.message?.match(/📖\s+(chapter\d+)\s+생성 시작/);
+            if (startMatch) {
+              setCurrentGenerating((prev) => new Set([...prev, startMatch[1]]));
+            }
+            const doneMatch = data.message?.match(/✅\s+(chapter\d+)\s+(?:완료|재시도 완료)/);
+            if (doneMatch) {
+              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(doneMatch[1]); return next; });
+              setChapters((prev) => prev.map((ch) =>
+                ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
+              ));
+              loadChapterPreview(doneMatch[1]); // 완료된 챕터 실시간 미리보기
+            }
+            const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
+            if (failMatch) {
+              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(failMatch[1]); return next; });
+            }
+          },
+          onDone: (data) => {
+            isStreamingRef.current = false;
+            if (data?.report) setReport(data.report);
+            const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
+            setStatus(finalStatus);
+            setCurrentGenerating(() => new Set());
+            loadChapters();
+            onComplete?.();
+          },
+          onError: (err) => {
+            isStreamingRef.current = false;
+            setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
+            setStatus('idle');
+            setCurrentGenerating(() => new Set());
+          },
+        }
+      );
+    } catch (err) {
+      isStreamingRef.current = false;
+      setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
+      startPolling();
+    }
+  };
+
+  // 선택한 챕터 재생성 (기존 내용 덮어쓰기)
   const handleRegenerateSelected = async () => {
     if (selectedChapters.size === 0) return;
     const ids = [...selectedChapters];
@@ -699,7 +991,9 @@ function BatchTab({ project, onComplete }) {
     setStatus('running');
     setLogs([]);
     setReport(null);
-    setCurrentGenerating(new Set());
+    setCurrentGenerating(() => new Set());
+    isStreamingRef.current = true;
+    stopPolling(); // SSE 시작 전 기존 폴링 정리
 
     try {
       await apiStreamPost(
@@ -718,6 +1012,7 @@ function BatchTab({ project, onComplete }) {
               setChapters((prev) => prev.map((ch) =>
                 ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
               ));
+              loadChapterPreview(doneMatch[1]); // 완료된 챕터 실시간 미리보기
             }
             const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
             if (failMatch) {
@@ -725,21 +1020,24 @@ function BatchTab({ project, onComplete }) {
             }
           },
           onDone: (data) => {
+            isStreamingRef.current = false;
             if (data?.report) setReport(data.report);
             const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
             setStatus(finalStatus);
-            setCurrentGenerating(new Set());
+            setCurrentGenerating(() => new Set());
             loadChapters();
             onComplete?.();
           },
           onError: (err) => {
+            isStreamingRef.current = false;
             setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
             setStatus('idle');
-            setCurrentGenerating(new Set());
+            setCurrentGenerating(() => new Set());
           },
         }
       );
     } catch (err) {
+      isStreamingRef.current = false;
       setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
       startPolling();
     }
@@ -749,12 +1047,12 @@ function BatchTab({ project, onComplete }) {
     <div className="flex flex-col h-full gap-4">
       {/* 생성 중 취소 바 (항상 보이는 위치) */}
       {status === 'running' && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex-shrink-0">
           <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
           </span>
-          <span className="text-sm text-blue-700 font-medium flex-1">
+          <span className="text-sm text-emerald-700 font-medium flex-1">
             {currentGenerating.size > 0
               ? `✍️ ${[...currentGenerating].join(', ')} 생성 중...`
               : '🚀 배치 생성 진행 중...'}
@@ -786,15 +1084,15 @@ function BatchTab({ project, onComplete }) {
             <div className="px-4 pb-4 border-t border-gray-100 space-y-4">
               {/* 워크플로 단계 표시 */}
               <div className="flex items-center gap-1.5 pt-3 text-xs">
-                <span className={`px-2 py-1 rounded-full ${samplePhase === 'select' ? 'bg-blue-100 text-blue-700 font-bold' : samplePhase !== 'select' ? 'bg-green-100 text-green-700' : 'text-gray-400'}`}>
+                <span className={`px-2 py-1 rounded-full ${samplePhase === 'select' ? 'bg-emerald-100 text-emerald-700 font-bold' : samplePhase !== 'select' ? 'bg-green-100 text-green-700' : 'text-gray-400'}`}>
                   ① 챕터 선택
                 </span>
                 <span className="text-gray-300">→</span>
-                <span className={`px-2 py-1 rounded-full ${samplePhase === 'generating' ? 'bg-blue-100 text-blue-700 font-bold animate-pulse' : samplePhase === 'review' ? 'bg-green-100 text-green-700' : 'text-gray-400'}`}>
+                <span className={`px-2 py-1 rounded-full ${samplePhase === 'generating' ? 'bg-emerald-100 text-emerald-700 font-bold animate-pulse' : samplePhase === 'review' ? 'bg-green-100 text-green-700' : 'text-gray-400'}`}>
                   ② 샘플 생성
                 </span>
                 <span className="text-gray-300">→</span>
-                <span className={`px-2 py-1 rounded-full ${samplePhase === 'review' ? 'bg-blue-100 text-blue-700 font-bold' : 'text-gray-400'}`}>
+                <span className={`px-2 py-1 rounded-full ${samplePhase === 'review' ? 'bg-emerald-100 text-emerald-700 font-bold' : 'text-gray-400'}`}>
                   ③ 검토 & 가이드 조정
                 </span>
                 <span className="text-gray-300">→</span>
@@ -809,7 +1107,7 @@ function BatchTab({ project, onComplete }) {
                       value={sampleChapterId}
                       onChange={(e) => { setSampleChapterId(e.target.value); if (samplePhase !== 'generating') setSamplePhase('select'); }}
                       disabled={samplePhase === 'generating'}
-                      className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">샘플로 생성할 챕터 선택...</option>
                       {chapters.map((ch) => (
@@ -821,7 +1119,7 @@ function BatchTab({ project, onComplete }) {
                     <button
                       onClick={handleGenerateSample}
                       disabled={!sampleChapterId || samplePhase === 'generating'}
-                      className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 whitespace-nowrap transition-colors flex items-center gap-1.5"
+                      className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap transition-colors flex items-center gap-1.5"
                     >
                       {samplePhase === 'generating' ? (
                         <><span className="animate-spin inline-block">⏳</span> 생성 중...</>
@@ -863,33 +1161,66 @@ function BatchTab({ project, onComplete }) {
                   )}
                 </div>
 
-                {/* 오른쪽: 가이드라인 편집 */}
+                {/* 오른쪽: 가이드라인 편집 (내용 + 이미지 탭) */}
                 <div className="w-80 flex-shrink-0 flex flex-col">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-700">📝 생성 가이드라인</span>
-                    <div className="flex items-center gap-2">
-                      {!guidelinesSaved && (
-                        <span className="text-xs text-amber-600 animate-pulse">● 수정됨</span>
-                      )}
-                      <button
-                        onClick={handleSaveGuidelines}
-                        disabled={guidelinesSaved}
-                        className="px-2.5 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-                      >
-                        💾 저장
-                      </button>
-                    </div>
+                  <div className="flex items-center gap-1 mb-2">
+                    <button
+                      onClick={() => setGuideTab?.('content')}
+                      className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+                        (guideTab || 'content') === 'content'
+                          ? 'bg-emerald-100 text-emerald-700 font-medium'
+                          : 'text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      📝 내용 가이드
+                      {!guidelinesSaved && <span className="ml-1 text-amber-600">●</span>}
+                    </button>
+                    <button
+                      onClick={() => setGuideTab?.('image')}
+                      className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+                        guideTab === 'image'
+                          ? 'bg-purple-100 text-purple-700 font-medium'
+                          : 'text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      🖼️ 이미지 컨셉
+                      {!imageGuidelinesSaved && <span className="ml-1 text-amber-600">●</span>}
+                    </button>
+                    <div className="flex-1" />
+                    <button
+                      onClick={(guideTab || 'content') === 'content' ? handleSaveGuidelines : handleSaveImageGuidelines}
+                      disabled={(guideTab || 'content') === 'content' ? guidelinesSaved : imageGuidelinesSaved}
+                      className="px-2.5 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                    >
+                      💾 저장
+                    </button>
                   </div>
-                  <textarea
-                    value={guidelines}
-                    onChange={(e) => { setGuidelines(e.target.value); setGuidelinesSaved(false); }}
-                    placeholder={"생성 가이드라인을 입력하세요...\n\n예시:\n- 모든 챕터에 실습 예제를 포함해주세요\n- 코드 블록에는 항상 주석을 달아주세요\n- 각 섹션 끝에 핵심 정리를 추가해주세요\n- 학생 수준은 고등학교 1학년입니다"}
-                    className="flex-1 min-h-[200px] w-full text-sm border border-gray-300 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
-                  />
-                  <p className="text-xs text-gray-400 mt-1.5">
-                    💡 이 가이드라인은 모든 챕터 생성 시 AI에게 전달됩니다.
-                    {samplePhase === 'review' && ' 가이드를 수정한 후 샘플을 재생성하여 결과를 확인하세요.'}
-                  </p>
+
+                  {(guideTab || 'content') === 'content' ? (
+                    <>
+                      <textarea
+                        value={guidelines}
+                        onChange={(e) => { setGuidelines(e.target.value); setGuidelinesSaved(false); }}
+                        placeholder={"내용 가이드라인을 입력하세요...\n\n예시:\n- 모든 챕터에 실습 예제를 포함\n- 코드 블록에는 항상 주석\n- 각 섹션 끝에 핵심 정리\n- 학생 수준은 고등학교 1학년"}
+                        className="flex-1 min-h-[200px] w-full text-sm border border-gray-300 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-mono"
+                      />
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        💡 텍스트와 구성 요소에 대한 가이드. 모든 챕터 생성 시 AI에게 전달됩니다.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <textarea
+                        value={imageGuidelines}
+                        onChange={(e) => { setImageGuidelines(e.target.value); setImageGuidelinesSaved(false); }}
+                        placeholder={"이미지 생성 컨셉을 입력하세요...\n\n예시:\n- 애니메이션 스타일의 따뜻한 톤\n- 캐릭터는 한국 고등학생\n- 교실/학교 배경 선호\n- 파스텔 색상, 밝은 분위기\n- 텍스트 라벨은 한국어로"}
+                        className="flex-1 min-h-[200px] w-full text-sm border border-purple-300 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
+                      />
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        🖼️ 이미지 생성 시 스타일과 컨셉을 지정합니다. Gemini 이미지 API에 전달됩니다.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -914,17 +1245,25 @@ function BatchTab({ project, onComplete }) {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">최대 토큰: {maxTokens.toLocaleString()}</label>
+            <label className="block text-xs text-gray-500 mb-1">
+              챕터당 목표 글자 수: ~{charTarget.toLocaleString()}자
+              <span className="text-gray-400 ml-1">(토큰: {maxTokens.toLocaleString()})</span>
+            </label>
             <input
               type="range"
               min={2000}
-              max={16000}
-              step={1000}
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(Number(e.target.value))}
+              max={12000}
+              step={500}
+              value={charTarget}
+              onChange={(e) => setCharTarget(Number(e.target.value))}
               disabled={status === 'running'}
               className="w-full"
             />
+            <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+              <span>간결 (2,000자)</span>
+              <span>표준 (6,000자)</span>
+              <span>상세 (12,000자)</span>
+            </div>
           </div>
 
           <div>
@@ -974,7 +1313,7 @@ function BatchTab({ project, onComplete }) {
                       onClick={() => setTpmLimit(preset.value)}
                       className={`px-1.5 py-0.5 text-[10px] rounded border ${
                         tpmLimit === preset.value
-                          ? 'bg-blue-100 border-blue-300 text-blue-700'
+                          ? 'bg-emerald-100 border-emerald-300 text-emerald-700'
                           : 'border-gray-200 text-gray-400 hover:bg-gray-50'
                       }`}
                     >
@@ -1013,7 +1352,7 @@ function BatchTab({ project, onComplete }) {
                 <button
                   onClick={() => handleGenerate(true)}
                   disabled={remainingChapters === 0}
-                  className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {completedChapters > 0 && remainingChapters > 0
                     ? `▶️ 이어서 생성 (${remainingChapters}개)`
@@ -1034,7 +1373,7 @@ function BatchTab({ project, onComplete }) {
         <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between mb-3 flex-shrink-0">
             <h3 className="font-semibold text-gray-900 text-sm">📋 목차 및 진행 상태</h3>
-            <button onClick={loadChapters} className="text-xs text-blue-600 hover:underline">
+            <button onClick={loadChapters} className="text-xs text-emerald-600 hover:underline">
               🔄 새로고침
             </button>
           </div>
@@ -1049,7 +1388,7 @@ function BatchTab({ project, onComplete }) {
                   <span>
                     완료: {completedChapters}/{totalChapters}개
                     {status === 'running' && currentGenerating.size > 0 && (
-                      <span className="ml-2 text-blue-600 animate-pulse">
+                      <span className="ml-2 text-emerald-600 animate-pulse">
                         ✍️ {[...currentGenerating].join(', ')} 생성 중...
                       </span>
                     )}
@@ -1059,7 +1398,7 @@ function BatchTab({ project, onComplete }) {
                 <div className="w-full bg-gray-200 rounded-full h-2.5">
                   <div
                     className={`h-2.5 rounded-full transition-all ${
-                      status === 'running' ? 'bg-blue-500 animate-pulse' : 'bg-blue-600'
+                      status === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-600'
                     }`}
                     style={{ width: `${totalChapters > 0 ? (completedChapters / totalChapters) * 100 : 0}%` }}
                   />
@@ -1075,7 +1414,9 @@ function BatchTab({ project, onComplete }) {
                   selectedChapters={selectedChapters}
                   onToggleSelect={handleToggleSelect}
                   onRegenerate={handleRegenerateSelected}
+                  onGenerateSelected={handleGenerateSelected}
                   onSelectAll={handleSelectAll}
+                  onPreview={loadChapterPreview}
                 />
               </div>
             </>
@@ -1083,13 +1424,47 @@ function BatchTab({ project, onComplete }) {
         </div>
       </div>
 
-      {/* 로그 */}
+      {/* 로그 + 실시간 미리보기 (좌우 분할) */}
       {logs.length > 0 && (
-        <div className="flex-[2] min-h-[300px] bg-gray-900 rounded-xl p-4 overflow-y-auto font-mono text-sm leading-relaxed text-gray-300">
-          {logs.map((log, i) => (
-            <div key={i} className="py-0.5">{log}</div>
-          ))}
-          <div ref={logEndRef} />
+        <div className={`flex gap-4 ${previewContent ? 'flex-[3] min-h-[400px]' : 'flex-[2] min-h-[300px]'}`}>
+          {/* 로그 패널 */}
+          <div className={`bg-gray-900 rounded-xl p-4 overflow-y-auto font-mono text-sm leading-relaxed text-gray-300 ${previewContent ? 'w-2/5' : 'w-full'}`}>
+            {logs.map((log, i) => (
+              <div key={i} className="py-0.5">{log}</div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+
+          {/* 실시간 미리보기 패널 */}
+          {previewContent && (
+            <div className="w-3/5 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900">📄 생성된 챕터 미리보기</span>
+                  {previewChapterId && (
+                    <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">
+                      {previewChapterId}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => { setPreviewContent(''); setPreviewChapterId(null); }}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  ✕ 닫기
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 prose prose-sm max-w-none">
+                {previewLoading ? (
+                  <div className="flex items-center justify-center h-32 text-gray-400">
+                    <span className="animate-spin mr-2">⏳</span> 내용 불러오는 중...
+                  </div>
+                ) : (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{previewContent}</ReactMarkdown>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1132,9 +1507,9 @@ function EstimatedCost({ model, models, maxTokens, chapterCount }) {
 
   const { input: inputPrice, output: outputPrice } = modelInfo.pricing;
   // 실제 프롬프트: 시스템(3~5K) + docStructure(2~4K) + templateAddition(2~4K) + 아웃라인(1~3K) + 참고자료(5~20K) + 이전챕터참조(10~30K)
-  const estimatedInputPerChapter = 40000; // 평균 입력 토큰 (프롬프트 + 아웃라인 + 참고자료 + 이전 챕터)
-  // 실제 출력은 maxTokens의 약 70~90% 사용
-  const estimatedOutputPerChapter = Math.round(maxTokens * 0.8);
+  const estimatedInputPerChapter = 40000;
+  // 한국어: 출력 토큰 ≈ 글자 수 (1:1). 서버에서 시간 기반 캡 적용됨
+  const estimatedOutputPerChapter = Math.round(maxTokens * 0.85);
   const totalInput = chapterCount * estimatedInputPerChapter;
   const totalOutput = chapterCount * estimatedOutputPerChapter;
   const inputCost = (totalInput / 1_000_000) * inputPrice;
@@ -1146,7 +1521,7 @@ function EstimatedCost({ model, models, maxTokens, chapterCount }) {
 
   return (
     <div className="text-xs text-amber-700 space-y-0.5">
-      <p>{chapterCount}개 챕터 × 입력 ~{estimatedInputPerChapter.toLocaleString()} + 출력 ~{estimatedOutputPerChapter.toLocaleString()} 토큰</p>
+      <p>{chapterCount}개 챕터 × ~{estimatedOutputPerChapter.toLocaleString()}자 출력</p>
       <p className="font-semibold">~${totalCost.toFixed(2)} (약 {krwTotal.toLocaleString()}원)</p>
       <p className="text-amber-600">입력 ${inputCost.toFixed(2)} + 출력 ${outputCost.toFixed(2)}</p>
     </div>
@@ -1173,7 +1548,7 @@ function ReportPanel({ report }) {
           <div className="text-xs text-gray-500">✅ 신규 성공</div>
         </div>
         <div className="text-center">
-          <div className="text-xl font-bold text-blue-600">{totalCompleted}/{report.total}</div>
+          <div className="text-xl font-bold text-emerald-600">{totalCompleted}/{report.total}</div>
           <div className="text-xs text-gray-500">📊 전체 완료</div>
         </div>
         <div className="text-center">
@@ -1226,12 +1601,188 @@ function ReportPanel({ report }) {
 // =============================================
 // 탭 3: 챕터 편집
 // =============================================
+// =============================================
+// 이미지 프롬프트 유틸리티
+// =============================================
+function parseImagePrompts(text) {
+  const regex = /<!-- IMAGE: (.+?) -->/g;
+  const prompts = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    prompts.push({ index: match.index, full: match[0], description: match[1].trim() });
+  }
+  return prompts;
+}
+
+function checkPromptQuality(desc) {
+  const checks = [];
+  if (desc.length < 15) {
+    checks.push({ type: 'warning', msg: `설명이 너무 짧습니다 (${desc.length}자, 15자 이상 권장)` });
+  } else {
+    checks.push({ type: 'success', msg: `구체적인 설명 (${desc.length}자)` });
+  }
+  const eduKw = ['보여주는', '설명하는', '비교하는', '과정', '구조', '변화', '관계', '단계', '분석', '시각화'];
+  if (eduKw.some(k => desc.includes(k))) {
+    checks.push({ type: 'success', msg: '교육 목적 명시됨' });
+  } else {
+    checks.push({ type: 'warning', msg: '"~를 보여주는" 등 교육 목적을 추가하세요' });
+  }
+  if (/색상|라벨|표시|구분|범례|번호/.test(desc)) {
+    checks.push({ type: 'success', msg: '라벨/색상 지정됨' });
+  }
+  if (/일러스트|다이어그램|차트|지도|사진|모델|단면도|그래프|스타일/.test(desc)) {
+    checks.push({ type: 'success', msg: '시각 스타일 명시됨' });
+  }
+  return checks;
+}
+
+// =============================================
+// 이미지 프롬프트 채팅 패널
+// =============================================
+function ImagePromptChat({ project, chapterId, imagePrompt, onApply, onClose, model }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [streamText, setStreamText] = useState('');
+  const chatEndRef = useRef(null);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, streamText]);
+
+  // 첫 진입 시 AI가 자동 분석
+  useEffect(() => {
+    const checks = checkPromptQuality(imagePrompt);
+    const issues = checks.filter(c => c.type === 'warning').map(c => c.msg);
+    const intro = issues.length > 0
+      ? `현재 프롬프트를 분석했습니다:\n\n${issues.map(i => `⚠️ ${i}`).join('\n')}\n\n어떤 방향으로 개선할까요?`
+      : '현재 프롬프트가 잘 작성되어 있습니다. 추가로 개선하고 싶은 부분이 있으신가요?';
+    setMessages([{ role: 'assistant', content: intro }]);
+  }, [imagePrompt]);
+
+  const handleSend = async (text) => {
+    const msg = text || input.trim();
+    if (!msg || streaming) return;
+    setInput('');
+    const allMessages = [...messages, { role: 'user', content: msg }];
+    setMessages(allMessages);
+    setStreaming(true);
+    setStreamText('');
+
+    try {
+      await apiStreamPost(
+        `/api/projects/${project.name}/chapters/${chapterId}/image-chat`,
+        { imagePrompt, model, messages: allMessages },
+        {
+          onText: (t) => setStreamText(prev => prev + t),
+          onDone: (data) => {
+            setMessages(prev => [...prev, { role: 'assistant', content: data.content || '' }]);
+            setStreamText('');
+            setStreaming(false);
+          },
+          onError: () => setStreaming(false),
+        }
+      );
+    } catch { setStreaming(false); }
+  };
+
+  // 채팅에서 ```image-prompt 블록 찾기
+  const findSuggestedPrompt = (text) => {
+    const m = text.match(/```image-prompt\s*\n([\s\S]*?)```/);
+    return m ? m[1].trim() : null;
+  };
+
+  const quickChips = ['더 구체적으로', '교육 목적 추가', '색상/라벨 지정', '스타일 변경'];
+
+  return (
+    <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full">
+      <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-900">🖼️ 프롬프트 개선</h4>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+      </div>
+
+      {/* 현재 프롬프트 */}
+      <div className="p-3 bg-gray-50 border-b text-xs">
+        <p className="text-gray-500 mb-1">현재:</p>
+        <p className="text-gray-800 font-medium">{imagePrompt}</p>
+      </div>
+
+      {/* 빠른 제안 칩 */}
+      <div className="p-2 border-b flex flex-wrap gap-1">
+        {quickChips.map(chip => (
+          <button
+            key={chip}
+            onClick={() => handleSend(chip)}
+            disabled={streaming}
+            className="px-2 py-1 text-xs bg-emerald-50 text-emerald-700 rounded-full hover:bg-emerald-100 disabled:opacity-50"
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+
+      {/* 채팅 영역 */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+        {messages.map((m, i) => (
+          <div key={i}>
+            <div className={`text-xs px-3 py-2 rounded-lg whitespace-pre-wrap ${
+              m.role === 'user'
+                ? 'bg-emerald-50 text-emerald-900 ml-6'
+                : 'bg-gray-100 text-gray-800 mr-2'
+            }`}>
+              {m.content}
+            </div>
+            {/* 적용 버튼 — assistant 메시지에 image-prompt 블록이 있으면 표시 */}
+            {m.role === 'assistant' && findSuggestedPrompt(m.content) && (
+              <div className="mt-1 flex gap-1">
+                <button
+                  onClick={() => onApply(findSuggestedPrompt(m.content))}
+                  className="px-2 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                >
+                  ✅ 적용
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        {streamText && (
+          <div className="text-xs px-3 py-2 rounded-lg bg-gray-100 text-gray-800 mr-2 whitespace-pre-wrap">
+            {streamText}▌
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* 입력 */}
+      <div className="p-2 border-t">
+        <div className="flex gap-1">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            placeholder="개선 아이디어..."
+            disabled={streaming}
+            className="flex-1 text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none disabled:opacity-50"
+          />
+          <button
+            onClick={() => handleSend()}
+            disabled={streaming || !input.trim()}
+            className="px-2 py-1.5 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+          >
+            전송
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EditorTab({ project }) {
   const [chapters, setChapters] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [chatPrompt, setChatPrompt] = useState(null); // 이미지 채팅 대상 프롬프트
+  const [showImageReview, setShowImageReview] = useState(true);
 
   useEffect(() => {
     if (!project) return;
@@ -1273,6 +1824,68 @@ function EditorTab({ project }) {
 
   const hasChanges = content !== savedContent;
 
+  // 미저장 변경사항이 있을 때 페이지 이탈 경고
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
+  const imagePrompts = parseImagePrompts(content);
+
+  // 생성된 이미지 파싱: ![alt](images/filename.png)
+  const generatedImages = [];
+  const imgRegex = /!\[([^\]]*)\]\(images\/([^)]+)\)/g;
+  let imgMatch;
+  while ((imgMatch = imgRegex.exec(content)) !== null) {
+    generatedImages.push({ alt: imgMatch[1], filename: imgMatch[2] });
+  }
+
+  const [regenerating, setRegenerating] = useState(null);
+  const [imgCacheBust, setImgCacheBust] = useState(0); // 이미지 캐시 무효화
+  const handleRegenerate = async (filename, currentAlt) => {
+    const newPrompt = prompt('새 이미지 설명을 입력하세요:', currentAlt);
+    if (!newPrompt) return;
+    setRegenerating(filename);
+    try {
+      await apiFetch(`/api/projects/${project.name}/chapters/${selectedId}/regenerate-image`, {
+        method: 'POST',
+        body: JSON.stringify({ imageName: filename, newPrompt }),
+      });
+      // 마크다운에서 alt 텍스트를 새 프롬프트로 업데이트
+      const updatedContent = content.replace(
+        `![${currentAlt}](images/${filename})`,
+        `![${newPrompt}](images/${filename})`
+      );
+      setContent(updatedContent);
+      // 자동 저장
+      await apiFetch(`/api/projects/${project.name}/chapters/${selectedId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ content: updatedContent }),
+      });
+      setSavedContent(updatedContent);
+      setImgCacheBust(Date.now()); // 이미지 캐시 무효화
+    } catch (err) {
+      alert(`재생성 실패: ${err.message}`);
+    } finally {
+      setRegenerating(null);
+    }
+  };
+
+  // 이미지 프롬프트 적용 (채팅에서 개선된 프롬프트로 교체)
+  const handleApplyPrompt = (newDesc) => {
+    if (!chatPrompt) return;
+    const oldPlaceholder = `<!-- IMAGE: ${chatPrompt} -->`;
+    const newPlaceholder = `<!-- IMAGE: ${newDesc} -->`;
+    setContent(content.replace(oldPlaceholder, newPlaceholder));
+    setChatPrompt(null);
+  };
+
   if (chapters.length === 0) {
     return (
       <div className="text-center py-16">
@@ -1290,10 +1903,10 @@ function EditorTab({ project }) {
           {chapters.map((ch) => (
             <button
               key={ch.chapter_id}
-              onClick={() => loadChapter(ch.chapter_id)}
+              onClick={() => { loadChapter(ch.chapter_id); setChatPrompt(null); }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                 selectedId === ch.chapter_id
-                  ? 'bg-blue-50 text-blue-700 font-medium'
+                  ? 'bg-emerald-50 text-emerald-700 font-medium'
                   : 'text-gray-600 hover:bg-gray-50'
               }`}
             >
@@ -1305,7 +1918,7 @@ function EditorTab({ project }) {
       </div>
 
       {/* 편집 영역 */}
-      <div className="flex-1 flex flex-col bg-white rounded-xl border border-gray-200">
+      <div className="flex-1 flex flex-col bg-white rounded-xl border border-gray-200 min-w-0 overflow-y-auto">
         {/* 툴바 */}
         <div className="p-3 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1318,7 +1931,7 @@ function EditorTab({ project }) {
             <button
               onClick={() => setShowPreview(!showPreview)}
               className={`px-3 py-1 text-xs rounded-lg border ${
-                showPreview ? 'bg-blue-50 text-blue-600 border-blue-200' : 'text-gray-500 border-gray-200 hover:bg-gray-50'
+                showPreview ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'text-gray-500 border-gray-200 hover:bg-gray-50'
               }`}
             >
               {showPreview ? '📝 편집' : '👁️ 미리보기'}
@@ -1326,7 +1939,7 @@ function EditorTab({ project }) {
             <button
               onClick={handleSave}
               disabled={!hasChanges}
-              className="px-3 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="px-3 py-1 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
             >
               💾 저장
             </button>
@@ -1334,11 +1947,11 @@ function EditorTab({ project }) {
         </div>
 
         {/* 내용 */}
-        <div className="flex-1 min-h-0">
+        <div className="min-h-[300px]" style={{ height: 'clamp(300px, 55vh, 600px)' }}>
           {showPreview ? (
             <div className="h-full overflow-y-auto p-6">
               <div className="prose prose-sm max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={makeMarkdownComponents(project.name)}>{content}</ReactMarkdown>
               </div>
             </div>
           ) : (
@@ -1356,8 +1969,142 @@ function EditorTab({ project }) {
           <span>📊 {content.length.toLocaleString()}자</span>
           <span>{(content.match(/\n/g) || []).length + 1}줄</span>
           <span>{Math.floor((content.match(/```/g) || []).length / 2)} 코드블록</span>
+          {imagePrompts.length > 0 && (
+            <span className="text-purple-500">🖼️ 이미지 {imagePrompts.length}개</span>
+          )}
         </div>
+
+        {/* 생성된 이미지 갤러리 */}
+        {generatedImages.length > 0 && (
+          <div className="border-t border-gray-200 max-h-56 overflow-y-auto">
+            <div className="p-3">
+              <h4 className="text-xs font-semibold text-gray-700 mb-2">🖼️ 생성된 이미지 ({generatedImages.length}장)</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {generatedImages.map((img, idx) => {
+                  const imgSrc = `${API_BASE}/api/projects/${project.name}/chapters/images/${img.filename}${imgCacheBust ? '?_t=' + imgCacheBust : ''}`;
+                  return (
+                    <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200">
+                      <img
+                        src={imgSrc} alt={img.alt}
+                        className="w-full h-24 object-cover cursor-pointer"
+                        onClick={() => _openLightbox?.({ src: imgSrc, alt: img.alt })}
+                        title="클릭하여 크게 보기"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); _openLightbox?.({ src: imgSrc, alt: img.alt }); }}
+                          className="px-2 py-1 text-xs bg-white text-gray-800 rounded hover:bg-gray-100"
+                        >
+                          🔍 크게
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRegenerate(img.filename, img.alt); }}
+                          disabled={regenerating === img.filename}
+                          className="px-2 py-1 text-xs bg-white text-gray-800 rounded hover:bg-gray-100 disabled:opacity-50"
+                        >
+                          {regenerating === img.filename ? '생성중...' : '재생성'}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-gray-500 p-1 truncate">{img.alt}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 이미지 프롬프트 검토 섹션 */}
+        {imagePrompts.length > 0 && showImageReview && (
+          <div className="border-t border-gray-200 max-h-48 overflow-y-auto">
+            <div className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-gray-700">🖼️ 이미지 프롬프트 검토 ({imagePrompts.length}개)</h4>
+                <button onClick={() => setShowImageReview(false)} className="text-xs text-gray-400 hover:text-gray-600">접기</button>
+              </div>
+              <div className="space-y-2">
+                {imagePrompts.map((ip, idx) => {
+                  const checks = checkPromptQuality(ip.description);
+                  const hasWarning = checks.some(c => c.type === 'warning');
+                  return (
+                    <div key={idx} className={`p-2 rounded-lg border text-xs ${hasWarning ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-gray-800 font-medium flex-1 truncate" title={ip.description}>
+                          {idx + 1}. {ip.description}
+                        </p>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            onClick={async () => {
+                              const filename = `${selectedId}_img${idx + 1}.png`;
+                              setRegenerating(filename);
+                              try {
+                                await apiFetch(`/api/projects/${project.name}/chapters/${selectedId}/regenerate-image`, {
+                                  method: 'POST',
+                                  body: JSON.stringify({ imageName: filename, newPrompt: ip.description }),
+                                });
+                                // 플레이스홀더를 이미지 마크다운으로 교체
+                                const updated = content.replace(ip.full, `![${ip.description}](images/${filename})`);
+                                setContent(updated);
+                                await apiFetch(`/api/projects/${project.name}/chapters/${selectedId}`, {
+                                  method: 'PUT', body: JSON.stringify({ content: updated }),
+                                });
+                                setSavedContent(updated);
+                                setImgCacheBust(Date.now());
+                              } catch (err) {
+                                alert(`생성 실패: ${err.message}`);
+                              } finally {
+                                setRegenerating(null);
+                              }
+                            }}
+                            disabled={regenerating}
+                            className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 disabled:opacity-50"
+                          >
+                            {regenerating ? '생성중...' : '🖼️ 생성'}
+                          </button>
+                          <button
+                            onClick={() => setChatPrompt(ip.description)}
+                            className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                          >
+                            AI 개선
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {checks.map((c, ci) => (
+                          <span key={ci} className={c.type === 'success' ? 'text-emerald-600' : 'text-amber-600'}>
+                            {c.type === 'success' ? '✅' : '⚠️'} {c.msg}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 이미지 없으면 숨겼던 검토 패널 복원 버튼 */}
+        {imagePrompts.length > 0 && !showImageReview && (
+          <div className="border-t border-gray-200 p-1 text-center">
+            <button onClick={() => setShowImageReview(true)} className="text-xs text-purple-500 hover:text-purple-700">
+              🖼️ 이미지 프롬프트 검토 ({imagePrompts.length}개)
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* 이미지 프롬프트 채팅 패널 (슬라이드) */}
+      {chatPrompt && (
+        <ImagePromptChat
+          project={project}
+          chapterId={selectedId}
+          imagePrompt={chatPrompt}
+          onApply={handleApplyPrompt}
+          onClose={() => setChatPrompt(null)}
+          model="claude-sonnet-4-6"
+        />
+      )}
     </div>
   );
 }

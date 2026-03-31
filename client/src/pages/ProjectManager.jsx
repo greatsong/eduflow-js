@@ -82,7 +82,9 @@ function ProjectSettingsTab({ project, onCreated, onUpdated }) {
 
   // 템플릿 목록 로드
   useEffect(() => {
-    apiFetch('/api/projects/templates/list').then(setTemplates).catch(() => {});
+    apiFetch('/api/projects/templates/list').then(setTemplates).catch(() => {
+      console.error('템플릿 목록 로드 실패');
+    });
   }, []);
 
   // 기존 프로젝트 선택 시 정보 로드
@@ -101,8 +103,14 @@ function ProjectSettingsTab({ project, onCreated, onUpdated }) {
     // 기존 프로젝트: 정보 로드
     setLoading(true);
     Promise.all([
-      apiFetch(`/api/projects/${project.name}`).catch(() => ({})),
-      apiFetch(`/api/projects/${project.name}/template-info`).catch(() => ({})),
+      apiFetch(`/api/projects/${project.name}`).catch((e) => {
+        console.error('프로젝트 설정 로드 실패:', e.message);
+        return {};
+      }),
+      apiFetch(`/api/projects/${project.name}/template-info`).catch((e) => {
+        console.error('템플릿 정보 로드 실패:', e.message);
+        return {};
+      }),
     ]).then(([config, templateInfo]) => {
       setForm({
         name: project.name,
@@ -377,7 +385,7 @@ function ReferencesTab({ projectId }) {
           <span className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-700">
             {uploading ? '업로드 중...' : '📤 파일 선택 및 업로드'}
           </span>
-          <input type="file" multiple accept=".md,.txt,.markdown,.docx,.pdf"
+          <input type="file" multiple accept=".md,.txt,.markdown,.docx,.pdf,.csv,.xlsx,.xls,.json"
             onChange={handleUpload} className="hidden" />
         </label>
       </div>
@@ -555,8 +563,8 @@ function QuickStartTab({ projectId }) {
   useEffect(() => {
     apiFetch('/api/models').then((d) => {
       setModels(d.models);
-      apiFetch('/api/models/default/conversation').then((r) => setModel(r.modelId)).catch(() => {});
-    }).catch(() => {});
+      apiFetch('/api/models/default/conversation').then((r) => setModel(r.modelId)).catch((err) => console.error('기본 대화 모델 로드 실패', err));
+    }).catch((err) => console.error('모델 목록 로드 실패', err));
   }, []);
 
   // 직접 입력 모드에서 기존 데이터 로드
@@ -564,10 +572,10 @@ function QuickStartTab({ projectId }) {
     if (!projectId || mode !== 'manual') return;
     apiFetch(`/api/projects/${projectId}/context`)
       .then(data => { if (data?.content) setDiscussionText(data.content); })
-      .catch(() => {});
+      .catch((err) => console.error('프로젝트 컨텍스트 로드 실패', err));
     apiFetch(`/api/projects/${projectId}/toc`)
       .then(data => { if (data?.toc_md) setTocText(data.toc_md); })
-      .catch(() => {});
+      .catch((err) => console.error('프로젝트 목차 로드 실패', err));
   }, [projectId, mode]);
 
   const handleFileUpload = (e) => {
@@ -846,11 +854,11 @@ function PedagogicalDevicesTab({ projectId }) {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    apiFetch('/api/projects/devices/catalog').then(setCatalog).catch(() => {});
+    apiFetch('/api/projects/devices/catalog').then(setCatalog).catch((err) => console.error('교육적 장치 카탈로그 로드 실패', err));
     if (projectId) {
       apiFetch(`/api/projects/${projectId}/devices`)
         .then((d) => setSelected(d.devices || []))
-        .catch(() => {});
+        .catch((err) => console.error('프로젝트 교육적 장치 로드 실패', err));
     }
   }, [projectId]);
 
