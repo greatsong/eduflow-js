@@ -34,6 +34,7 @@ export class TokenUsageManager {
 
     const configPath = join(dirname(this.baseDir), '..', 'model_config.json');
     const fallback = {
+      'claude-opus-4-7':              { input: 5.0,  output: 25.0 },
       'claude-opus-4-6':              { input: 5.0,  output: 25.0 },
       'claude-opus-4-5-20251101':     { input: 5.0,  output: 25.0 },
       'claude-sonnet-4-6':            { input: 3.0,  output: 15.0 },

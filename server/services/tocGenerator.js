@@ -18,7 +18,7 @@ export class TOCGenerator {
   /**
    * 목차 자동 생성 (SSE 스트리밍 지원)
    */
-  async generate(references, directionSummary, model = 'claude-opus-4-5-20251101', maxTokens = 16384, res = null) {
+  async generate(references, directionSummary, model = 'claude-opus-4-7', maxTokens = 16384, res = null) {
     const referencesText = references
       .map((ref, i) => `[참고자료 ${i + 1}]\n${ref}`)
       .join('\n\n---\n\n');

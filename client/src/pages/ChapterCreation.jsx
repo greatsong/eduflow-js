@@ -614,7 +614,7 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
 function BatchTab({ project, onComplete }) {
   const [chapters, setChapters] = useState([]);
   const [report, setReport] = useState(null);
-  const [model, setModel] = useState('claude-opus-4-5-20251101');
+  const [model, setModel] = useState('claude-opus-4-7');
   const [charTarget, setCharTarget] = useState(6000); // 챕터당 목표 글자 수
   const maxTokens = Math.round(charTarget * 1.15); // 한국어: 1토큰≈1자 + 15% 마크다운 버퍼
   const [concurrent, setConcurrent] = useState(5);

@@ -240,6 +240,7 @@ export class ChapterGenerator {
   async _loadModelPricing() {
     const configPath = join(__dirname, '..', '..', 'model_config.json');
     const fallback = {
+      'claude-opus-4-7': { input: 5.0, output: 25.0 },
       'claude-opus-4-6': { input: 5.0, output: 25.0 },
       'claude-opus-4-5-20251101': { input: 5.0, output: 25.0 },
       'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
@@ -247,6 +248,8 @@ export class ChapterGenerator {
       'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
       'claude-haiku-4-5-20251001': { input: 0.8, output: 4.0 },
     };
+    // 모델별 max_output_tokens 캐시 초기화
+    this._modelMaxTokens = {};
     if (!existsSync(configPath)) {
       return fallback;
     }
@@ -256,6 +259,10 @@ export class ChapterGenerator {
       const pricing = { ...fallback };
       for (const m of config.models || []) {
         pricing[m.id] = m.pricing || this._inferPricing(m.id, fallback);
+        // max_output_tokens 필드가 있으면 캐시에 저장
+        if (typeof m.max_output_tokens === 'number' && m.max_output_tokens > 0) {
+          this._modelMaxTokens[m.id] = m.max_output_tokens;
+        }
       }
       return pricing;
     } catch {
@@ -263,10 +270,31 @@ export class ChapterGenerator {
     }
   }
 
+  /**
+   * 모델별 안전한 출력 토큰 상한 조회
+   * model_config.json의 max_output_tokens × 0.95 (스트리밍 버퍼 여유)
+   * 모르는 모델은 보수적으로 32000 반환
+   */
+  _getModelTokenLimit(modelId) {
+    const declared = (this._modelMaxTokens && this._modelMaxTokens[modelId]) || 0;
+    if (declared > 0) {
+      return Math.floor(declared * 0.95);
+    }
+    // 모델 ID 패턴으로 추론 (config에 없는 신규 모델)
+    const id = (modelId || '').toLowerCase();
+    if (id.includes('opus-4-7')) return 39900; // 42000 * 0.95
+    if (id.includes('opus')) return 30400;      // 32000 * 0.95
+    if (id.includes('sonnet') || id.includes('haiku')) return 60800; // 64000 * 0.95
+    if (id.startsWith('gpt-5') || id.startsWith('gpt-4') || id.startsWith('o')) return 121600; // 128000 * 0.95
+    if (id.startsWith('gemini')) return 62259;  // 65536 * 0.95
+    if (id.startsWith('solar')) return 7782;    // 8192 * 0.95
+    return 32000;
+  }
+
   /** 모델 ID에서 가격 추론 (config에 pricing이 없을 때) */
   _inferPricing(modelId, fallback) {
     const id = modelId.toLowerCase();
-    if (id.includes('opus')) return fallback['claude-opus-4-6'] || { input: 5.0, output: 25.0 };
+    if (id.includes('opus')) return fallback['claude-opus-4-7'] || { input: 5.0, output: 25.0 };
     if (id.includes('haiku')) return fallback['claude-haiku-4-5-20251001'] || { input: 0.8, output: 4.0 };
     if (id.includes('sonnet')) return { input: 3.0, output: 15.0 };
     if (id.startsWith('gpt-4o')) return { input: 2.5, output: 10.0 };
@@ -333,7 +361,7 @@ export class ChapterGenerator {
     return 30;
   }
 
-  _calcMaxTokensForTime(timeMinutes, userMaxTokens) {
+  _calcMaxTokensForTime(timeMinutes, userMaxTokens, modelId = null) {
     // ============================================================
     // 분량 제어 핵심 원칙: "잘리지 않는 것이 최우선"
     //
@@ -341,8 +369,11 @@ export class ChapterGenerator {
     // 2. max_tokens는 AI가 가이드를 약간 초과해도 잘리지 않도록 충분한 여유를 둠
     // 3. AI가 프롬프트 가이드를 잘 따르면 charMax 이내에서 자연스럽게 끝남
     // 4. 만약 AI가 가이드를 무시하고 길게 써도 max_tokens 한도 내에서 마무리됨
+    //
+    // MODEL_TOKEN_LIMIT는 model_config.json의 max_output_tokens에서 동적으로 조회
+    // (하드코딩 제거 — 새 모델이 나와도 model_config.json만 수정하면 됨)
     // ============================================================
-    const MODEL_TOKEN_LIMIT = 32000; // Opus/Sonnet API 한계보다 약간 아래
+    const MODEL_TOKEN_LIMIT = this._getModelTokenLimit(modelId);
     const effectiveMinutes = timeMinutes > 0 ? timeMinutes : 50;
 
     // 프롬프트의 charMax (AI에게 요청하는 최대 글자 수)
@@ -383,23 +414,20 @@ export class ChapterGenerator {
   }
 
   async _writeGenerationStatusDebounced(data) {
-    // deep copy하여 타이머 콜백에서 안전하게 사용 (BUG-007 경쟁 조건 완화)
-    this._pendingStatusData = JSON.parse(JSON.stringify(data));
+    this._pendingStatusData = data;
     const now = Date.now();
     if (now - this._lastStatusWrite < 2000) {
       if (!this._statusWriteTimer) {
-        // 타이머 생성 시점의 데이터 스냅샷을 캡처하여 전달
-        const snapshot = this._pendingStatusData;
         this._statusWriteTimer = setTimeout(async () => {
           this._statusWriteTimer = null;
           this._lastStatusWrite = Date.now();
-          await this._writeGenerationStatus(snapshot).catch(() => {});
+          await this._writeGenerationStatus(this._pendingStatusData).catch(() => {});
         }, 2000 - (now - this._lastStatusWrite));
       }
       return;
     }
     this._lastStatusWrite = now;
-    await this._writeGenerationStatus(this._pendingStatusData).catch(() => {});
+    await this._writeGenerationStatus(data).catch(() => {});
   }
 
   async loadGenerationStatus() {
@@ -452,51 +480,105 @@ export class ChapterGenerator {
       if (c >= '\uac00' && c <= '\ud7a3') korean++;
     }
     const other = text.length - korean;
-    // 한글 토큰 추정 보정 (BUG-013): 한글 1글자 ≈ 0.8~1토큰이므로 /1.2로 계산
-    return Math.floor((korean / 1.2 + other / 4) * 1.1);
+    return Math.floor((korean / 2 + other / 4) * 1.1);
   }
 
   /**
    * 스트리밍 방식 AI API 호출 (실시간 진행률 표시, 멀티 프로바이더)
+   *
+   * stopReason === 'max_tokens'로 잘릴 경우:
+   *   1) 마지막 완전한 문장까지 트리밍
+   *   2) 자동으로 continuation 호출 (assistant 메시지 + "이어서" 요청)
+   *   3) 최대 MAX_CONTINUATIONS회 반복
+   *   4) 모든 결과를 합쳐 반환 (input/output 토큰도 누적)
+   * 헌법 제3조(완결성) 보장 — 더 이상 사용자가 별도 세션에서 수동 보정할 필요 없음.
    */
   async _streamGenerate(model, maxTokens, prompt, chapterId, progressCallback, isRetry = false) {
+    const MAX_CONTINUATIONS = 2; // 초기 1회 + 이어쓰기 최대 2회 = 총 3 chunk
     const provider = detectProvider(model);
     const apiKey = resolveApiKey(provider, this.apiKeys);
-    const estimatedTotalChars = maxTokens; // 한국어: 1토큰 ≈ 1자
     const prefix = isRetry ? '재시도 ' : '';
-    let charsSoFar = 0;
-    let lastProgressTime = Date.now();
 
-    const result = await streamChat({
-      provider, apiKey, model,
-      messages: [{ role: 'user', content: prompt }],
-      maxTokens,
-      onText: (text) => {
-        charsSoFar += text.length;
-        const now = Date.now();
-        if (now - lastProgressTime >= 3000 && progressCallback) {
-          const pct = Math.min(99, Math.round((charsSoFar / estimatedTotalChars) * 100));
-          progressCallback(`📝 ${chapterId} ${prefix}생성 중... ${charsSoFar.toLocaleString()}자 (~${pct}%)`);
-          lastProgressTime = now;
+    const messages = [{ role: 'user', content: prompt }];
+    let combinedContent = '';
+    let totalInput = 0;
+    let totalOutput = 0;
+    let lastStopReason = '';
+
+    for (let attempt = 0; attempt <= MAX_CONTINUATIONS; attempt++) {
+      const isContinuation = attempt > 0;
+      const estimatedTotalChars = maxTokens;
+      let charsSoFar = 0;
+      let lastProgressTime = Date.now();
+      const labelPrefix = isContinuation ? `${prefix}이어쓰기 ${attempt}/${MAX_CONTINUATIONS} ` : `${prefix}`;
+
+      if (isContinuation && progressCallback) {
+        progressCallback(`🔁 ${chapterId} 잘림 감지 → 자동 이어쓰기 ${attempt}/${MAX_CONTINUATIONS} 시작...`);
+      }
+
+      const result = await streamChat({
+        provider, apiKey, model,
+        messages,
+        maxTokens,
+        onText: (text) => {
+          charsSoFar += text.length;
+          const now = Date.now();
+          if (now - lastProgressTime >= 3000 && progressCallback) {
+            const pct = Math.min(99, Math.round((charsSoFar / estimatedTotalChars) * 100));
+            const totalLen = combinedContent.length + charsSoFar;
+            progressCallback(`📝 ${chapterId} ${labelPrefix}생성 중... 누적 ${totalLen.toLocaleString()}자 (현재 ${charsSoFar.toLocaleString()}, ~${pct}%)`);
+            lastProgressTime = now;
+          }
+        },
+      });
+
+      totalInput += result.inputTokens || 0;
+      totalOutput += result.outputTokens || 0;
+      lastStopReason = result.stopReason;
+
+      // 마지막 시도 또는 정상 종료 → 결합
+      if (result.stopReason !== 'max_tokens' || attempt === MAX_CONTINUATIONS) {
+        if (result.stopReason === 'max_tokens') {
+          // 마지막 시도에서도 잘렸으면 트리밍
+          this._log(`⚠️ ${chapterId} 최종 시도(${attempt})에서도 max_tokens 도달 — 마지막 완전 문장까지 트리밍`);
+          combinedContent += this._trimToLastCompleteSentence(result.content);
+          if (progressCallback) {
+            progressCallback(`⚠️ ${chapterId} ${MAX_CONTINUATIONS + 1}회 시도 후 트리밍 완료 (${combinedContent.length.toLocaleString()}자)`);
+          }
+        } else {
+          combinedContent += result.content;
         }
-      },
-    });
+        break;
+      }
 
-    let finalContent = result.content;
+      // 잘렸지만 더 시도할 여지 있음 → 트리밍 후 continuation 메시지 구성
+      const trimmed = this._trimToLastCompleteSentence(result.content);
+      combinedContent += trimmed;
 
-    if (result.stopReason === 'max_tokens') {
-      this._log(`⚠️ ${chapterId} 응답이 max_tokens(${maxTokens})로 잘림 — 마지막 200자: ...${result.content.slice(-200)}`);
-      // 잘린 콘텐츠 복구: 마지막 완전한 문장/줄까지 트리밍
-      finalContent = this._trimToLastCompleteSentence(finalContent);
-      this._log(`🔧 ${chapterId} 잘린 콘텐츠 복구 → ${finalContent.length}자`);
-      if (progressCallback) progressCallback(`⚠️ ${chapterId} 토큰 한도 도달 → 마지막 완전한 문장까지 정리됨`);
+      this._log(`🔁 ${chapterId} 이어쓰기 트리거 [attempt=${attempt + 1}] — 누적 ${combinedContent.length}자 (이번 chunk ${trimmed.length}자)`);
+
+      // 마지막 ~1500자를 컨텍스트로 노출하면서 전체 누적 본문을 assistant 응답으로 전달
+      const tailContext = combinedContent.slice(-1500);
+      messages.push({ role: 'assistant', content: combinedContent });
+      messages.push({
+        role: 'user',
+        content:
+          `위에서 응답이 토큰 한도로 잘렸습니다. 같은 톤·구조·형식으로 그대로 이어서 작성하세요.\n\n` +
+          `# 이어쓰기 규칙\n` +
+          `- 헤더(##)를 다시 시작하지 말고, 끊긴 문장/문단/섹션부터 자연스럽게 이어가세요.\n` +
+          `- 이미 작성한 내용을 다시 요약하거나 반복하지 마세요.\n` +
+          `- "이어서…", "계속하면…" 같은 메타 문장 없이 본문 흐름 그대로 시작하세요.\n` +
+          `- 가능하면 이번 chunk 안에서 챕터를 완결(성찰/정리 섹션 포함)하세요.\n\n` +
+          `# 직전 본문 끝부분 (참고)\n` +
+          `\`\`\`\n${tailContext}\n\`\`\``,
+      });
     }
 
     return {
-      content: this._sanitizeContent(finalContent),
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      stopReason: result.stopReason,
+      content: this._sanitizeContent(combinedContent),
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      stopReason: lastStopReason,
     };
   }
 
@@ -527,13 +609,12 @@ export class ChapterGenerator {
     while (lines.length > 1) {
       const lastLine = lines[lines.length - 1].trim();
       if (!lastLine) { lines.pop(); continue; }
-      // 문장 종결 부호로 끝나거나, 마크다운 헤더, 빈 줄, 목록 등이면 OK (BUG-005)
+      // 문장 종결 부호로 끝나거나, 마크다운 헤더, 빈 줄, 목록 등이면 OK
       const endsWell = /[.?!)\]}>。？！）」】`'"]$/.test(lastLine)
-        || /^#{1,6}\s/.test(lastLine)   // 헤더
-        || /^[-*+]\s/.test(lastLine)    // 비순서 목록 항목
-        || /^```/.test(lastLine)        // 코드블록 경계
-        || /^\d+\.\s/.test(lastLine)    // 번호 목록 항목
-        || /\|$/.test(lastLine);        // 테이블 행
+        || /^#{1,6}\s/.test(lastLine) // 헤더
+        || /^[-*+]\s/.test(lastLine)  // 목록
+        || /^```/.test(lastLine)      // 코드블록 경계
+        || /^\d+\./.test(lastLine);   // 번호 목록
       if (endsWell) break;
       lines.pop();
     }
@@ -575,19 +656,14 @@ export class ChapterGenerator {
     return readFile(file, 'utf-8');
   }
 
-  /**
-   * 참고자료 로드 — 파싱 실패 파일 목록도 함께 반환 (BUG-009, BUG-020)
-   * @returns {{ refs: string[], failedFiles: string[] }}
-   */
   async _loadReferences() {
-    if (!existsSync(this.referencesPath)) return { refs: [], failedFiles: [] };
+    if (!existsSync(this.referencesPath)) return [];
 
     // ReferenceManager를 사용하여 모든 포맷(PDF, DOCX, XLSX, HTML, HWP 등) 처리
     const { ReferenceManager } = await import('./referenceManager.js');
     const rm = new ReferenceManager(this.projectPath);
     const files = await rm.listFiles();
     const refs = [];
-    const failedFiles = [];
 
     for (const file of files) {
       try {
@@ -595,15 +671,13 @@ export class ChapterGenerator {
         if (result.status === 'ok' && result.content) {
           refs.push(`[${file.name}]\n${result.content}`);
         } else if (result.status === 'parse_error') {
-          failedFiles.push(file.name);
           console.warn(`참고자료 파싱 실패 (${file.name}): ${result.error || '알 수 없는 오류'}`);
         }
       } catch (e) {
-        failedFiles.push(file.name);
         console.warn(`참고자료 로드 실패 (${file.name}):`, e.message);
       }
     }
-    return { refs, failedFiles };
+    return refs;
   }
 
   _truncateReferences(references, maxChars) {
@@ -650,10 +724,70 @@ export class ChapterGenerator {
   }
 
   /**
+   * 모든 system prompt 끝에 통합 출력 형식 규칙을 덧붙인다.
+   * 각 템플릿마다 흩어진 "ASCII art 절대 금지" 규정을 보강하고,
+   * 워크시트/치트시트도 마크다운 표로 통일하도록 한다.
+   *
+   * 추가되는 규칙은 헌법 제7조(보이면 이해된다)에 부합하도록
+   * - 회로도/도표/박스/워크시트 프레임 모두 ASCII 금지
+   * - 인쇄용 워크시트는 마크다운 표(파이프+대시)로 작성
+   * - 시각화는 Mermaid/SVG/마크다운 표로 일관
+   */
+  _appendUnifiedOutputRules(prompt) {
+    const SUFFIX = `
+
+# 🧱 출력 형식 통합 규칙 (모든 챕터 공통, 최우선 준수)
+
+아래 규칙은 어떤 템플릿이든 일관되게 적용됩니다. 위 지시와 충돌하면 이 규칙을 따르세요.
+
+1. **ASCII 박스/도표/프레임 일체 금지** — 텍스트 문자(┌ ─ ┐ │ └ ┘ ┼ 등)로 그림·도표·박스·워크시트 프레임·치트시트·핀배치·회로도를 그리지 마세요.
+2. **워크시트·치트시트·기록 양식도 마크다운 표로 작성하세요.** 예를 들어 "실패 기록 양식", "수용 기준 체크리스트", "관찰 기록지", "도형 치트시트" 같은 학생 활동지·교사 인쇄물도 모두 다음과 같이 마크다운 표로 만드세요:
+
+   \`\`\`markdown
+   | 항목 | 학생 기록 |
+   |---|---|
+   | 내가 한 말 |  |
+   | 봇이 한 말 |  |
+   | 뭐가 이상한가 |  |
+   | 추가할 규칙 |  |
+   \`\`\`
+
+   빈칸은 셀을 비워 두면 됩니다. ASCII 박스보다 표가 인쇄·복사·렌더링 모두 깔끔합니다.
+3. **데이터/비교/대조/타임라인은 항상 마크다운 표를 우선** 고려하세요. 표로 표현 가능한 것을 굳이 글로 풀어 쓰지 마세요.
+4. **시각화는 Mermaid → 인라인 SVG → 마크다운 표** 순으로 선택하세요. 시각 자료가 필요 없는 콘텐츠라면 억지로 넣지 마세요.
+5. **체크박스 양식**은 \`- [ ] 항목\` 마크다운 문법을 사용하세요. ASCII 체크박스(□, ☐) 대신 마크다운 체크리스트.
+`;
+    if (!prompt) return prompt;
+    return prompt + SUFFIX;
+  }
+
+  /**
    * 템플릿 문자열의 {{변수}}를 실제 값으로 치환
    */
   _substituteVars(template, vars) {
     let result = template;
+
+    // 조건부 블록 처리: {{#if_KEY}}...{{/if_KEY}}
+    // context_answers 기반으로 시뮬레이션/역량평가 조건 해석
+    const contextAnswers = this.templateInfo?.context_answers || {};
+    const teachingStyle = contextAnswers.teaching_style || '';
+    const condMap = {
+      if_simulation: ['시뮬레이션형', '통합형'].includes(teachingStyle),
+      if_competency: ['역량평가형', '통합형'].includes(teachingStyle),
+    };
+    for (const [condKey, show] of Object.entries(condMap)) {
+      const regex = new RegExp(`\\{\\{#${condKey}\\}\\}([\\s\\S]*?)\\{\\{/${condKey}\\}\\}`, 'g');
+      result = result.replace(regex, show ? '$1' : '');
+    }
+
+    // context_answers를 vars에 추가 (teaching_style 등)
+    for (const [key, value] of Object.entries(contextAnswers)) {
+      if (!(key in vars)) {
+        vars[key] = value;
+      }
+    }
+
+    // 변수 치환: {{key}} → value
     for (const [key, value] of Object.entries(vars)) {
       result = result.replaceAll(`{{${key}}}`, String(value ?? ''));
     }
@@ -718,9 +852,17 @@ export class ChapterGenerator {
       if (totalChapters > 0 && currentNum > 0) {
         courseInfo = `\n**전체 과정**: 총 ${totalChapters}차시 중 ${currentNum}차시\n- 각 차시는 ${effectiveTimeLabel} 분량입니다\n`;
       }
-      // 분량 계산: 프롬프트 가이드용 (실제 max_tokens는 이보다 훨씬 넉넉하게 설정됨)
-      const charMin = effectiveMinutes * 300;
-      const charMax = effectiveMinutes * 500;
+      // 분량 계산: 프롬프트 가이드용
+      // 의도: charMax는 "콘텐츠 목표치"이며 모델 토큰 한도를 단일 chunk가 넘지 않도록 보정.
+      // 모델 한도를 초과하는 분량은 _streamGenerate의 자동 continuation이 처리하므로
+      // 한 chunk가 한도를 넘지 않게만 가이드한다.
+      const rawCharMin = effectiveMinutes * 300;
+      const rawCharMax = effectiveMinutes * 500;
+      const modelTokenLimit = this._getModelTokenLimit(this.projectConfig.claude_model || null);
+      // 한국어 ~1자/토큰 가정 + 안전마진(headroom 0.85)
+      const singleChunkCap = Math.max(4000, Math.round(modelTokenLimit * 0.85));
+      const charMin = Math.min(rawCharMin, singleChunkCap);
+      const charMax = Math.min(rawCharMax, singleChunkCap);
       const safeCharMax = Math.round(charMax * 0.9); // 90% 지점에서 마무리 유도
       const conceptCount = Math.max(1, Math.min(4, Math.floor(effectiveMinutes / 20)));
       const stepCount = Math.max(2, Math.min(6, Math.floor(effectiveMinutes / 10)));
@@ -741,6 +883,75 @@ ${courseInfo}
 - **내용은 충실하게** 작성하되, ${safeCharMax.toLocaleString()}자 부근을 목표로 하세요
 - 핵심 개념을 깊이 있게 다루면서도, 한 차시에 맞는 범위를 유지하세요
 - **반드시 마무리 섹션(성찰/정리)까지 포함하여 완결된 형태로 끝내세요**
+
+## 🎯 밀도 규칙 (장황함 방지)
+좋은 교재는 **짧고 밀도 높은 문장**으로 핵심을 전달합니다. 아래 원칙을 반드시 지키세요:
+
+1. **같은 개념을 반복해서 풀어 쓰지 말 것.** 비유·정의·사례 중 1~2개면 충분합니다. 세 번 이상 같은 이야기를 다른 말로 하지 마세요.
+2. **불필요한 서두·중간 요약·예고 금지.**
+   - ❌ "이 장에서는 ~를 배웁니다" (이미 제목과 학습목표에 있음)
+   - ❌ "지금까지 ~를 살펴봤습니다" (바로 아래 섹션으로 넘어가면 됨)
+   - ❌ "다음 섹션에서는 ~를 다룰 것입니다" (그냥 다루면 됨)
+3. **한 문장에 하나의 개념.** 만연체 금지. 끊어 쓰세요.
+4. **예시 개수는 최소로.** 2개로 충분한 설명에 5개를 나열하지 마세요.
+5. **박스/인용/표는 강조가 필요한 곳에만.** 분량 채우기용으로 남발하지 마세요.
+6. **분량 부족 시 덜 중요한 항목을 생략.** 문장이 중간에 끊기는 것보다 한 섹션이 빠지는 게 낫습니다.
+7. **핵심을 먼저, 부연은 나중에.** "하지만…", "단, …", "참고로…" 같은 부연은 최소한만.
+
+## 🏫 교단 즉시성 규칙 (교사용 지도서 스타일의 경우 필수)
+
+이 자료가 **교사용 지도서(차시별 수업안)**이거나 **Step 단위 수업 진행**이 필요한 경우, 아래 규칙을 반드시 지켜 "교단에서 바로 읽을 수 있는" 상태로 작성하세요.
+
+### A. Step 구조 & 시간 명시
+- 각 Step 제목에 **반드시 "(N분)" 형태로 시간 명시**. 예: \`### Step 2: 환경 세팅 (15분)\`
+- 한 차시(50분)를 **Step 3~4개**로 분해하고, 각 Step 시간 합계가 차시 시간과 정확히 일치하도록 하세요
+- 차시가 2교시 이상이면 **차시별로 Step 섹션을 분리**(예: \`### 차시 1 (50분)\` → Step 1~4, \`### 차시 2 (50분)\` → Step 1~4)
+
+### B. 교단 발화 스크립트 (대사 규칙)
+- **모든 선생님 대사는 인용블록 \`>\` 로 작성**하고, **한 블록은 3~4줄 이내**로 끊으세요
+- 대사 블록 안에서는 **학생에게 바로 말할 수 있는 짧은 문장**만 쓰세요. 긴 설명·배경·이론은 \`>\` 블록 밖의 본문 산문으로 분리하세요
+- 한 Step당 교단 발화 블록 **2회 이상** 등장 (도입 대사 + 활동 지시 대사)
+- 만연체 절대 금지. 한 문장 = 하나의 메시지
+
+좋은 예시:
+\`\`\`
+> "자, 여러분 화면 봐주세요.
+> 제가 어제 만든 급식 봇이에요.
+> 질문할 테니까 잘 보세요."
+\`\`\`
+
+나쁜 예시 (절대 금지 — 한 블록이 5줄 넘거나 이론 설명):
+\`\`\`
+> "이 봇은 의도적으로 부실하게 설계되어 있으며, 규칙이 단 한 줄만 들어 있기 때문에 제가 질문을 던지면 환각, 일관성 부족, 역할 이탈이라는 세 가지 대표적 실패 유형이 순차적으로 드러날 것입니다..."
+\`\`\`
+
+### C. 메타 해설 반복 금지 (4.7 과잉 패턴 방지)
+- **"이 활동의 의도"는 각 Step당 2~3문장 이내.** 동일한 메타 해설을 챕터 전체에서 반복하지 마세요
+- "이 차시의 본질", "설계 철학", "선생님께 드리는 편지" 같은 **편지·서문은 '왜 이걸 배우나요?' 섹션 1회에만** 등장. 이후 섹션에서 재등장 금지
+- **인용된 명언·씨앗 문장·핵심 표어는 본문에 정확히 1회만** 등장. "미리 외워두세요"·"나중에 다시 물어볼게요" 같은 예고성 반복 금지
+- **개념 설명은 개념당 2문단 완결** (비유 1문단 + 정의 또는 예시 1문단). 4단(비유+정의+예시+확인) 모두 구사하지 말 것
+- **이미 본문에 등장한 인용·예시·표는 다른 섹션에서 재인용 금지**
+
+### D. Step 구성 요소 (각 Step이 갖춰야 할 것)
+교단에서 바로 쓸 수 있으려면 각 Step은 다음을 모두 포함하세요:
+1. **이 활동의 의도** (2~3문장, 짧게)
+2. **선생님 스크립트** (\`>\` 인용블록, 3~4줄 이내 × 2회 이상)
+3. **예상 학생 반응 & 교사 대응 표** (3행 이상)
+4. **교사 유의사항 또는 트러블슈팅** (불릿 또는 마크다운 표)
+
+### E. 시각 자료 상한 (인지 부하 관리)
+- Mermaid 다이어그램은 차시당 **1~2개**. 3개 이상 금지
+- SVG/HTML 다이어그램은 사용 금지 (Mermaid 또는 마크다운 표만)
+- **ASCII 박스(┌─┐, │, └─┘)는 사용 금지.** 대신 아래 대체 수단을 사용하세요:
+  - 개념 강조·정의 박스 → **인용블록(\`>\` + **굵게**)** 또는 **Markdown 표**
+  - 수식·공식 정리 → **Markdown 표 또는 순서 있는 리스트**
+  - 치트시트·비교표 → **Markdown 표 (\\| 컬럼 구분)**
+  - 학생 배포용 워크시트 빈 칸 → **Markdown 체크리스트(\`- [ ]\`)** 또는 밑줄(\`_______\`)을 포함한 인용 블록
+- **이유**: ASCII 박스는 한글·영문·이모지가 섞이면 웹 브라우저에서 글자 폭 차이로 세로선이 어긋나 보입니다. 대신 위 대체 수단을 쓰면 디자인이 깔끔하게 유지됩니다.
+
+### F. 학생 인지 부하 관리
+- 한 Step 안에 새로 등장하는 개념 **최대 2개**
+- **학생 활동 분량 > 교사 설명 분량** (따라하기 섹션의 글자 수 합계가 핵심 개념 섹션보다 많아야 함)
 `;
     }
 
@@ -866,8 +1077,24 @@ ${courseInfo}
       'pc.tone': pc.tone,
     };
 
-    // 1. JSON에서 템플릿 데이터 로드
-    const template = await tm.getTemplate(templateId);
+    // v2: _v2Composed에서 contentRules, featureBlocks, deliveryRules 추가
+    if (this._v2Composed) {
+      vars.contentRules = this._v2Composed.contentRules || '';
+      vars.featureBlocks = this._v2Composed.featureBlocks || '';
+      vars.deliveryRules = this._v2Composed.deliveryRules || '';
+    }
+
+    // 1. 템플릿 데이터 로드 — v2는 _v2Composed에서, v1은 JSON 파일에서
+    let template;
+    if (this.templateInfo.version === 2 && this._v2Composed) {
+      // v2: TemplateComposer가 조합한 how 템플릿 데이터 사용
+      template = {
+        system_prompt_template: this._v2Composed.systemPromptTemplate,
+        doc_structure: this._v2Composed.docStructure,
+      };
+    } else {
+      template = await tm.getTemplate(templateId);
+    }
 
     // 2. docStructure 로드 + 치환
     let docStructure;
@@ -883,7 +1110,7 @@ ${courseInfo}
 
     // 4. system_prompt 로드 + 치환
     if (template?.system_prompt_template) {
-      return this._substituteVars(template.system_prompt_template, vars);
+      return this._appendUnifiedOutputRules(this._substituteVars(template.system_prompt_template, vars));
     }
 
     // 5. 폴백: JSON에 데이터 없으면 default 템플릿 사용
@@ -896,11 +1123,11 @@ ${courseInfo}
       vars.docStructure = docStructure;
     }
     if (defaultTemplate?.system_prompt_template) {
-      return this._substituteVars(defaultTemplate.system_prompt_template, vars);
+      return this._appendUnifiedOutputRules(this._substituteVars(defaultTemplate.system_prompt_template, vars));
     }
 
     // 최종 폴백: 하드코딩된 기본 프롬프트
-    return `당신은 ${pc.role}입니다. ${chapterTitle}에 대한 교육자료를 작성해주세요.`;
+    return this._appendUnifiedOutputRules(`당신은 ${pc.role}입니다. ${chapterTitle}에 대한 교육자료를 작성해주세요.`);
 
   }
 
@@ -935,9 +1162,14 @@ ${courseInfo}
       const chars = Array.from(trimmed);
       const lastChar = chars[chars.length - 1];
       const validEndings = new Set(['.', '?', '!', ')', ']', '}', '"', "'", '`', '>', '。', '？', '！', '）', '」', '】', '*', '-', '|', '\n']);
-      // 유효한 종결 부호이거나, 이모지(U+2000 이상)이면 정상으로 판단
-      const isEmoji = lastChar && lastChar.codePointAt(0) > 0x2000;
-      if (!validEndings.has(lastChar) && !isEmoji) {
+      // 이모지/심볼 판정: SMP(U+10000+) 또는 BMP의 기호·픽토그램 영역만 정상 종결로 간주.
+      // 이전 구현(codePoint > 0x2000)은 한글(U+AC00~U+D7A3)을 모두 이모지로 오판정해
+      // 한국어로 끝나는 잘린 콘텐츠를 검출하지 못함.
+      const cp = lastChar ? lastChar.codePointAt(0) : 0;
+      const isEmojiOrSymbol = cp >= 0x10000 // SMP (대부분 이모지)
+        || (cp >= 0x2600 && cp <= 0x27BF)   // 잡다한 기호/딩뱃
+        || (cp >= 0x2300 && cp <= 0x23FF);  // 기술 기호
+      if (!validEndings.has(lastChar) && !isEmojiOrSymbol) {
         errors.push(`[${chapterId}] 콘텐츠가 문장 중간에서 잘린 것으로 보입니다 (마지막 문자: '${lastChar}')`);
       }
     }
@@ -965,8 +1197,81 @@ ${courseInfo}
       }
     }
 
+    // 5. ASCII 박스 사용 감지 (워크시트는 표로 통일 — 통합 출력 형식 규칙)
+    const asciiBoxRegex = /[┌┐└┘├┤┬┴┼─│]/;
+    if (asciiBoxRegex.test(content)) {
+      warnings.push(`[${chapterId}] ASCII 박스 문자(┌─┐│└┘ 등) 발견 — 워크시트/치트시트는 마크다운 표로 작성하세요`);
+    }
+
+    // 6. SAMPLE 마커 정량 검증 (교사용 지도서 계열만)
+    // Mermaid 카운트는 제외 (필요 없는 콘텐츠도 있으므로 강제하지 않음)
+    const isTeacherGuide = ['teacher-guide-4c', 'teacher-guide'].includes(templateId);
+    if (isTeacherGuide) {
+      // (a) 교사 발화문: "선생님:" 또는 admonition `??? quote "선생님 스크립트"`
+      const teacherSpeechCount = (content.match(/선생님\s*[:：]/g) || []).length
+        + (content.match(/\?\?\?\s*quote\s+"선생님/g) || []).length;
+      if (teacherSpeechCount < 3) {
+        warnings.push(`[${chapterId}] 교사 발화문 부족: ${teacherSpeechCount}개 (권장 ≥ 3) — "선생님:" 또는 admonition 스크립트 추가`);
+      }
+
+      // (b) 분 단위 시간 표기 (예: "12분", "5~7분")
+      const timeMarkerCount = (content.match(/\d+\s*분/g) || []).length;
+      if (timeMarkerCount < 3) {
+        warnings.push(`[${chapterId}] 분 단위 시간 표기 부족: ${timeMarkerCount}개 (권장 ≥ 3) — 활동마다 시간 배분 명시`);
+      }
+
+      // (c) admonition 박스 (??? 또는 !!!)
+      const admonitionCount = (content.match(/^[!?]{3}\s+\w+/gm) || []).length;
+      if (admonitionCount < 2) {
+        warnings.push(`[${chapterId}] admonition 박스 부족: ${admonitionCount}개 (권장 ≥ 2) — "이 활동의 의도", "선생님 스크립트" 등 box 활용`);
+      }
+
+      // (d) 마크다운 표 (헤더 + 구분선 패턴)
+      const tableCount = (content.match(/^\|.+\|\s*\n\|[\s\-:|]+\|/gm) || []).length;
+      if (tableCount < 2) {
+        warnings.push(`[${chapterId}] 마크다운 표 부족: ${tableCount}개 (권장 ≥ 2) — 비교/타임라인/루브릭은 표로 정리`);
+      }
+
+      // (e) 학생 예상 반응
+      const studentReactionPattern = /(예상\s*반응|학생\s*[A-Z가-힣]?\s*[:：])/g;
+      const studentReactionCount = (content.match(studentReactionPattern) || []).length;
+      if (studentReactionCount < 2) {
+        warnings.push(`[${chapterId}] 학생 예상 반응 부족: ${studentReactionCount}개 (권장 ≥ 2) — 발문에 예상 답변 동반`);
+      }
+    }
+
     const valid = errors.length === 0;
     return { valid, warnings, errors };
+  }
+
+  /**
+   * 이미지 플레이스홀더를 처리하는 공통 헬퍼 (v2 ImageGenerator 사용)
+   * API 키가 없어도 플레이스홀더 SVG가 생성되므로 항상 동작
+   */
+  async _processImages(content, chapterId, progressCallback) {
+    const googleApiKey = resolveApiKey('google', this.apiKeys);
+    const openaiApiKey = resolveApiKey('openai', this.apiKeys);
+
+    let imgStyleGuide = '';
+    const imgGuideFile = join(this.projectPath, 'image_guidelines.md');
+    if (existsSync(imgGuideFile)) {
+      imgStyleGuide = (await readFile(imgGuideFile, 'utf-8')).trim();
+    }
+
+    const imgGen = new ImageGenerator({
+      googleApiKey,
+      openaiApiKey,
+      styleGuide: imgStyleGuide,
+      resolution: this.projectConfig.image_resolution || 'standard',
+      projectPath: this.projectPath,
+    });
+
+    const placeholders = imgGen.findPlaceholders(content);
+    if (placeholders.length === 0) return content;
+
+    const providerLabel = imgGen.availableProvider === 'none' ? '플레이스홀더' : imgGen.availableProvider;
+    this._log(`🖼️ ${chapterId} 이미지 플레이스홀더 ${placeholders.length}개 → ${providerLabel} 생성`);
+    return imgGen.processChapterImages(content, this.projectPath, chapterId, progressCallback);
   }
 
   /**
@@ -977,9 +1282,11 @@ ${courseInfo}
     const templateId = this.templateInfo.template_id || '';
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
     const effectiveMinutes = timeMinutes > 0 ? timeMinutes : 50;
-    const tokenCharLimit = maxTokens; // 한국어: 1토큰 ≈ 1자
-    const charMin = Math.min(effectiveMinutes * 300, tokenCharLimit);
-    const charMax = Math.min(effectiveMinutes * 500, tokenCharLimit);
+    // 검증 기준: 콘텐츠 목표치만 사용 (모델 토큰 한도와 무관)
+    // 이유: continuation으로 합쳐진 최종 콘텐츠는 모델 한도를 합산 초과할 수 있으므로
+    // 단일 chunk 한도로 제한하면 정상 합본을 "초과"로 잘못 경고하게 됨.
+    const charMin = effectiveMinutes * 300;
+    const charMax = effectiveMinutes * 500;
 
     const validation = this._validateChapter(content, templateId, { chapterId }, charMin, charMax);
 
@@ -998,19 +1305,12 @@ ${courseInfo}
       this._log(`🟢 ${chapterId} 검증 통과`);
     }
 
-    // SSE 진행 이벤트로 전달 — 오류/경고를 개별 메시지로 전달 (BUG-010)
+    // SSE 진행 이벤트로 전달
     if (progressCallback) {
-      if (validation.errors.length > 0) {
-        for (const err of validation.errors) {
-          progressCallback(`🔴 검증 오류: ${err}`);
-        }
-      }
-      if (validation.warnings.length > 0) {
-        for (const warn of validation.warnings) {
-          progressCallback(`🟡 검증 경고: ${warn}`);
-        }
-      }
-      if (validation.valid && validation.warnings.length === 0) {
+      if (validation.errors.length > 0 || validation.warnings.length > 0) {
+        const issues = [...validation.errors, ...validation.warnings];
+        progressCallback(`🔍 ${chapterId} 검증 결과: ${issues.join(' | ')}`);
+      } else {
         progressCallback(`🔍 ${chapterId} 검증 통과`);
       }
     }
@@ -1021,9 +1321,9 @@ ${courseInfo}
   /**
    * 단일 챕터 생성 (rate limit 자동 재시도 포함)
    */
-  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-6', maxTokens = 0, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0, tokenBudget = null) {
+  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-7', maxTokens = 0, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0, tokenBudget = null) {
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
-    const effectiveMaxTokens = this._calcMaxTokensForTime(timeMinutes, maxTokens);
+    const effectiveMaxTokens = this._calcMaxTokensForTime(timeMinutes, maxTokens, model);
 
     if (effectiveMaxTokens < maxTokens) {
       const source = timeMinutes > 0 ? estimatedTime : '기본 1차시(50분)';
@@ -1040,12 +1340,7 @@ ${courseInfo}
       return { success: false, chapter_id: chapterId, error };
     }
 
-    const { refs: references, failedFiles } = await this._loadReferences();
-    // 파싱 실패한 참고자료 경고 로그 (BUG-009, BUG-020)
-    if (failedFiles.length > 0) {
-      this._log(`⚠️ ${chapterId} 참고자료 파싱 실패 ${failedFiles.length}건: ${failedFiles.join(', ')}`);
-      if (progressCallback) progressCallback(`⚠️ 참고자료 파싱 실패 ${failedFiles.length}건: ${failedFiles.join(', ')}`);
-    }
+    const references = await this._loadReferences();
     const prompt = await this._buildPrompt(chapterId, chapterTitle, outline, references, partContext, effectiveMaxTokens, estimatedTime, totalChapters, currentNum);
 
     // TPM 예산 대기 — 출력 토큰 기준 (병목), 통과 시 자동 예약됨
@@ -1054,8 +1349,6 @@ ${courseInfo}
       await tokenBudget.waitForBudget(effectiveMaxTokens, progressCallback);
     }
 
-    // try-finally로 감싸서 어떤 경로든 토큰 예약이 반드시 해제되도록 보장 (BUG-004)
-    let budgetSettled = false;
     try {
       if (progressCallback) {
         const providerName = { anthropic: 'Claude', openai: 'OpenAI', google: 'Gemini', upstage: 'Solar' }[detectProvider(model)] || 'AI';
@@ -1069,27 +1362,34 @@ ${courseInfo}
       const imgEnabled = this.projectConfig.image_generation_enabled
         || (this.templateInfo.features || []).includes('image_generation');
       if (imgEnabled) {
-        const googleApiKey = resolveApiKey('google', this.apiKeys);
-        if (googleApiKey) {
-          try {
-            // 이미지 가이드라인 로드
-            let imgStyleGuide = '';
-            const imgGuideFile = join(this.projectPath, 'image_guidelines.md');
-            if (existsSync(imgGuideFile)) {
-              imgStyleGuide = (await readFile(imgGuideFile, 'utf-8')).trim();
-            }
-            const imgGen = new ImageGenerator(googleApiKey, undefined, null, {}, imgStyleGuide);
-            const placeholders = imgGen.findPlaceholders(finalContent);
-            if (placeholders.length > 0) {
-              this._log(`🖼️ ${chapterId} 이미지 플레이스홀더 ${placeholders.length}개 감지 → 이미지 생성 시작`);
-              finalContent = await imgGen.processChapterImages(finalContent, this.docsPath, chapterId, progressCallback);
-            }
-          } catch (imgErr) {
-            this._log(`⚠️ ${chapterId} 이미지 생성 중 오류 (콘텐츠는 유지): ${imgErr.message}`);
-            if (progressCallback) progressCallback(`⚠️ 이미지 생성 중 오류 발생 (텍스트 콘텐츠는 정상 저장됩니다)`);
+        try {
+          const googleApiKey = resolveApiKey('google', this.apiKeys);
+          const openaiApiKey = resolveApiKey('openai', this.apiKeys);
+
+          // 이미지 가이드라인 로드
+          let imgStyleGuide = '';
+          const imgGuideFile = join(this.projectPath, 'image_guidelines.md');
+          if (existsSync(imgGuideFile)) {
+            imgStyleGuide = (await readFile(imgGuideFile, 'utf-8')).trim();
           }
-        } else {
-          this._log(`⚠️ ${chapterId} 이미지 생성 활성화됨, 그러나 Google API 키 없음 → 건너뜀`);
+
+          const imgGen = new ImageGenerator({
+            googleApiKey,
+            openaiApiKey,
+            styleGuide: imgStyleGuide,
+            resolution: this.projectConfig.image_resolution || 'standard',
+            projectPath: this.projectPath,
+          });
+
+          const placeholders = imgGen.findPlaceholders(finalContent);
+          if (placeholders.length > 0) {
+            const providerLabel = imgGen.availableProvider === 'none' ? '플레이스홀더' : imgGen.availableProvider;
+            this._log(`🖼️ ${chapterId} 이미지 플레이스홀더 ${placeholders.length}개 감지 → ${providerLabel} 생성 시작`);
+            finalContent = await imgGen.processChapterImages(finalContent, this.projectPath, chapterId, progressCallback);
+          }
+        } catch (imgErr) {
+          this._log(`⚠️ ${chapterId} 이미지 생성 중 오류 (콘텐츠는 유지): ${imgErr.message}`);
+          if (progressCallback) progressCallback(`⚠️ 이미지 생성 중 오류 발생 (텍스트 콘텐츠는 정상 저장됩니다)`);
         }
       }
 
@@ -1098,7 +1398,6 @@ ${courseInfo}
 
       if (tokenBudget) {
         tokenBudget.recordUsage(result.outputTokens, reserved);
-        budgetSettled = true;
       }
 
       this._log(`✅ ${chapterId} 생성 완료 - 입력: ${result.inputTokens}, 출력: ${result.outputTokens}, 문자 수: ${finalContent.length}`);
@@ -1134,16 +1433,10 @@ ${courseInfo}
             // 재시도 성공 시에도 이미지 생성 처리
             let retryContent = retryResult.content;
             if (this.projectConfig.image_generation_enabled) {
-              const googleApiKey = resolveApiKey('google', this.apiKeys);
-              if (googleApiKey) {
-                try {
-                  const imgGen = new ImageGenerator(googleApiKey);
-                  if (imgGen.findPlaceholders(retryContent).length > 0) {
-                    retryContent = await imgGen.processChapterImages(retryContent, this.docsPath, chapterId, progressCallback);
-                  }
-                } catch (imgErr) {
-                  this._log(`⚠️ ${chapterId} 재시도 이미지 생성 오류: ${imgErr.message}`);
-                }
+              try {
+                retryContent = await this._processImages(retryContent, chapterId, progressCallback);
+              } catch (imgErr) {
+                this._log(`⚠️ ${chapterId} 재시도 이미지 생성 오류: ${imgErr.message}`);
               }
             }
 
@@ -1152,7 +1445,6 @@ ${courseInfo}
 
             if (tokenBudget) {
               tokenBudget.recordUsage(retryResult.outputTokens, reserved);
-              budgetSettled = true;
             }
 
             this._log(`✅ ${chapterId} 재시도 ${attempt} 성공 - 입력: ${retryResult.inputTokens}, 출력: ${retryResult.outputTokens}`);
@@ -1175,7 +1467,7 @@ ${courseInfo}
             if (retryErr.status !== 429 || attempt === maxRetries) {
               this._log(`❌ ${chapterId} 재시도 ${attempt} 실패: ${retryErr.message}`);
               if (progressCallback) progressCallback(`❌ ${chapterId} 재시도 실패: ${retryErr.message}`);
-              // 예약 해제는 finally에서 처리
+              if (tokenBudget) tokenBudget.releaseReservation(reserved);
               return { success: false, chapter_id: chapterId, error: retryErr.message };
             }
             e = retryErr; // 다음 루프에서 Retry-After 헤더 다시 확인
@@ -1195,16 +1487,10 @@ ${courseInfo}
           // 529 재시도 성공 시에도 이미지 생성 처리
           let retryContent529 = retryResult.content;
           if (this.projectConfig.image_generation_enabled) {
-            const googleApiKey = resolveApiKey('google', this.apiKeys);
-            if (googleApiKey) {
-              try {
-                const imgGen = new ImageGenerator(googleApiKey);
-                if (imgGen.findPlaceholders(retryContent529).length > 0) {
-                  retryContent529 = await imgGen.processChapterImages(retryContent529, this.docsPath, chapterId, progressCallback);
-                }
-              } catch (imgErr) {
-                this._log(`⚠️ ${chapterId} 529 재시도 이미지 생성 오류: ${imgErr.message}`);
-              }
+            try {
+              retryContent529 = await this._processImages(retryContent529, chapterId, progressCallback);
+            } catch (imgErr) {
+              this._log(`⚠️ ${chapterId} 529 재시도 이미지 생성 오류: ${imgErr.message}`);
             }
           }
 
@@ -1213,7 +1499,6 @@ ${courseInfo}
 
           if (tokenBudget) {
             tokenBudget.recordUsage(retryResult.outputTokens, reserved);
-            budgetSettled = true;
           }
 
           this._log(`✅ ${chapterId} 529 재시도 성공`);
@@ -1235,20 +1520,16 @@ ${courseInfo}
         } catch (e2) {
           this._log(`❌ ${chapterId} 529 재시도 실패: ${e2.message}`);
           if (progressCallback) progressCallback(`❌ ${chapterId} 재시도 실패: ${e2.message}`);
-          // 예약 해제는 finally에서 처리
+          if (tokenBudget) tokenBudget.releaseReservation(reserved);
           return { success: false, chapter_id: chapterId, error: e2.message };
         }
       }
 
-      // 그 외 에러는 재시도하지 않음 — 예약 해제는 finally에서 처리
+      // 그 외 에러는 재시도하지 않음 — 예약 해제
+      if (tokenBudget) tokenBudget.releaseReservation(reserved);
       this._log(`❌ ${chapterId} 생성 실패 (재시도 안 함): ${e.message}`);
       if (progressCallback) progressCallback(`❌ ${chapterId} 생성 실패: ${e.message}`);
       return { success: false, chapter_id: chapterId, error: e.message };
-    } finally {
-      // 어떤 경로(성공/실패/예외)든 토큰 예약이 해제되지 않았으면 여기서 해제
-      if (tokenBudget && !budgetSettled) {
-        tokenBudget.releaseReservation(reserved);
-      }
     }
   }
 
@@ -1262,7 +1543,7 @@ ${courseInfo}
    * @param {boolean} skipCompleted - 완료된 챕터 건너뛰기
    * @param {number} tpmLimit - 분당 토큰 제한 (0이면 비활성화)
    */
-  async generateAllChapters(tocData, model = 'claude-opus-4-6', maxTokens = 0, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0, chapterIds = null) {
+  async generateAllChapters(tocData, model = 'claude-opus-4-7', maxTokens = 0, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0, chapterIds = null) {
     const startTime = Date.now();
 
     // 출력 TPM 예산 관리자 생성 (tpmLimit > 0인 경우에만)

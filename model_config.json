@@ -2,7 +2,7 @@
   "_안내": "=== 모델 설정 파일 === 새 모델이 나오면 이 파일만 수정하세요! 앱 전체에 자동 반영됩니다.",
   "_수정방법": "1) 아래 models에서 id/provider/display_name/pricing 수정  2) defaults에서 기본 모델 변경  3) 앱 새로고침 (60초 캐시)",
   "_가격확인": "anthropic.com/pricing | openai.com/pricing | ai.google.dev/pricing | upstage.ai",
-  "_최종수정일": "2026-03-06",
+  "_최종수정일": "2026-04-17",
 
   "providers": {
     "anthropic": {
@@ -29,11 +29,12 @@
 
   "models": [
     {
-      "id": "claude-opus-4-6",
+      "id": "claude-opus-4-7",
       "provider": "anthropic",
-      "display_name": "Claude Opus 4.6",
+      "display_name": "Claude Opus 4.7",
       "tier": "최고 품질",
       "pricing": { "input": 5.0, "output": 25.0 },
+      "max_output_tokens": 42000,
       "recommended_for": ["챕터 생성", "고품질 콘텐츠", "에이전트", "코딩"]
     },
     {
@@ -42,6 +43,7 @@
       "display_name": "Claude Sonnet 4.6",
       "tier": "빠르고 강력",
       "pricing": { "input": 3.0, "output": 15.0 },
+      "max_output_tokens": 64000,
       "recommended_for": ["챕터 생성", "대화", "목차 생성", "피드백"]
     },
     {
@@ -50,6 +52,7 @@
       "display_name": "Claude Haiku 4.5",
       "tier": "초고속·대량",
       "pricing": { "input": 0.8, "output": 4.0 },
+      "max_output_tokens": 64000,
       "recommended_for": ["대량 생성", "대화", "빠른 피드백"]
     },
     {
@@ -58,6 +61,7 @@
       "display_name": "GPT-5.4 Pro",
       "tier": "프리미엄 추론",
       "pricing": { "input": 30.0, "output": 180.0 },
+      "max_output_tokens": 128000,
       "recommended_for": ["복잡한 추론", "고품질 콘텐츠", "코딩"]
     },
     {
@@ -66,6 +70,7 @@
       "display_name": "GPT-5.4",
       "tier": "최신 플래그십",
       "pricing": { "input": 2.50, "output": 15.0 },
+      "max_output_tokens": 128000,
       "recommended_for": ["챕터 생성", "고품질 콘텐츠", "추론", "코딩"]
     },
     {
@@ -74,6 +79,7 @@
       "display_name": "GPT-5.3",
       "tier": "고성능",
       "pricing": { "input": 1.75, "output": 14.0 },
+      "max_output_tokens": 128000,
       "recommended_for": ["챕터 생성", "고품질 콘텐츠", "추론"]
     },
     {
@@ -82,6 +88,7 @@
       "display_name": "GPT-5.1",
       "tier": "균형",
       "pricing": { "input": 1.25, "output": 10.0 },
+      "max_output_tokens": 128000,
       "recommended_for": ["챕터 생성", "대화", "코딩"]
     },
     {
@@ -90,6 +97,7 @@
       "display_name": "GPT-5 Mini",
       "tier": "경제적·빠름",
       "pricing": { "input": 0.25, "output": 2.0 },
+      "max_output_tokens": 128000,
       "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
     },
     {
@@ -98,6 +106,7 @@
       "display_name": "GPT-5 Nano",
       "tier": "초경량·최저가",
       "pricing": { "input": 0.05, "output": 0.40 },
+      "max_output_tokens": 128000,
       "recommended_for": ["요약", "분류", "대량 생성"]
     },
     {
@@ -106,6 +115,7 @@
       "display_name": "Gemini 3.1 Pro",
       "tier": "최신 최고급 추론",
       "pricing": { "input": 2.0, "output": 12.0 },
+      "max_output_tokens": 65536,
       "recommended_for": ["챕터 생성", "복잡한 추론", "에이전트", "코딩"]
     },
     {
@@ -114,6 +124,7 @@
       "display_name": "Gemini 3 Flash",
       "tier": "고성능 멀티모달",
       "pricing": { "input": 0.50, "output": 3.0 },
+      "max_output_tokens": 65536,
       "recommended_for": ["챕터 생성", "멀티모달 이해", "대화"]
     },
     {
@@ -122,6 +133,7 @@
       "display_name": "Gemini 3.1 Flash-Lite",
       "tier": "초고속·최저가",
       "pricing": { "input": 0.25, "output": 1.50 },
+      "max_output_tokens": 65536,
       "recommended_for": ["대화", "빠른 피드백", "대량 생성"]
     },
     {
@@ -130,12 +142,13 @@
       "display_name": "Solar Pro 3",
       "tier": "한국어 특화·추론",
       "pricing": { "input": 1.0, "output": 4.0 },
+      "max_output_tokens": 8192,
       "recommended_for": ["한국어 콘텐츠", "챕터 생성", "추론"]
     }
   ],
 
   "defaults": {
-    "chapter_generation": "claude-opus-4-6",
+    "chapter_generation": "claude-opus-4-7",
     "conversation": "claude-sonnet-4-6"
   }
 }

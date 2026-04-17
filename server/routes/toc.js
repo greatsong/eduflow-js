@@ -80,7 +80,7 @@ router.post('/generate', requireApiKey,  asyncHandler(async (req, res) => {
     }
 
     // BUG-013: 목차 생성 전 API 키 검증
-    const useGenModel = model || 'claude-opus-4-5-20251101';
+    const useGenModel = model || 'claude-opus-4-7';
     const genProvider = detectProvider(useGenModel);
     const genApiKey = resolveApiKey(genProvider, req.apiKeys);
     if (!genApiKey) {
@@ -94,7 +94,7 @@ router.post('/generate', requireApiKey,  asyncHandler(async (req, res) => {
     const tocData = await tg.generate(
       referencesContent,
       directionSummary,
-      model || 'claude-opus-4-5-20251101',
+      model || 'claude-opus-4-7',
       maxTokens || 16384,
       res
     );
