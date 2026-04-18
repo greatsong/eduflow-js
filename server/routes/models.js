@@ -24,7 +24,8 @@ router.get('/', asyncHandler(async (req, res) => {
     };
   }
 
-  res.json({ models, pricing, providers: availableProviders });
+  // 로컬 버전: 모든 모델 잠금 없음 (관리자 취급)
+  res.json({ models, pricing, providers: availableProviders, userTier: 'master' });
 }));
 
 // GET /api/models/default/:purpose - 용도별 기본 모델

@@ -7,6 +7,8 @@ const DEFAULT_SETTINGS = {
   serverModeMessage: '이 서비스는 현재 API 키가 제공됩니다.', // 서버 모드일 때 안내 메시지
   allowedModels: [],                                         // 빈 배열 = 모든 모델 허용
   registrationMode: 'open',                                  // 'open' | 'approval'
+  imageGenerationEnabled: false,                             // 이미지 자동 생성 (Gemini Imagen)
+  imageGenerationProvider: 'gemini',                         // 이미지 생성 프로바이더 (향후 확장용)
   adminApiKeys: {                                            // 관리자가 UI에서 입력한 API 키
     anthropic: { key: '', shared: false },                   // shared: true → 모든 사용자 제공
     openai:    { key: '', shared: false },                   // shared: false → 관리자만 사용

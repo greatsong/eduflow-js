@@ -1,0 +1,11 @@
+{
+  "id": "hw_diagrams",
+  "name": "회로도",
+  "icon": "🔌",
+  "description": "Pico 핀 배치도, 회로 연결도, 센서 모듈 연결 등 하드웨어 회로도를 HTML 마크업으로 삽입합니다.",
+  "category": "시각화",
+  "prompt_block": "## 시각 자료 & 회로도\n\n하드웨어 관련 시각 자료는 **반드시** 아래 HTML 마크업을 사용하세요.\n\n### Pico 핀 배치도\n```html\n<div class=\"hw-diagram\" data-type=\"pico-pinout\"\n     data-highlight='[{\"pin\":\"핀이름\",\"label\":\"용도\",\"color\":\"색상코드\"}]'>\n</div>\n```\n- `pin`: GPIO0, GP0, 3V3, GND 등 Pico 핀 이름\n- `label`: 이 핀의 용도 설명 (예: \"LED 양극\", \"온도센서 데이터\")\n- `color`: 강조 색상 (예: \"#FF6B6B\", \"#4ECDC4\")\n\n### 회로 연결도\n```html\n<div class=\"hw-diagram\" data-type=\"connection\"\n     data-title=\"제목\"\n     data-connections='[{\"from\":\"핀\",\"to\":\"부품\",\"then\":\"다음부품\",\"color\":\"색상\"}]'\n     data-notes='[\"주의사항1\",\"주의사항2\"]'>\n</div>\n```\n- `from`: 시작 핀 (예: \"GP15\")\n- `to`: 연결 대상 (예: \"LED 양극(+)\")\n- `then`: 추가 연결 (예: \"330Ω 저항 → GND\")\n- `data-notes`: 배선 시 주의사항 배열\n\n### 센서 모듈 연결\n```html\n<div class=\"hw-diagram\" data-type=\"sensor-module\"\n     data-sensor=\"센서명\"\n     data-title=\"제목\"\n     data-connections='[{\"pin\":\"센서핀\",\"to\":\"Pico핀\",\"note\":\"설명\",\"color\":\"색상\"}]'>\n</div>\n```\n- `data-sensor`: 센서 모듈 이름 (예: \"DHT11\", \"HC-SR04\")\n- 각 연결에 `note`로 해당 핀의 역할을 설명\n\n### 사용 지침\n- 하드웨어 연결이 나오면 반드시 위 마크업 중 적절한 유형을 사용하세요\n- 소프트웨어/개념 다이어그램은 Mermaid를 사용하세요\n- JSON 데이터의 따옴표 이스케이프에 주의하세요 (작은따옴표로 감싸기)",
+  "required_assets": { "css": [], "js": ["circuit-diagrams"] },
+  "conflicts_with": [],
+  "requires": []
+}

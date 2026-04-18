@@ -13,3 +13,6 @@ projects/*/
 
 # 베타 설정
 beta_config.json
+
+# 런타임 데이터 (토큰 사용 로그 등 개인정보 보호)
+data/
