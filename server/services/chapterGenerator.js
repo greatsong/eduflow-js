@@ -5,7 +5,6 @@ import { fileURLToPath } from 'url';
 import pLimit from 'p-limit';
 import { TemplateManager } from './templateManager.js';
 import { streamChat, detectProvider, resolveApiKey } from './aiProvider.js';
-import { ImageGenerator } from './imageGenerator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -197,6 +196,10 @@ export class ChapterGenerator {
     this._statusWriteTimer = null;
     this._lastStatusWrite = 0;
     this._pendingStatusData = null;
+
+    // 참고자료 캐시 (배치 생성 시 재파싱 방지)
+    this._referencesCache = null;
+    this._referencesCacheKey = null;
   }
 
   async init() {
@@ -656,28 +659,116 @@ export class ChapterGenerator {
     return readFile(file, 'utf-8');
   }
 
+  /**
+   * 참고자료 폴더의 현재 상태(파일명+크기+mtime)를 기반으로 캐시 키를 계산.
+   * 배치 생성 중 파일이 바뀌지 않으면 재파싱 없이 캐시 사용.
+   */
+  async _computeReferencesCacheKey() {
+    if (!existsSync(this.referencesPath)) return 'empty';
+    try {
+      const { readdir, stat } = await import('fs/promises');
+      const entries = await readdir(this.referencesPath);
+      const parts = [];
+      for (const name of entries.sort()) {
+        if (name.startsWith('.')) continue;
+        try {
+          const s = await stat(join(this.referencesPath, name));
+          if (s.isFile()) parts.push(`${name}:${s.size}:${s.mtimeMs}`);
+        } catch { /* skip */ }
+      }
+      return parts.join('|') || 'empty';
+    } catch {
+      return 'error';
+    }
+  }
+
   async _loadReferences() {
     if (!existsSync(this.referencesPath)) return [];
 
-    // ReferenceManager를 사용하여 모든 포맷(PDF, DOCX, XLSX, HTML, HWP 등) 처리
+    // 캐시 체크 — 동일 세션 내 배치 생성에서 재파싱 방지
+    const cacheKey = await this._computeReferencesCacheKey();
+    if (this._referencesCache && this._referencesCacheKey === cacheKey) {
+      return this._referencesCache;
+    }
+
+    // ReferenceManager를 사용하여 모든 포맷을 병렬 파싱
     const { ReferenceManager } = await import('./referenceManager.js');
     const rm = new ReferenceManager(this.projectPath);
-    const files = await rm.listFiles();
+    const parsed = await rm.loadAllParsed({ concurrency: 4 });
     const refs = [];
 
-    for (const file of files) {
-      try {
-        const result = await rm.readFileContent(file.name);
-        if (result.status === 'ok' && result.content) {
-          refs.push(`[${file.name}]\n${result.content}`);
-        } else if (result.status === 'parse_error') {
-          console.warn(`참고자료 파싱 실패 (${file.name}): ${result.error || '알 수 없는 오류'}`);
-        }
-      } catch (e) {
-        console.warn(`참고자료 로드 실패 (${file.name}):`, e.message);
+    for (const r of parsed) {
+      if (r.status === 'ok' && r.content) {
+        refs.push(`[${r.name}]\n${r.content}`);
+      } else if (r.status === 'parse_error') {
+        console.warn(`참고자료 파싱 실패 (${r.name}): ${r.error || '알 수 없는 오류'}`);
       }
     }
+
+    this._referencesCache = refs;
+    this._referencesCacheKey = cacheKey;
     return refs;
+  }
+
+  /**
+   * 긴 참고자료를 챕터 관련 구간으로 슬라이싱해 토큰을 절약한다.
+   * - 임계 길이 이하: 그대로 반환
+   * - 초과: 문단 단위로 분할 → 챕터 키워드와 매칭되는 상위 문단만 추출
+   */
+  _sliceReferenceForChapter(ref, searchTerms, maxChars = 8000) {
+    if (!ref || ref.length <= maxChars) return ref;
+    if (!searchTerms || searchTerms.size === 0) return ref.slice(0, maxChars) + '\n\n...(이하 생략)';
+
+    // 헤더 추출: "[파일명]\n" 유지
+    const headerMatch = ref.match(/^\[[^\]]+\]\n/);
+    const header = headerMatch ? headerMatch[0] : '';
+    const body = header ? ref.slice(header.length) : ref;
+
+    // 문단 분할 (빈 줄 기준)
+    const paragraphs = body.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
+    if (paragraphs.length <= 1) {
+      return header + body.slice(0, maxChars) + '\n\n...(이하 생략)';
+    }
+
+    // 문단별 점수 매기기
+    const scored = paragraphs.map((p, idx) => {
+      const lower = p.toLowerCase();
+      let score = 0;
+      for (const term of searchTerms) {
+        if (lower.includes(term)) score += 1;
+      }
+      return { idx, score, text: p };
+    });
+
+    // 점수 내림차순 → 원래 순서 유지하며 한도까지 채움
+    const sorted = [...scored].sort((a, b) => b.score - a.score || a.idx - b.idx);
+    const picked = new Set();
+    let total = 0;
+    for (const s of sorted) {
+      if (total + s.text.length > maxChars) continue;
+      picked.add(s.idx);
+      total += s.text.length;
+      if (total >= maxChars * 0.9) break;
+    }
+
+    // 원래 순서대로 재조립
+    const selected = scored.filter((s) => picked.has(s.idx)).map((s) => s.text);
+    if (selected.length === 0) return header + body.slice(0, maxChars) + '\n\n...(이하 생략)';
+
+    return header + selected.join('\n\n') + '\n\n...(관련도 낮은 구간 생략됨)';
+  }
+
+  _extractSearchTerms(chapterTitle, outline, partContext) {
+    const terms = new Set();
+    for (const text of [chapterTitle, partContext, (outline || '').slice(0, 1000)]) {
+      if (!text) continue;
+      const words = String(text).replace(/[,.:*\-_#\[\]"'()]/g, ' ').split(/\s+/);
+      for (const word of words) {
+        const clean = word.trim();
+        if (clean.length >= 2) terms.add(clean.toLowerCase());
+      }
+    }
+    return terms;
   }
 
   _truncateReferences(references, maxChars) {
@@ -800,6 +891,18 @@ export class ChapterGenerator {
     const availableInputTokens = MAX_CONTEXT_TOKENS - maxTokens - BASE_PROMPT_TOKENS;
 
     references = this._sortReferencesByRelevance(references, chapterTitle, outline, partContext);
+
+    // 긴 참고자료는 챕터 관련 구간으로 슬라이싱해 토큰 절약
+    const LONG_REF_THRESHOLD = 8000; // 문자 단위
+    const hasLongRef = references.some((r) => r.length > LONG_REF_THRESHOLD);
+    if (hasLongRef) {
+      const searchTerms = this._extractSearchTerms(chapterTitle, outline, partContext);
+      references = references.map((ref) =>
+        ref.length > LONG_REF_THRESHOLD
+          ? this._sliceReferenceForChapter(ref, searchTerms, LONG_REF_THRESHOLD)
+          : ref
+      );
+    }
 
     const outlineTokens = this._estimateTokens(outline || '');
     let refsTextFull = references.length ? references.join('\n\n---\n\n') : '';
@@ -981,27 +1084,6 @@ ${courseInfo}
     const isClassPreview = templateId === 'class-preview';
     const isAiLiteracy = templateId === 'lesson-per-session';
 
-    // 이미지 자동 생성 가이드 (v1: config, v2: features 배열)
-    const imageEnabled = this.projectConfig.image_generation_enabled
-      || (this.templateInfo.features || []).includes('image_generation');
-    let imageGuide = '';
-    if (imageEnabled) {
-      imageGuide = `
-## 이미지 삽입 (자동 생성)
-교재에 시각 자료가 필요한 곳에 아래 형식으로 이미지 플레이스홀더를 삽입하세요:
-<!-- IMAGE: 이미지에 대한 상세한 설명 -->
-
-예시:
-<!-- IMAGE: DNA 이중나선 구조를 보여주는 3D 모델, 염기쌍이 색상으로 구분됨 -->
-<!-- IMAGE: 한국의 삼국시대 영토 변화를 보여주는 지도 (고구려-파랑, 백제-초록, 신라-빨강) -->
-
-주의:
-- 설명은 구체적이고 교육적 맥락이 명확해야 합니다
-- 차시당 3개 이내로 제한하세요 (생성 시간 고려)
-- Mermaid나 SVG로 충분한 다이어그램은 이미지 대신 코드로 작성하세요
-`;
-    }
-
     // 평가 단계 가이드 (assessment_level: 0~4)
     const assessmentLevel = this.projectConfig.assessment_level ?? 2;
     let assessmentGuide = '';
@@ -1080,7 +1162,6 @@ ${courseInfo}
       guidelinesText,
       templateAddition,
       pedagogicalContext,
-      imageGuide,
       assessmentGuide,
       outline: outline || '개요 없음',
       'pc.role': pc.role,
@@ -1258,36 +1339,6 @@ ${courseInfo}
   }
 
   /**
-   * 이미지 플레이스홀더를 처리하는 공통 헬퍼 (v2 ImageGenerator 사용)
-   * API 키가 없어도 플레이스홀더 SVG가 생성되므로 항상 동작
-   */
-  async _processImages(content, chapterId, progressCallback) {
-    const googleApiKey = resolveApiKey('google', this.apiKeys);
-    const openaiApiKey = resolveApiKey('openai', this.apiKeys);
-
-    let imgStyleGuide = '';
-    const imgGuideFile = join(this.projectPath, 'image_guidelines.md');
-    if (existsSync(imgGuideFile)) {
-      imgStyleGuide = (await readFile(imgGuideFile, 'utf-8')).trim();
-    }
-
-    const imgGen = new ImageGenerator({
-      googleApiKey,
-      openaiApiKey,
-      styleGuide: imgStyleGuide,
-      resolution: this.projectConfig.image_resolution || 'standard',
-      projectPath: this.projectPath,
-    });
-
-    const placeholders = imgGen.findPlaceholders(content);
-    if (placeholders.length === 0) return content;
-
-    const providerLabel = imgGen.availableProvider === 'none' ? '플레이스홀더' : imgGen.availableProvider;
-    this._log(`🖼️ ${chapterId} 이미지 플레이스홀더 ${placeholders.length}개 → ${providerLabel} 생성`);
-    return imgGen.processChapterImages(content, this.projectPath, chapterId, progressCallback);
-  }
-
-  /**
    * 챕터 생성 후 검증을 실행하고 결과를 로그/콜백으로 전달
    * @returns {{ valid: boolean, warnings: string[], errors: string[] }}
    */
@@ -1369,42 +1420,7 @@ ${courseInfo}
       }
 
       const result = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback);
-
-      // 이미지 플레이스홀더가 있고 이미지 생성이 활성화되어 있으면 이미지 자동 생성
-      let finalContent = result.content;
-      const imgEnabled = this.projectConfig.image_generation_enabled
-        || (this.templateInfo.features || []).includes('image_generation');
-      if (imgEnabled) {
-        try {
-          const googleApiKey = resolveApiKey('google', this.apiKeys);
-          const openaiApiKey = resolveApiKey('openai', this.apiKeys);
-
-          // 이미지 가이드라인 로드
-          let imgStyleGuide = '';
-          const imgGuideFile = join(this.projectPath, 'image_guidelines.md');
-          if (existsSync(imgGuideFile)) {
-            imgStyleGuide = (await readFile(imgGuideFile, 'utf-8')).trim();
-          }
-
-          const imgGen = new ImageGenerator({
-            googleApiKey,
-            openaiApiKey,
-            styleGuide: imgStyleGuide,
-            resolution: this.projectConfig.image_resolution || 'standard',
-            projectPath: this.projectPath,
-          });
-
-          const placeholders = imgGen.findPlaceholders(finalContent);
-          if (placeholders.length > 0) {
-            const providerLabel = imgGen.availableProvider === 'none' ? '플레이스홀더' : imgGen.availableProvider;
-            this._log(`🖼️ ${chapterId} 이미지 플레이스홀더 ${placeholders.length}개 감지 → ${providerLabel} 생성 시작`);
-            finalContent = await imgGen.processChapterImages(finalContent, this.projectPath, chapterId, progressCallback);
-          }
-        } catch (imgErr) {
-          this._log(`⚠️ ${chapterId} 이미지 생성 중 오류 (콘텐츠는 유지): ${imgErr.message}`);
-          if (progressCallback) progressCallback(`⚠️ 이미지 생성 중 오류 발생 (텍스트 콘텐츠는 정상 저장됩니다)`);
-        }
-      }
+      const finalContent = result.content;
 
       const chapterFile = join(this.docsPath, `${chapterId}.md`);
       await writeFile(chapterFile, finalContent, 'utf-8');
@@ -1442,16 +1458,7 @@ ${courseInfo}
 
           try {
             const retryResult = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback, true);
-
-            // 재시도 성공 시에도 이미지 생성 처리
-            let retryContent = retryResult.content;
-            if (this.projectConfig.image_generation_enabled) {
-              try {
-                retryContent = await this._processImages(retryContent, chapterId, progressCallback);
-              } catch (imgErr) {
-                this._log(`⚠️ ${chapterId} 재시도 이미지 생성 오류: ${imgErr.message}`);
-              }
-            }
+            const retryContent = retryResult.content;
 
             const chapterFile = join(this.docsPath, `${chapterId}.md`);
             await writeFile(chapterFile, retryContent, 'utf-8');
@@ -1496,16 +1503,7 @@ ${courseInfo}
 
         try {
           const retryResult = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback, true);
-
-          // 529 재시도 성공 시에도 이미지 생성 처리
-          let retryContent529 = retryResult.content;
-          if (this.projectConfig.image_generation_enabled) {
-            try {
-              retryContent529 = await this._processImages(retryContent529, chapterId, progressCallback);
-            } catch (imgErr) {
-              this._log(`⚠️ ${chapterId} 529 재시도 이미지 생성 오류: ${imgErr.message}`);
-            }
-          }
+          const retryContent529 = retryResult.content;
 
           const chapterFile = join(this.docsPath, `${chapterId}.md`);
           await writeFile(chapterFile, retryContent529, 'utf-8');

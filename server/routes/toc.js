@@ -148,24 +148,6 @@ router.put('/guidelines', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
-// GET /api/projects/:id/toc/image-guidelines - 이미지 생성 가이드라인 로드
-router.get('/image-guidelines', asyncHandler(async (req, res) => {
-  const filePath = join(projectPath(req.params.id), 'image_guidelines.md');
-  let guidelines = '';
-  if (existsSync(filePath)) {
-    guidelines = await readFile(filePath, 'utf-8');
-  }
-  res.json({ guidelines });
-}));
-
-// PUT /api/projects/:id/toc/image-guidelines - 이미지 생성 가이드라인 저장
-router.put('/image-guidelines', asyncHandler(async (req, res) => {
-  const { guidelines } = req.body;
-  const filePath = join(projectPath(req.params.id), 'image_guidelines.md');
-  await writeFile(filePath, guidelines || '', 'utf-8');
-  res.json({ success: true });
-}));
-
 // POST /api/projects/:id/toc/confirm - 목차 확정
 router.post('/confirm', asyncHandler(async (req, res) => {
   const projPath = projectPath(req.params.id);
