@@ -86,6 +86,38 @@ app.get('/api/auth/status', async (req, res) => {
   });
 });
 
+// GitHub 연결 상태 (로컬: gh CLI 또는 GITHUB_TOKEN 확인)
+app.get('/api/auth/github/status', async (req, res) => {
+  try {
+    const { execa } = await import('execa');
+    // gh CLI에서 토큰 + 사용자명 조회
+    try {
+      await execa('gh', ['auth', 'token']);
+      const { stdout } = await execa('gh', ['api', 'user', '--jq', '.login']);
+      const username = (stdout || '').trim();
+      if (username) {
+        return res.json({
+          connected: true,
+          username,
+          source: 'gh-cli',
+          local: true,
+        });
+      }
+    } catch { /* gh 없거나 로그인 안 됨 */ }
+
+    // env var 폴백 (사용자명은 못 구함)
+    if (process.env.GITHUB_TOKEN) {
+      return res.json({
+        connected: true,
+        username: 'env',
+        source: 'env',
+        local: true,
+      });
+    }
+  } catch { /* ignore */ }
+  res.json({ connected: false, local: true });
+});
+
 // API 키 검증 (간소화: 키가 비어있지 않으면 유효로 처리)
 app.post('/api/auth/verify', async (req, res) => {
   // 어떤 프로바이더든 키가 있으면 통과

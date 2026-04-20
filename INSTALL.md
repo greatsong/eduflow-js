@@ -221,6 +221,72 @@ npm install
 
 > MkDocs를 쓰려면 Python `mkdocs` + `mkdocs-material`이 설치되어 있어야 합니다. 대부분의 Mac/Linux 환경은 `pip install mkdocs mkdocs-material`로 충분합니다.
 
+### GitHub Pages로 배포하기 (로컬)
+
+Step 5의 "🚀 GitHub Pages 배포" 섹션에서 빌드된 사이트를 본인의 GitHub 저장소로 바로 올릴 수 있습니다. 로컬판은 **`gh` CLI**를 사용합니다(웹 배포판의 Google OAuth가 아니라).
+
+#### 1단계: GitHub CLI 설치
+
+| OS | 설치 명령 |
+|----|-----------|
+| **Mac** | `brew install gh` |
+| **Windows** | [cli.github.com](https://cli.github.com/)에서 설치 파일 다운로드 또는 `winget install --id GitHub.cli` |
+| **Linux** | [공식 안내](https://github.com/cli/cli/blob/trunk/docs/install_linux.md) 참조 |
+
+설치 확인:
+```bash
+gh --version
+```
+
+#### 2단계: GitHub 로그인 (최초 1회)
+
+```bash
+gh auth login
+```
+
+대화형 프롬프트가 뜹니다. 다음과 같이 선택하세요:
+
+1. `GitHub.com` 선택
+2. `HTTPS` 선택
+3. `Y` (Git 인증에 사용)
+4. `Login with a web browser` 선택 → 화면에 뜬 8자리 코드 복사 → 브라우저에서 로그인 후 코드 붙여넣기
+
+확인:
+```bash
+gh auth status
+```
+`Logged in to github.com as ...`이 보이면 성공.
+
+#### 3단계: 에듀플로에서 배포
+
+1. Step 5 "배포 관리"로 이동
+2. "🚀 GitHub Pages 배포" 섹션의 저장소 이름 입력 (예: `my-python-book`)
+3. "🚀 배포" 버튼 클릭
+4. 1~3분 기다리면 사이트 URL이 표시됨 (`https://내_계정.github.io/저장소명/`)
+
+> 처음 배포 시 GitHub 저장소가 자동 생성됩니다(공개 저장소). 두 번째부터는 같은 저장소를 덮어쓰기합니다.
+
+#### 대안: `.env` 파일에 토큰 직접 설정
+
+`gh` CLI 대신 개인 액세스 토큰(PAT)을 쓰고 싶으시면:
+
+1. https://github.com/settings/tokens/new 접속
+2. 권한 선택: `repo`(전체), `workflow` 체크 → 토큰 생성
+3. 프로젝트 루트의 `.env`에 추가:
+   ```
+   GITHUB_TOKEN=ghp_여기에_토큰_붙여넣기
+   ```
+4. 서버 재시작(`npm run dev` 재실행)
+
+> `gh` CLI가 있으면 CLI 인증이 우선됩니다.
+
+#### 문제 해결
+
+- **"GitHub 토큰을 찾을 수 없습니다"** → `gh auth login` 하지 않았거나 `.env`에 `GITHUB_TOKEN` 미설정. 위 단계 확인
+- **"이 페이지를 새로고침해주세요"** 안내 박스가 계속 뜸 → `gh auth login` 후 브라우저 새로고침(Cmd/Ctrl+R)
+- **배포는 성공했는데 사이트가 404** → GitHub Pages 빌드는 보통 1~3분 걸립니다. 커피 한 잔 마시고 다시 접속
+- **저장소명이 이미 있어서 덮어쓰고 싶은데 무서움** → GitHub 저장소 설정에서 브랜치 보호 규칙 먼저 확인. 안전하게 가려면 다른 이름으로 시도
+
 ---
 
 ## 문제 해결

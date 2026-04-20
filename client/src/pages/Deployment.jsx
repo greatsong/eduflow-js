@@ -46,7 +46,8 @@ export default function Deployment() {
   const [activeTab, setActiveTab] = useState(0);
   const [status, setStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
-  const [githubUser, setGithubUser] = useState(null); // { username, avatarUrl }
+  const [githubUser, setGithubUser] = useState(null); // { username, avatarUrl, local? }
+  const [githubLocalHint, setGithubLocalHint] = useState(false); // 로컬 모드 + gh 미연동 안내
 
   // 작업별 상태(로딩/결과/메시지)를 부모가 보관 → 탭 전환에도 유지
   const initialJobs = {
@@ -94,7 +95,10 @@ export default function Deployment() {
     apiFetch('/api/auth/github/status')
       .then(data => {
         if (data.connected) {
-          setGithubUser({ username: data.username, avatarUrl: data.avatarUrl });
+          setGithubUser({ username: data.username, avatarUrl: data.avatarUrl, local: data.local });
+        } else if (data.local) {
+          // 로컬 모드에서 gh CLI 미인증 — OAuth 팝업 대신 CLI 안내 표시
+          setGithubLocalHint(true);
         }
       })
       .catch(() => {});
@@ -168,6 +172,7 @@ export default function Deployment() {
             jobs={jobs}
             updateJob={updateJob}
             goToPreview={() => setActiveTab(2)}
+            githubLocalHint={githubLocalHint}
           />
         )}
         {activeTab === 1 && (
@@ -256,7 +261,7 @@ const GitHubIcon = ({ className = 'w-5 h-5' }) => (
   </svg>
 );
 
-function MkDocsTab({ project, status, statusLoading, githubUser, setGithubUser, refreshStatus, jobs, updateJob, goToPreview }) {
+function MkDocsTab({ project, status, statusLoading, githubUser, setGithubUser, refreshStatus, jobs, updateJob, goToPreview, githubLocalHint }) {
   const [siteName, setSiteName] = useState('');
   const [theme, setTheme] = useState('material');
   const [colorTheme, setColorTheme] = useState('indigo');
@@ -689,7 +694,24 @@ function MkDocsTab({ project, status, statusLoading, githubUser, setGithubUser, 
           )}
 
           {/* GitHub 연동 안내 (미연동 시) */}
-          {!githubUser && (
+          {!githubUser && githubLocalHint && (
+            <div className="mb-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
+              <p className="text-sm text-amber-900 font-medium mb-2">
+                🖥️ 로컬 모드: GitHub CLI 인증이 필요합니다
+              </p>
+              <p className="text-xs text-amber-800 mb-3 leading-relaxed">
+                로컬에서는 Google OAuth 팝업이 아니라 <code className="px-1 bg-amber-100 rounded">gh</code> CLI를 사용합니다.
+                터미널에서 아래 명령을 한 번 실행한 뒤 이 페이지를 새로고침해주세요:
+              </p>
+              <pre className="text-xs bg-amber-100 text-amber-900 p-2 rounded mb-3 overflow-x-auto">{`gh auth login`}</pre>
+              <p className="text-[11px] text-amber-700">
+                또는 <code className="px-1 bg-amber-100 rounded">.env</code>에 <code className="px-1 bg-amber-100 rounded">GITHUB_TOKEN=ghp_...</code>을 추가한 뒤 서버를 재시작하셔도 됩니다.
+                <br/>
+                <a href="https://cli.github.com/" target="_blank" rel="noreferrer" className="underline">gh CLI 설치 방법 ↗</a>
+              </p>
+            </div>
+          )}
+          {!githubUser && !githubLocalHint && (
             <div className="mb-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
               <p className="text-sm text-gray-700 font-medium mb-2">
                 GitHub 연동이 필요합니다

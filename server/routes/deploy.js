@@ -258,35 +258,63 @@ router.get('/docx/download', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/projects/:id/deploy/github - GitHub Pages 배포
-// 사용자 자신의 GitHub 계정으로만 배포 (GitHub 연동 필수)
-// 배포 성공 시 포트폴리오 자동 등록 (필수)
+//
+// 토큰 획득 우선순위:
+//   1) JWT 유저(웹 배포판): userStore의 GitHub OAuth 토큰
+//   2) 로컬: `gh auth token` CLI 출력
+//   3) 로컬: 환경변수 GITHUB_TOKEN
 router.post('/github', asyncHandler(async (req, res) => {
   const { repoName, creator } = req.body;
   if (!repoName) {
     return res.status(400).json({ message: '저장소 이름이 필요합니다' });
   }
 
-  // GitHub 연동 필수: 사용자 토큰이 없으면 배포 불가
-  if (!req.user?.googleId) {
-    return res.status(401).json({ message: '로그인이 필요합니다.' });
-  }
-
   const userStore = req.app.locals.userStore;
-  if (!userStore) {
-    return res.status(500).json({ message: '서버 설정 오류: UserStore가 초기화되지 않았습니다.' });
+  let token = null;
+  let tokenSource = null;
+
+  // 1) 웹 배포판: JWT 유저 → userStore
+  if (req.user?.googleId && userStore) {
+    const github = await userStore.getGitHubToken(req.user.googleId);
+    if (github?.token) {
+      token = github.token;
+      tokenSource = `user(${github.username || req.user.googleId})`;
+    }
   }
 
-  const github = await userStore.getGitHubToken(req.user.googleId);
-  if (!github?.token) {
-    return res.status(400).json({ message: 'GitHub 연동이 필요합니다. 배포 페이지에서 GitHub 계정을 연동해주세요.' });
+  // 2) 로컬: gh CLI에서 토큰 조회
+  if (!token) {
+    try {
+      const { execa } = await import('execa');
+      const { stdout } = await execa('gh', ['auth', 'token']);
+      const t = (stdout || '').trim();
+      if (t) {
+        token = t;
+        tokenSource = 'gh-cli';
+      }
+    } catch { /* gh 없거나 로그인 안 됨 */ }
+  }
+
+  // 3) 로컬: 환경변수
+  if (!token && process.env.GITHUB_TOKEN) {
+    token = process.env.GITHUB_TOKEN;
+    tokenSource = 'env';
+  }
+
+  if (!token) {
+    return res.status(400).json({
+      message: 'GitHub 토큰을 찾을 수 없습니다. 아래 중 하나를 진행해주세요:\n'
+        + '• 터미널에서 `gh auth login` 실행\n'
+        + '• .env 파일에 `GITHUB_TOKEN=ghp_...` 추가 후 서버 재시작\n'
+        + '• (웹 배포판) 배포 페이지에서 GitHub 계정 연동',
+    });
   }
 
   const dep = new Deployment(projectPath(req.params.id));
   await dep.init();
 
-  // 사용자 GitHub 토큰으로 배포
-  console.log(`[EduFlow] GitHub API 배포 요청: ${repoName} (사용자: ${github.username})`);
-  const result = await dep.deployToGitHubAPI(repoName, github.token, creator || null);
+  console.log(`[EduFlow] GitHub API 배포 요청: ${repoName} (token source: ${tokenSource})`);
+  const result = await dep.deployToGitHubAPI(repoName, token, creator || null);
 
   // 배포 성공 시 포트폴리오 등록 (필수 — 서버 토큰 사용)
   if (result.success && result.site_url) {
@@ -310,15 +338,17 @@ router.post('/github', asyncHandler(async (req, res) => {
       ...(creator?.affiliation && { creatorAffiliation: creator.affiliation }),
     }, null, 2), 'utf-8');
 
-    // UserStore에 프로젝트 배포 이력 저장
-    try {
-      await userStore.addUserProject(req.user.googleId, {
-        repoName,
-        siteUrl: result.site_url,
-        repoUrl: result.repo_url,
-        username: result.username,
-      });
-    } catch { /* 배포 결과에 영향 없음 */ }
+    // UserStore에 프로젝트 배포 이력 저장 (웹 배포판에서만 가능 — 로컬은 건너뜀)
+    if (userStore && req.user?.googleId) {
+      try {
+        await userStore.addUserProject(req.user.googleId, {
+          repoName,
+          siteUrl: result.site_url,
+          repoUrl: result.repo_url,
+          username: result.username,
+        });
+      } catch { /* 배포 결과에 영향 없음 */ }
+    }
   }
 
   res.json(result);
