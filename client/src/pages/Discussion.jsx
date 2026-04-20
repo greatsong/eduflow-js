@@ -173,7 +173,7 @@ export default function Discussion() {
           <button
             onClick={handleSummarize}
             disabled={messages.length === 0 || summaryStreaming || isStreaming}
-            className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
           >
             {summaryStreaming
               ? '요약 생성 중...'

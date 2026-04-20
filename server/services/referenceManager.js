@@ -29,6 +29,71 @@ const PARSEABLE_EXTS = [
   '.pdf', '.docx', '.xlsx', '.xls', '.html', '.htm', '.hwp', '.hwpx',
 ];
 
+// 확장자별 최대 파싱 크기 (바이트). 이 한도 초과 시 parse_error 반환 — 서버 OOM 방지.
+// multer 업로드 한도(50MB)와 별개로, 파서가 메모리에 전부 올릴 때 실제 안전선.
+export const MAX_PARSE_SIZE = {
+  '.pdf': 50 * 1024 * 1024,   // 50MB
+  '.docx': 20 * 1024 * 1024,  // 20MB
+  '.xlsx': 20 * 1024 * 1024,
+  '.xls': 20 * 1024 * 1024,
+  '.hwp': 20 * 1024 * 1024,
+  '.hwpx': 20 * 1024 * 1024,
+  '.html': 10 * 1024 * 1024,
+  '.htm': 10 * 1024 * 1024,
+  default: 10 * 1024 * 1024,  // 텍스트 계열
+};
+
+function getMaxParseSize(ext) {
+  return MAX_PARSE_SIZE[ext] ?? MAX_PARSE_SIZE.default;
+}
+
+function formatSize(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${bytes}B`;
+}
+
+/**
+ * HTML을 Turndown으로 변환하기 전 사전 정리.
+ * - <style>, <script>, <noscript>, <!-- --> 블록 제거 → CSS/JS 코드가 본문에 섞이는 것 방지
+ * - data:image/...;base64,... 속성 값은 빈 src로 치환 → 수십KB 잡음 제거
+ */
+function preCleanHtml(html) {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
+    // data: URL (base64 이미지 등) — 속성 값 안쪽 통째 제거
+    .replace(/(src|href)\s*=\s*(["'])\s*data:[^"']*\2/gi, '$1=""')
+    .replace(/url\(\s*["']?\s*data:[^)]*\)/gi, 'url("")');
+}
+
+/**
+ * 모든 포맷의 파싱 결과에 공통 적용되는 텍스트 정규화.
+ * - 남아있는 data: URL 토큰 제거 (DOCX/PDF에도 드물게 등장)
+ * - 과도한 공백/빈 줄 압축 (연속 3개 이상 빈 줄 → 2개)
+ * - 탭 → 공백 1, NBSP → 공백
+ * - 줄 양끝 공백 트림
+ */
+function normalizeText(text) {
+  if (!text) return text;
+  return text
+    // data: URL 잔여 토큰 (CSS·DOCX·HTML 공통)
+    .replace(/data:[a-z0-9+/.\-]+;[a-z0-9=;,]*base64,[A-Za-z0-9+/=]+/gi, '')
+    // 극단적으로 긴 공백 없는 토큰 (base64 잔해) — 800자 이상 연속 non-space 문자열 제거
+    .replace(/\S{800,}/g, '')
+    // CRLF → LF
+    .replace(/\r\n/g, '\n')
+    // NBSP → 일반 공백
+    .replace(/\u00a0/g, ' ')
+    // 줄 양끝 공백 제거
+    .split('\n').map((l) => l.replace(/[ \t]+$/g, '')).join('\n')
+    // 빈 줄 3개 이상 → 2개로 압축
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function getMimeType(filename) {
   const ext = extname(filename).toLowerCase();
   return MIME_TYPES[ext] || 'application/octet-stream';
@@ -104,11 +169,27 @@ export class ReferenceManager {
 
     const ext = extname(filename).toLowerCase();
 
+    // 파일 크기 한도 검사 (대용량 파일로 인한 서버 OOM 방지)
+    try {
+      const fileStat = await stat(filePath);
+      const limit = getMaxParseSize(ext);
+      if (fileStat.size > limit) {
+        return {
+          content: null,
+          status: 'parse_error',
+          format: ext.replace('.', ''),
+          error: `파일이 너무 큽니다: ${formatSize(fileStat.size)} (한도 ${formatSize(limit)}). 분할 업로드를 권장합니다.`,
+        };
+      }
+    } catch {
+      // stat 실패는 아래 로직에서 처리
+    }
+
     try {
       // 텍스트 파일 — 직접 읽기
       if (TEXT_READABLE_EXTS.includes(ext)) {
         const content = await readFile(filePath, 'utf-8');
-        return { content, status: 'ok', format: 'text' };
+        return { content: normalizeText(content), status: 'ok', format: 'text' };
       }
 
       // PDF
@@ -119,7 +200,7 @@ export class ReferenceManager {
         if (!data.text || data.text.trim().length === 0) {
           return { content: null, status: 'parse_error', format: 'pdf', error: '텍스트를 추출할 수 없습니다 (이미지 PDF일 수 있음)' };
         }
-        return { content: data.text, status: 'ok', format: 'pdf', pages: data.numpages };
+        return { content: normalizeText(data.text), status: 'ok', format: 'pdf', pages: data.numpages };
       }
 
       // DOCX
@@ -127,7 +208,7 @@ export class ReferenceManager {
         const mammoth = await import('mammoth');
         const buffer = await readFile(filePath);
         const result = await mammoth.extractRawText({ buffer });
-        return { content: result.value, status: 'ok', format: 'docx' };
+        return { content: normalizeText(result.value), status: 'ok', format: 'docx' };
       }
 
       // XLSX / XLS
@@ -140,16 +221,17 @@ export class ReferenceManager {
           const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
           text += `[시트: ${sheetName}]\n${csv}\n\n`;
         }
-        return { content: text.trim(), status: 'ok', format: 'spreadsheet' };
+        return { content: normalizeText(text), status: 'ok', format: 'spreadsheet' };
       }
 
       // HTML / HTM
       if (ext === '.html' || ext === '.htm') {
         const TurndownService = (await import('turndown')).default;
         const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-        const html = await readFile(filePath, 'utf-8');
-        const markdown = td.turndown(html);
-        return { content: markdown, status: 'ok', format: 'html' };
+        const rawHtml = await readFile(filePath, 'utf-8');
+        const cleanHtml = preCleanHtml(rawHtml);
+        const markdown = td.turndown(cleanHtml);
+        return { content: normalizeText(markdown), status: 'ok', format: 'html' };
       }
 
       // HWP (한글 문서)
@@ -160,13 +242,13 @@ export class ReferenceManager {
           // @ohah/hwpjs API — toMarkdown 또는 toJSON 사용
           const result = hwpjs.toMarkdown ? hwpjs.toMarkdown(buffer) : null;
           if (result) {
-            return { content: result, status: 'ok', format: 'hwp' };
+            return { content: normalizeText(result), status: 'ok', format: 'hwp' };
           }
           // fallback: toJSON에서 텍스트 추출
           if (hwpjs.toJSON) {
             const json = hwpjs.toJSON(buffer);
             const text = JSON.stringify(json, null, 2);
-            return { content: text, status: 'ok', format: 'hwp' };
+            return { content: normalizeText(text), status: 'ok', format: 'hwp' };
           }
           return { content: null, status: 'parse_error', format: 'hwp', error: 'HWP 파서가 이 파일을 처리할 수 없습니다' };
         } catch (e) {
@@ -199,7 +281,7 @@ export class ReferenceManager {
             }
           }
           if (text.trim()) {
-            return { content: text.trim(), status: 'ok', format: 'hwpx' };
+            return { content: normalizeText(text), status: 'ok', format: 'hwpx' };
           }
           return { content: null, status: 'parse_error', format: 'hwpx', error: 'HWPX에서 텍스트를 추출할 수 없습니다' };
         } catch (e) {
@@ -252,5 +334,44 @@ export class ReferenceManager {
   async getTotalSize() {
     const files = await this.listFiles();
     return files.reduce((sum, f) => sum + f.size, 0);
+  }
+
+  /**
+   * 모든 참고자료를 병렬로 파싱해 텍스트 배열로 반환한다.
+   * 기존 chapterGenerator._loadReferences의 순차 로직을 교체.
+   * @param {object} opts
+   * @param {number} opts.concurrency 동시 파싱 수 (기본 4)
+   * @returns {Promise<Array<{ name: string, content: string|null, status: string, error?: string }>>}
+   */
+  async loadAllParsed({ concurrency = 4 } = {}) {
+    const files = await this.listFiles();
+    if (files.length === 0) return [];
+
+    const results = new Array(files.length);
+    let idx = 0;
+
+    const worker = async () => {
+      while (true) {
+        const i = idx++;
+        if (i >= files.length) return;
+        const file = files[i];
+        try {
+          const r = await this.readFileContent(file.name);
+          results[i] = { name: file.name, ...r };
+        } catch (e) {
+          results[i] = {
+            name: file.name,
+            content: null,
+            status: 'parse_error',
+            format: file.format,
+            error: e.message,
+          };
+        }
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(concurrency, files.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
   }
 }

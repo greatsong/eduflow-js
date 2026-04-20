@@ -32,13 +32,7 @@ async function loadConfig(id) {
   const configFile = join(projectPath(id), 'config.json');
   if (!existsSync(configFile)) return null;
   const raw = await readFile(configFile, 'utf-8');
-  try {
-    return JSON.parse(raw);
-  } catch (e) {
-    // JSON 파싱 실패 시 null 반환 (손상된 config.json 방어)
-    console.error(`[loadConfig] JSON 파싱 실패 (id: ${id}):`, e.message);
-    return null;
-  }
+  return JSON.parse(raw);
 }
 
 // ============================================================
@@ -63,8 +57,6 @@ router.get('/', asyncHandler(async (req, res) => {
   }
 
   // 사용자별 필터링: owner가 설정된 프로젝트는 본인 것만, 미설정은 모두에게 표시
-  // NOTE(BUG-021): 로컬 버전에서는 인증 미들웨어를 거치지 않을 수 있어 req.user가 없는 것이 정상.
-  // 이 경우 모든 프로젝트를 반환한다. 멀티유저 배포 시 인증 필수화가 필요함.
   const userGoogleId = req.user?.googleId;
   const filtered = userGoogleId
     ? projects.filter(p => !p.owner || p.owner.googleId === userGoogleId)
@@ -169,6 +161,23 @@ router.post('/', asyncHandler(async (req, res) => {
     // ── v2: 3축 조합 시스템 ──
     const tc = new TemplateComposer();
     await tc.applyV2(projPath, what_id, how_id, featureIds || [], context_answers || {});
+
+    // v2에서도 커스텀 프롬프트 저장
+    if (custom_prompt_config) {
+      const infoFile = join(projPath, 'template-info.json');
+      if (existsSync(infoFile)) {
+        const raw = await readFile(infoFile, 'utf-8');
+        const info = JSON.parse(raw);
+        if (custom_prompt_config.toc_prompt_addition !== undefined) {
+          info.toc_prompt_addition = custom_prompt_config.toc_prompt_addition;
+        }
+        if (custom_prompt_config.chapter_prompt_addition !== undefined) {
+          info.chapter_prompt_addition = custom_prompt_config.chapter_prompt_addition;
+        }
+        info.custom_prompt_config = custom_prompt_config;
+        await writeFile(infoFile, JSON.stringify(info, null, 2), 'utf-8');
+      }
+    }
   } else if (template_id) {
     // ── v1: 레거시 단일 템플릿 ──
     const tm = new TemplateManager();
@@ -239,6 +248,9 @@ router.post('/templates/compose-preview', asyncHandler(async (req, res) => {
     persona: composed.persona,
     templateName: composed.templateName,
     compatibility: composed.compatibility,
+    tocAddition: composed.tocAddition,
+    chapterAddition: composed.chapterAddition,
+    // 하위 호환
     tocAdditionPreview: composed.tocAddition.slice(0, 500),
     chapterAdditionPreview: composed.chapterAddition.slice(0, 500),
   });
@@ -326,14 +338,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   }
 
   const raw = await readFile(configFile, 'utf-8');
-  let config;
-  try {
-    config = JSON.parse(raw);
-  } catch (e) {
-    // 손상된 config.json 방어
-    console.error(`[PUT /:id] config.json 파싱 실패:`, e.message);
-    return res.status(422).json({ message: '프로젝트 설정 파일이 손상되었습니다' });
-  }
+  const config = JSON.parse(raw);
   const updates = req.body;
 
   // 허용된 필드만 업데이트
@@ -460,9 +465,7 @@ router.get('/:id/references/:filename', asyncHandler(async (req, res) => {
     return res.status(404).json({ message: '파일을 찾을 수 없습니다' });
   }
   if (result.status === 'parse_error' || result.status === 'unsupported') {
-    // 파싱 실패 또는 미지원 포맷은 422 상태코드로 반환 (BUG-017)
-    const statusCode = result.status === 'parse_error' ? 422 : 415;
-    return res.status(statusCode).json({ filename: req.params.filename, content: null, status: result.status, error: result.error });
+    return res.json({ filename: req.params.filename, content: null, status: result.status, error: result.error });
   }
   res.json({ filename: req.params.filename, content: result.content, status: 'ok', format: result.format });
 }));
@@ -516,7 +519,16 @@ router.put('/:id/template-info', asyncHandler(async (req, res) => {
   if (chapter_prompt_addition !== undefined) {
     info.chapter_prompt_addition = chapter_prompt_addition;
   }
-  info.custom_prompt_config = { toc_prompt_addition, chapter_prompt_addition };
+  // custom_prompt_config는 POST create에서 다른 필드({role, audience, ...}) 형태로도 쓰이므로
+  // 부분 업데이트 시 req.body의 undefined로 기존 값을 지우지 않도록 병합 처리.
+  if (toc_prompt_addition !== undefined || chapter_prompt_addition !== undefined) {
+    const prev = info.custom_prompt_config || {};
+    info.custom_prompt_config = {
+      ...prev,
+      ...(toc_prompt_addition !== undefined ? { toc_prompt_addition } : {}),
+      ...(chapter_prompt_addition !== undefined ? { chapter_prompt_addition } : {}),
+    };
+  }
 
   // v2 필드 업데이트
   if (what_id !== undefined) info.what_id = what_id;

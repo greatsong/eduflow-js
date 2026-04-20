@@ -27,6 +27,23 @@ export default function ChatInterface({ messages, isStreaming, onSend, onClear, 
     if (!trimmed || isStreaming) return;
     onSend(trimmed);
     setInput('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
+  };
+
+  const handleKeyDown = (e) => {
+    // Enter: 전송 / Shift+Enter: 줄바꿈(기본 동작 유지)
+    // IME(한글) 조합 중에는 무시 — 한글 입력 확정용 Enter까지 전송되는 것 방지
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
+  const handleInput = (e) => {
+    setInput(e.target.value);
+    // 내용에 맞춰 높이 자동 조절
+    e.target.style.height = 'auto';
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
   };
 
   return (
@@ -60,7 +77,7 @@ export default function ChatInterface({ messages, isStreaming, onSend, onClear, 
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm overflow-hidden ${
                   msg.role === 'user'
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-emerald-600 text-white'
                     : 'bg-gray-100 text-gray-900'
                 }`}
               >
@@ -84,20 +101,21 @@ export default function ChatInterface({ messages, isStreaming, onSend, onClear, 
 
       {/* 입력 영역 */}
       <form onSubmit={handleSubmit} className="pt-3 border-t border-gray-200">
-        <div className="flex gap-2">
-          <input
+        <div className="flex gap-2 items-end">
+          <textarea
             ref={inputRef}
-            type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={placeholder || '메시지를 입력하세요...'}
-            disabled={isStreaming}
-            className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            placeholder={isStreaming ? '응답 생성 중... 다음 메시지를 미리 입력하세요 (Shift+Enter: 줄바꿈)' : (placeholder || '메시지를 입력하세요... (Shift+Enter: 줄바꿈)')}
+            className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none leading-6"
+            style={{ minHeight: '44px', maxHeight: '200px' }}
           />
           <button
             type="submit"
             disabled={isStreaming || !input.trim()}
-            className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors shrink-0"
           >
             {isStreaming ? '...' : '전송'}
           </button>

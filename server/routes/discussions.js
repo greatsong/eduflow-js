@@ -5,13 +5,14 @@ import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { streamChat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { requireApiKey } from '../middleware/apiKey.js';
+import { requireApiKey, requireModelAccess } from '../middleware/apiKey.js';
 import { ConversationManager } from '../services/conversationManager.js';
 import { ReferenceManager } from '../services/referenceManager.js';
 import { ProgressManager } from '../services/progressManager.js';
 import { TOCGenerator } from '../services/tocGenerator.js';
 import { TokenUsageManager } from '../services/tokenUsageManager.js';
 import { sanitizeId } from '../middleware/sanitize.js';
+import { registerSSE } from '../services/sseManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -59,10 +60,16 @@ router.get('/:step/summary', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/projects/:id/discussions/:step/summarize - 요약 생성 (SSE)
-router.post('/:step/summarize', requireApiKey,  asyncHandler(async (req, res) => {
+router.post('/:step/summarize', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { model } = req.body;
   const projPath = projectPath(req.params.id);
   const step = req.params.step;
+
+  // SSE 연결 등록 (사용자당 제한)
+  const sse = registerSSE(req, res);
+  if (!sse.ok) {
+    return res.status(429).json({ message: '동시 SSE 연결이 너무 많습니다. 다른 탭을 닫고 다시 시도해주세요.' });
+  }
 
   // SSE 헤더
   res.setHeader('Content-Type', 'text/event-stream');
@@ -100,10 +107,16 @@ router.post('/:step/summarize', requireApiKey,  asyncHandler(async (req, res) =>
 }));
 
 // POST /api/projects/:id/discussions/:step/chat - 스트리밍 채팅 (SSE)
-router.post('/:step/chat', requireApiKey,  asyncHandler(async (req, res) => {
+router.post('/:step/chat', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { message, model, messages: clientMessages } = req.body;
   const projPath = projectPath(req.params.id);
   const step = req.params.step;
+
+  // SSE 연결 등록 (사용자당 제한)
+  const sse = registerSSE(req, res);
+  if (!sse.ok) {
+    return res.status(429).json({ message: '동시 SSE 연결이 너무 많습니다. 다른 탭을 닫고 다시 시도해주세요.' });
+  }
 
   // SSE 헤더
   res.setHeader('Content-Type', 'text/event-stream');
@@ -255,15 +268,9 @@ ${referencesText}
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
 
-    // BUG-006: API 키 검증 — 없으면 SSE 에러 전송 후 종료
-    if (!apiKey) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: `${provider} API 키가 설정되지 않았습니다. 설정에서 API 키를 확인해주세요.` })}\n\n`);
-      res.end();
-      return;
-    }
-
-    // Step 3은 목차 JSON 출력이 필요하므로 토큰 여유 확보
-    const chatMaxTokens = step === '3' ? 8192 : 2048;
+    // Step 3은 목차 전체 JSON 출력이 필요하므로 넉넉히 확보 (큰 목차 대응)
+    // 8192에선 파트 5개·챕터 20개 넘어가면 잘림 → 24000으로 확장
+    const chatMaxTokens = step === '3' ? 24000 : 2048;
 
     const result = await streamChat({
       provider, apiKey, model: useModel,

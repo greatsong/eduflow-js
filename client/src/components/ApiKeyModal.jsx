@@ -151,7 +151,7 @@ export default function ApiKeyModal({ open, onClose, onSaved }) {
                     setError('');
                   }}
                   placeholder={isServerProvided ? '서버에서 제공됨 (직접 입력하면 우선 사용)' : p.placeholder}
-                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono ${
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono ${
                     isServerProvided ? 'border-green-300 bg-green-50/50' : 'border-gray-300'
                   }`}
                 />
@@ -172,7 +172,7 @@ export default function ApiKeyModal({ open, onClose, onSaved }) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="flex-1 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
           >
             {saving ? '저장 중...' : '저장'}
           </button>

@@ -170,6 +170,26 @@ const DEFAULT_PROMPT = {
   tone: '친근하고 격려하는 톤',
 };
 
+/**
+ * AI가 생성한 마크다운에서 자주 발생하는 형식 오류를 교정.
+ * 현재 감지: 코드펜스(```)와 같은 줄에 본문이 붙어 있는 경우.
+ *   - "```본문"  → "```\n\n본문"   (클로징 펜스 + 본문 병합)
+ *   - "```python코드" → "```python\n\n코드" (오프닝 펜스 + 코드 병합)
+ * 미처 닫히지 않은 코드 블록으로 뒤의 HTML이 전부 이스케이프되는 현상 방지.
+ */
+export function sanitizeMarkdown(content) {
+  if (!content) return content;
+  return content.replace(/^(```)([^\n]+)$/gm, (_, fence, rest) => {
+    // 유효한 오프닝 펜스(언어태그만)는 그대로 유지
+    if (/^[a-zA-Z0-9+\-_]{1,20}$/.test(rest)) return fence + rest;
+    // 언어태그 + 본문 붙음
+    const m = rest.match(/^([a-zA-Z0-9+\-_]{1,20})(.+)$/);
+    if (m) return fence + m[1] + '\n\n' + m[2].trim();
+    // 본문 + 클로징 펜스 붙음
+    return fence + '\n\n' + rest.trim();
+  });
+}
+
 export class ChapterGenerator {
   constructor(projectPath, apiKeys = null) {
     this.projectPath = projectPath;
@@ -1420,7 +1440,7 @@ ${courseInfo}
       }
 
       const result = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback);
-      const finalContent = result.content;
+      const finalContent = sanitizeMarkdown(result.content);
 
       const chapterFile = join(this.docsPath, `${chapterId}.md`);
       await writeFile(chapterFile, finalContent, 'utf-8');
@@ -1458,7 +1478,7 @@ ${courseInfo}
 
           try {
             const retryResult = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback, true);
-            const retryContent = retryResult.content;
+            const retryContent = sanitizeMarkdown(retryResult.content);
 
             const chapterFile = join(this.docsPath, `${chapterId}.md`);
             await writeFile(chapterFile, retryContent, 'utf-8');
@@ -1503,7 +1523,7 @@ ${courseInfo}
 
         try {
           const retryResult = await this._streamGenerate(model, effectiveMaxTokens, prompt, chapterId, progressCallback, true);
-          const retryContent529 = retryResult.content;
+          const retryContent529 = sanitizeMarkdown(retryResult.content);
 
           const chapterFile = join(this.docsPath, `${chapterId}.md`);
           await writeFile(chapterFile, retryContent529, 'utf-8');
@@ -1812,7 +1832,7 @@ ${courseInfo}
    */
   async saveChapter(chapterId, content) {
     if (!existsSync(this.docsPath)) await mkdir(this.docsPath, { recursive: true });
-    await writeFile(join(this.docsPath, `${chapterId}.md`), content, 'utf-8');
+    await writeFile(join(this.docsPath, `${chapterId}.md`), sanitizeMarkdown(content), 'utf-8');
   }
 
   /**

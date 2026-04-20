@@ -1,5 +1,5 @@
-import { readFile, writeFile, readdir, stat, mkdir, unlink, copyFile, rm, cp } from 'fs/promises';
-import { join, dirname, relative } from 'path';
+import { readFile, writeFile, readdir, stat, mkdir, unlink, copyFile, rm, cp, symlink, lstat } from 'fs/promises';
+import { join, dirname, relative, resolve as resolvePath } from 'path';
 import { existsSync, createReadStream } from 'fs';
 import { fileURLToPath } from 'url';
 import { execa } from 'execa';
@@ -11,6 +11,16 @@ const PORTFOLIO_REPO_OWNER = 'greatsong';
 const PORTFOLIO_REPO_NAME = 'eduflow-portfolio';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Astro Starlight 공통 node_modules 캐시 경로
+ * - Docker 이미지 빌드 시점에 `server/services/starlight-cache/`에 설치된 공용 캐시
+ * - 런타임 Step 5 빌드가 프로젝트별 .starlight-build/node_modules를 이 경로로 심볼릭 링크 연결
+ * - 환경변수 STARLIGHT_NODE_MODULES_CACHE로 오버라이드 가능 (테스트/로컬용)
+ */
+const STARLIGHT_CACHE_DIR = resolvePath(__dirname, 'starlight-cache');
+const STARLIGHT_CACHE_NODE_MODULES = process.env.STARLIGHT_NODE_MODULES_CACHE
+  || join(STARLIGHT_CACHE_DIR, 'node_modules');
 
 export class Deployment {
   constructor(projectPath) {
@@ -525,20 +535,59 @@ ${navYaml}`;
       });
 
       // 2) placeholder 치환 (astro.config.mjs의 __SITE__ / __BASE__ 모두)
+      //    siteUrl이 비어 있으면 site: '' 로 치환되어 Astro 5의 URL 유효성 검증이 실패하므로
+      //    site 필드 자체를 제거. site는 GitHub Pages 배포용이고 미리보기 빌드에는 불필요.
       const configPath = join(result.buildDir, 'astro.config.mjs');
       let cfg = await readFile(configPath, 'utf-8');
-      cfg = cfg.replaceAll('__SITE__', siteUrl).replaceAll('__BASE__', basePath);
+      if (siteUrl) {
+        cfg = cfg.replaceAll('__SITE__', siteUrl);
+      } else {
+        cfg = cfg.replace(/^\s*site:\s*'__SITE__',?\s*\n/m, '');
+      }
+      cfg = cfg.replaceAll('__BASE__', basePath);
       await writeFile(configPath, cfg, 'utf-8');
 
-      // 3) npm install (node_modules 없을 때만)
+      // 3) node_modules 준비 — 공용 캐시를 buildDir로 복사
+      //    Dockerfile이 /app/server/services/starlight-cache/node_modules 를 미리 설치해 둔다.
+      //    과거엔 symlink 시도했으나 Astro/Vite의 절대 경로 resolver가
+      //    "No cached compile metadata found" 오류를 내 실패 → 복사로 전환.
+      //    복사는 200MB 기준 10~30초로 npm install(60~120초)보다 여전히 2~4배 빠름.
+      //    - generateStarlightProject가 매번 buildDir을 rm -rf 후 재생성하므로 여기서 항상 새로 복사
+      //    - BUILD_LOCK_KEY로 빌드가 직렬화되므로 동시성 문제 없음
       const nodeModulesPath = join(result.buildDir, 'node_modules');
-      if (!existsSync(nodeModulesPath)) {
-        await execa('npm', ['install', '--no-audit', '--no-fund', '--prefer-offline'], {
-          cwd: result.buildDir,
-          timeout: 600000,
-          stdio: 'pipe',
-          shell: true,
-        });
+      let cacheMode = 'none';
+      let cacheFallbackReason = null;
+
+      if (existsSync(STARLIGHT_CACHE_NODE_MODULES)) {
+        try {
+          if (existsSync(nodeModulesPath)) {
+            await rm(nodeModulesPath, { recursive: true, force: true });
+          }
+          // cp -r 사용: fs.cp보다 빠르고 퍼미션/심볼릭 링크 유지가 자연스러움
+          await execa('cp', ['-r', STARLIGHT_CACHE_NODE_MODULES, nodeModulesPath], {
+            timeout: 300000,
+          });
+          cacheMode = 'copy';
+        } catch (copyErr) {
+          cacheFallbackReason = `복사 실패: ${copyErr.message}`;
+          console.warn('[buildStarlight] 공용 캐시 복사 실패, npm install 폴백:', copyErr.message);
+        }
+      } else {
+        cacheFallbackReason = `공용 캐시 없음 (${STARLIGHT_CACHE_NODE_MODULES})`;
+      }
+
+      if (cacheMode === 'none') {
+        // 폴백: 링크 실패 또는 이미지에 캐시가 없는 환경 (예: 로컬 개발 초기)
+        if (!existsSync(nodeModulesPath)) {
+          console.warn('[buildStarlight] npm install 폴백 실행:', cacheFallbackReason);
+          await execa('npm', ['install', '--no-audit', '--no-fund', '--prefer-offline'], {
+            cwd: result.buildDir,
+            timeout: 600000,
+            stdio: 'pipe',
+            shell: true,
+          });
+          cacheMode = 'npm-install';
+        }
       }
 
       // 4) astro build
@@ -563,7 +612,7 @@ ${navYaml}`;
       // 7) 빌드 캐시 정리 — Fly Volume 용량 보호.
       //    generateStarlightProject가 매번 buildDir을 rm -rf 후 재생성하므로
       //    캐시를 남겨도 재활용되지 않는다. site/로 복사가 끝났으니 삭제 안전.
-      //    .starlight-build/ 전체(~200MB의 node_modules 포함) 제거.
+      //    .starlight-build/ 전체 제거 (복사된 node_modules 포함).
       let cleanupSavedBytes = 0;
       try {
         const before = await import('fs/promises').then((m) => m.stat(result.buildDir)).catch(() => null);
@@ -582,6 +631,7 @@ ${navYaml}`;
         imageCount: result.imageCount,
         stdout: build.stdout?.slice(-2000) || '',
         cleanupSavedBytes,
+        cacheMode, // 'copy' | 'npm-install' — Step 5 빌드 시간 진단용
       };
     } catch (e) {
       // 실패 시에는 buildDir을 남겨둬서 디버깅 가능하도록 한다.
@@ -935,9 +985,40 @@ ${navYaml}`;
 
       console.log(`[EduFlow] GitHub API 배포 시작: ${username}/${repoName}`);
 
-      // 2. site/ 폴더 확인
+      // 2. 배포 대상 URL에 맞게 재빌드
+      //    미리보기 빌드는 siteUrl=''·basePath='/'로 생성돼 GitHub Pages(/<repo>/)에서
+      //    CSS·JS 경로가 전부 404 난다. 배포 직전에 siteUrl/basePath를 박아 다시 빌드.
+      //    (변수명은 이 함수 뒷부분의 반환용 siteUrl과 충돌 방지를 위해 astro* prefix)
+      const astroSiteUrl = `https://${username}.github.io`;
+      const astroBasePath = `/${repoName}/`;
+
+      let theme = 'starlight';
+      let siteName = repoName;
+      let colorTheme = 'sky';
+      let accentColor;
+      const configPath = join(this.projectPath, 'config.json');
+      if (existsSync(configPath)) {
+        try {
+          const cfg = JSON.parse(await readFile(configPath, 'utf-8'));
+          theme = cfg.deployment?.theme || 'starlight';
+          siteName = cfg.title || repoName;
+          colorTheme = cfg.deployment?.color_theme || 'sky';
+          accentColor = cfg.deployment?.accent_color;
+        } catch { /* skip */ }
+      }
+
+      console.log(`[EduFlow] 배포용 재빌드: base=${astroBasePath}, site=${astroSiteUrl}`);
+      const rebuild = await this.buildWebsite({
+        theme, siteName, creator, colorTheme, accentColor,
+        siteUrl: astroSiteUrl, basePath: astroBasePath,
+      });
+      if (!rebuild.success) {
+        return { success: false, message: `배포 직전 재빌드 실패: ${rebuild.message}` };
+      }
+
+      // 3. site/ 폴더 확인
       if (!existsSync(this.sitePath)) {
-        return { success: false, message: '빌드된 사이트(site/)가 없습니다. 먼저 MkDocs 빌드를 실행하세요.' };
+        return { success: false, message: '빌드된 사이트(site/)가 없습니다. 먼저 웹사이트 빌드를 실행하세요.' };
       }
 
       // 3. 리포 존재 확인 → 없으면 생성

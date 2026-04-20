@@ -2,6 +2,7 @@ import { readFile, writeFile, unlink, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { chat, streamChat, detectProvider, resolveApiKey } from './aiProvider.js';
+import { withLock } from './fileLock.js';
 
 export class ConversationManager {
   constructor(projectPath, apiKeys = null) {
@@ -33,25 +34,27 @@ export class ConversationManager {
     await this.ensureDir();
     const filePath = this._conversationFile(step);
 
-    let conversation;
-    if (existsSync(filePath)) {
-      conversation = JSON.parse(await readFile(filePath, 'utf-8'));
-    } else {
-      conversation = {
-        step,
-        created_at: new Date().toISOString(),
-        messages: [],
-      };
-    }
+    await withLock(filePath, async () => {
+      let conversation;
+      if (existsSync(filePath)) {
+        conversation = JSON.parse(await readFile(filePath, 'utf-8'));
+      } else {
+        conversation = {
+          step,
+          created_at: new Date().toISOString(),
+          messages: [],
+        };
+      }
 
-    conversation.messages.push({
-      role,
-      content,
-      timestamp: new Date().toISOString(),
+      conversation.messages.push({
+        role,
+        content,
+        timestamp: new Date().toISOString(),
+      });
+      conversation.updated_at = new Date().toISOString();
+
+      await writeFile(filePath, JSON.stringify(conversation, null, 2), 'utf-8');
     });
-    conversation.updated_at = new Date().toISOString();
-
-    await writeFile(filePath, JSON.stringify(conversation, null, 2), 'utf-8');
   }
 
   async loadConversation(step) {

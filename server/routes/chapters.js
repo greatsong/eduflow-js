@@ -4,12 +4,13 @@ import { existsSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { requireApiKey } from '../middleware/apiKey.js';
+import { requireApiKey, requireModelAccess } from '../middleware/apiKey.js';
 import { ChapterGenerator } from '../services/chapterGenerator.js';
 import { ProgressManager } from '../services/progressManager.js';
 import { streamChat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
 import { TokenUsageManager } from '../services/tokenUsageManager.js';
 import { sanitizeId } from '../middleware/sanitize.js';
+import { registerSSE } from '../services/sseManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -26,8 +27,7 @@ function projectPath(id) {
 
 function sseHeaders(res) {
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.flushHeaders();
 }
 
@@ -69,22 +69,24 @@ router.post('/generation-cancel', asyncHandler(async (req, res) => {
   res.json({ success: cancelled, message: cancelled ? '취소 요청됨' : '실행 중인 생성이 없습니다' });
 }));
 
-// GET /api/projects/:id/chapters/images - 이미지 목록
+// GET /api/projects/:id/chapters/images - 업로드/기존 이미지 파일 목록
 router.get('/images', asyncHandler(async (req, res) => {
-  const imagesDir = join(projectPath(req.params.id), 'docs', 'images');
-  if (!existsSync(imagesDir)) {
-    return res.json([]);
-  }
-  const { readdir: rd, stat: st } = await import('fs/promises');
-  const files = await rd(imagesDir);
-  const images = [];
-  for (const f of files) {
-    if (/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(f)) {
-      const s = await st(join(imagesDir, f));
-      images.push({ name: f, size: s.size, created: s.birthtime });
+  const projPath = projectPath(req.params.id);
+  const imagesDir = join(projPath, 'docs', 'images');
+
+  const fileList = [];
+  if (existsSync(imagesDir)) {
+    const { readdir: rd, stat: st } = await import('fs/promises');
+    const files = await rd(imagesDir);
+    for (const f of files) {
+      if (/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(f)) {
+        const s = await st(join(imagesDir, f));
+        fileList.push({ name: f, size: s.size, created: s.birthtime });
+      }
     }
   }
-  res.json(images);
+
+  res.json(fileList);
 }));
 
 // GET /api/projects/:id/chapters/images/:filename - 이미지 파일 서빙
@@ -130,9 +132,8 @@ router.put('/chat-history', asyncHandler(async (req, res) => {
   }
 
   if (messages && messages.length > 0) {
-    // 최근 100개 메시지 저장 (BUG-022: 50→100으로 완화, 긴 대화 지원)
-    const maxMessages = parseInt(process.env.CHAT_HISTORY_LIMIT, 10) || 100;
-    history[chapterId] = messages.slice(-maxMessages);
+    // 최근 50개 메시지만 저장 (용량 관리)
+    history[chapterId] = messages.slice(-50);
   } else {
     delete history[chapterId];
   }
@@ -169,10 +170,12 @@ router.put('/:chapterId', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/projects/:id/chapters/generate-all - 배치 생성 (SSE)
-router.post('/generate-all', requireApiKey,  asyncHandler(async (req, res) => {
+router.post('/generate-all', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { model, maxTokens, concurrent, skipCompleted, tpmLimit, chapterIds } = req.body;
   const projPath = projectPath(req.params.id);
 
+  const sse = registerSSE(req, res);
+  if (!sse.ok) return res.status(429).json({ message: '동시 SSE 연결이 너무 많습니다.' });
   sseHeaders(res);
 
   try {
@@ -223,73 +226,80 @@ router.post('/generate-all', requireApiKey,  asyncHandler(async (req, res) => {
 
     sseSend(res, { type: 'done', report });
   } catch (e) {
-    // BUG-012: 에러 유형별 사용자 친화적 메시지 제공
-    let userMessage;
-    const msg = e.message || '';
-    if (msg.includes('API key') || msg.includes('api_key') || msg.includes('401') || msg.includes('authentication')) {
-      userMessage = 'API 키를 확인해주세요. 키가 유효하지 않거나 만료되었을 수 있습니다.';
-    } else if (msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNABORTED')) {
-      userMessage = '응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
-    } else {
-      userMessage = '챕터 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-    }
-    console.error('[chapters/generate-all] 에러:', msg);
-    sseSend(res, { type: 'error', message: userMessage });
+    sseSend(res, { type: 'error', message: e.message });
   }
 
   res.end();
 }));
 
-// POST /api/projects/:id/chapters/:chapterId/generate - 단일 챕터 생성
-router.post('/:chapterId/generate', requireApiKey,  asyncHandler(async (req, res) => {
+// POST /api/projects/:id/chapters/:chapterId/generate - 단일 챕터 생성 (SSE 진행 스트리밍)
+router.post('/:chapterId/generate', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { model, maxTokens } = req.body;
   const projPath = projectPath(req.params.id);
   const chapterId = req.params.chapterId;
 
-  const gen = new ChapterGenerator(projPath, req.apiKeys);
-  await gen.init();
+  const sse = registerSSE(req, res);
+  if (!sse.ok) return res.status(429).json({ message: '동시 SSE 연결이 너무 많습니다.' });
+  sseHeaders(res);
 
-  // TOC에서 챕터 정보 조회
-  const info = await gen.findChapterInToc(chapterId);
+  // 즉시 진행 메시지 — 프록시 idle 방지 + 사용자 즉각 피드백
+  sseSend(res, { type: 'progress', message: '🔬 챕터 생성 준비 중...' });
 
-  const useModel = model || 'claude-opus-4-7';
-  const result = await gen.generateChapter(
-    chapterId,
-    info.chapter_title || chapterId,
-    info.part_context || '',
-    useModel,
-    maxTokens || 12000,
-    null,
-    info.estimated_time || '',
-    info.total_chapters || 0,
-    info.current_chapter_num || 0
-  );
+  const progressCallback = (message) => {
+    if (res.writableEnded || res.destroyed) return;
+    try { sseSend(res, { type: 'progress', message }); } catch { /* ignore */ }
+  };
 
-  if (result.success) {
-    const pm = new ProgressManager(projPath);
-    await pm.markChapterCompleted(chapterId);
+  try {
+    const gen = new ChapterGenerator(projPath, req.apiKeys);
+    await gen.init();
 
-    // 토큰 사용량 기록
-    const provider = detectProvider(useModel);
-    tokenUsage.record({
-      userId: req.user?.googleId, userName: req.user?.name,
-      userEmail: req.user?.email,
-      projectId: req.params.id, action: 'chapter',
-      provider, model: useModel,
-      inputTokens: result.input_tokens, outputTokens: result.output_tokens,
-      keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
-    });
+    const info = await gen.findChapterInToc(chapterId);
+
+    const useModel = model || 'claude-opus-4-7';
+    const result = await gen.generateChapter(
+      chapterId,
+      info.chapter_title || chapterId,
+      info.part_context || '',
+      useModel,
+      maxTokens || 12000,
+      progressCallback,
+      info.estimated_time || '',
+      info.total_chapters || 0,
+      info.current_chapter_num || 0
+    );
+
+    if (result.success) {
+      const pm = new ProgressManager(projPath);
+      await pm.markChapterCompleted(chapterId);
+
+      const provider = detectProvider(useModel);
+      tokenUsage.record({
+        userId: req.user?.googleId, userName: req.user?.name,
+        userEmail: req.user?.email,
+        projectId: req.params.id, action: 'chapter',
+        provider, model: useModel,
+        inputTokens: result.input_tokens, outputTokens: result.output_tokens,
+        keySource: req.headers[`x-${provider}-key`] ? 'user' : 'server',
+      });
+    }
+
+    sseSend(res, { type: 'done', result });
+  } catch (e) {
+    sseSend(res, { type: 'error', message: e.message });
   }
 
-  res.json(result);
+  res.end();
 }));
 
 // POST /api/projects/:id/chapters/:chapterId/chat - 인터랙티브 채팅 (SSE)
-router.post('/:chapterId/chat', requireApiKey,  asyncHandler(async (req, res) => {
+router.post('/:chapterId/chat', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { message, model, messages: chatHistory } = req.body;
   const projPath = projectPath(req.params.id);
   const chapterId = req.params.chapterId;
 
+  const sse = registerSSE(req, res);
+  if (!sse.ok) return res.status(429).json({ message: '동시 SSE 연결이 너무 많습니다.' });
   sseHeaders(res);
 
   try {
@@ -334,13 +344,6 @@ ${currentContent.slice(0, 8000) || '(아직 작성되지 않음)'}
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
 
-    // API 키 검증: 키가 없으면 SSE 에러 전송 후 종료
-    if (!apiKey) {
-      sseSend(res, { type: 'error', message: `${provider} API 키가 설정되지 않았습니다. 설정에서 API 키를 확인해주세요.` });
-      res.end();
-      return;
-    }
-
     const result = await streamChat({
       provider, apiKey, model: useModel,
       messages: apiMessages,
@@ -361,18 +364,7 @@ ${currentContent.slice(0, 8000) || '(아직 작성되지 않음)'}
     sseSend(res, { type: 'done' });
     res.end();
   } catch (e) {
-    // BUG-012: 에러 유형별 사용자 친화적 메시지 제공
-    let userMessage;
-    const msg = e.message || '';
-    if (msg.includes('API key') || msg.includes('api_key') || msg.includes('401') || msg.includes('authentication')) {
-      userMessage = 'API 키를 확인해주세요. 키가 유효하지 않거나 만료되었을 수 있습니다.';
-    } else if (msg.includes('timeout') || msg.includes('ETIMEDOUT') || msg.includes('ECONNABORTED')) {
-      userMessage = '응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
-    } else {
-      userMessage = '챕터 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-    }
-    console.error('[chapters/chat] 에러:', msg);
-    sseSend(res, { type: 'error', message: userMessage });
+    sseSend(res, { type: 'error', message: e.message });
     res.end();
   }
 }));

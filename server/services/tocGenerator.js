@@ -143,80 +143,12 @@ ${templateAddition}
     try {
       tocData = JSON.parse(jsonText);
     } catch (e) {
-      // 부분 JSON 복구 시도: 닫히지 않은 중괄호/대괄호를 자동으로 닫아본다
-      let recovered = false;
-      try {
-        let repaired = jsonText.trimEnd();
-        // 열린 괄호와 닫힌 괄호 카운트
-        const opens = { '{': 0, '[': 0 };
-        const closes = { '}': '{', ']': '[' };
-        for (const ch of repaired) {
-          if (ch === '{' || ch === '[') opens[ch]++;
-          if (ch === '}') opens['{']--;
-          if (ch === ']') opens['[']--;
-        }
-        // 부족한 닫는 괄호를 역순으로 추가
-        const stack = [];
-        for (const ch of repaired) {
-          if (ch === '{' || ch === '[') stack.push(ch);
-          if (ch === '}' || ch === ']') stack.pop();
-        }
-        let suffix = '';
-        while (stack.length > 0) {
-          const open = stack.pop();
-          suffix += open === '{' ? '}' : ']';
-        }
-        if (suffix) {
-          // 마지막 불완전 문자열 값 닫기 시도 (열린 따옴표)
-          const quoteCount = (repaired.match(/"/g) || []).length;
-          if (quoteCount % 2 !== 0) {
-            repaired += '"';
-          }
-          repaired += suffix;
-          tocData = JSON.parse(repaired);
-          recovered = true;
-          console.warn('⚠️ TOC JSON 부분 복구 성공: 닫히지 않은 괄호를 자동으로 닫았습니다');
-        }
-      } catch {
-        // 복구 시도도 실패
-      }
-
-      if (!recovered) {
-        const errorFile = join(this.projectPath, 'toc_generation_error.txt');
-        await writeFile(errorFile,
-          `=== Claude 원본 응답 ===\n\n${responseText}\n\n=== 추출 시도된 JSON ===\n\n${jsonText}\n\n=== 에러 ===\n\n${e.message}`,
-          'utf-8'
-        );
-        const err = new Error(`JSON 파싱 실패: ${e.message}\n원본 응답이 toc_generation_error.txt에 저장되었습니다.`);
-        err.retryable = true; // 재시도 가능 여부
-        throw err;
-      }
-    }
-
-    // TOC 스키마 검증: 필수 필드 확인 (BUG-006, BUG-018)
-    const schemaErrors = [];
-    if (!tocData.parts || !Array.isArray(tocData.parts)) {
-      schemaErrors.push('최상위 "parts" 배열이 없습니다');
-    } else {
-      tocData.parts.forEach((part, pi) => {
-        if (!part.chapters || !Array.isArray(part.chapters)) {
-          schemaErrors.push(`parts[${pi}]에 "chapters" 배열이 없습니다`);
-        } else {
-          part.chapters.forEach((ch, ci) => {
-            if (!ch.chapter_id) {
-              schemaErrors.push(`parts[${pi}].chapters[${ci}]에 "chapter_id"가 없습니다`);
-            }
-            if (!ch.title && !ch.chapter_title) {
-              schemaErrors.push(`parts[${pi}].chapters[${ci}]에 "title" 또는 "chapter_title"이 없습니다`);
-            }
-          });
-        }
-      });
-    }
-    if (schemaErrors.length > 0) {
-      const err = new Error(`TOC 스키마 검증 실패:\n- ${schemaErrors.join('\n- ')}`);
-      err.retryable = true;
-      throw err;
+      const errorFile = join(this.projectPath, 'toc_generation_error.txt');
+      await writeFile(errorFile,
+        `=== Claude 원본 응답 ===\n\n${responseText}\n\n=== 추출 시도된 JSON ===\n\n${jsonText}\n\n=== 에러 ===\n\n${e.message}`,
+        'utf-8'
+      );
+      throw new Error(`JSON 파싱 실패: ${e.message}\n원본 응답이 toc_generation_error.txt에 저장되었습니다.`);
     }
 
     tocData.generated_at = new Date().toISOString();

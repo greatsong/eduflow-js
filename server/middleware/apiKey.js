@@ -65,3 +65,11 @@ export async function requireApiKey(req, res, next) {
     return res.status(500).json({ message: 'API 키 검증 중 오류: ' + err.message });
   }
 }
+
+/**
+ * 로컬 버전: 모델 등급 제한 없음 → 통과
+ * (웹 배포판에서는 JWT tier/모델 등급을 체크하는 역할)
+ */
+export function requireModelAccess(req, res, next) {
+  next();
+}
