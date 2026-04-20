@@ -1,5 +1,19 @@
 # 에듀플로 (EduFlow JS)
 
+> ## 📢 중요 안내 — 이 리포는 `eduflow-deploy`의 LOCAL_MODE로 통합 진행 중입니다
+>
+> 기능·안정성·업데이트 속도 측면에서 한 코드베이스로 모으는 것이 더 낫다고 판단해 **`eduflow-js` → `eduflow-deploy` LOCAL_MODE 이관**을 진행하고 있어요. 기능은 동일하고, 최신 기능(이미지 생성 v2, 2축 템플릿, Astro Starlight 테마 등)은 이미 `eduflow-deploy` 쪽이 앞서 있습니다.
+>
+> - **지금 사용 중이시면** 계속 쓰셔도 됩니다. 당분간 유지보수는 이어집니다.
+> - **새로 시작하시거나 기능 업데이트를 원하시면** `eduflow-deploy`의 LOCAL_MODE로 옮겨주세요 — 설치·사용법 동일합니다.
+> - **이사 가이드**: [eduflow-deploy/LOCAL.md #eduflow-js에서 이사 오시는 분께](https://github.com/greatsong/eduflow-deploy/blob/master/LOCAL.md#eduflow-js에서-이사-오시는-분께)
+> - **데이터 호환**: `projects/` 폴더 구조가 동일해서 그대로 복사하시면 열립니다
+> - **이 리포 상태**: 2026년 하반기 중 **Archived(읽기 전용)** 전환 예정. 별도 공지드릴게요.
+>
+> 문의·어려움이 있으시면 [eduflow-deploy Issues](https://github.com/greatsong/eduflow-deploy/issues)로 남겨주세요.
+
+---
+
 **AI와 함께 교육자료를 만드는 웹 애플리케이션**
 
 주제를 입력하면 Claude AI가 교재, 강의 자료, 워크샵 교안 등을 체계적으로 만들어 줍니다.
