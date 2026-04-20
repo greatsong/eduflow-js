@@ -31,7 +31,8 @@ AI 교육자료 생성 플랫폼 **에듀플로** 로컬(교사용) 버전.
 - 신규 서비스: `starlightGenerator.js`, `starlight-cache/`, `fileLock.js`, `apiKeyPool.js`, `rateLimiter.js`, `sseManager.js`, `userStore.js`
 - `middleware/apiKey.js`에 `requireModelAccess` 스텁 추가 (로컬은 등급 제한 없음)
 - 47 파일 변경. 상세: `git log --oneline` 참조
-- `/deploy/github`는 `userStore`/GitHub OAuth 의존이라 로컬에서는 동작 안 함(의도된 제한)
+- `/deploy/github`: 토큰 획득 우선순위 = 1) JWT 유저 → `userStore` (웹 배포판) 2) `gh auth token` CLI (로컬) 3) `GITHUB_TOKEN` 환경변수 (로컬 폴백). 로컬에서도 Starlight·MkDocs 모두 GitHub Pages 배포 가능
+- 포트폴리오 업데이트(`updatePortfolioAPI`)는 `PORTFOLIO_GITHUB_TOKEN` 환경변수가 있을 때만 동작. 로컬판은 보통 미설정이라 GitHub Pages 배포는 성공하고 포트폴리오만 스킵됨 (정상 동작)
 
 ## 기술 스택
 
