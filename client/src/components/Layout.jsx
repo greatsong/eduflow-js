@@ -123,27 +123,27 @@ export default function Layout() {
 
         </nav>
 
-        {/* API 키 상태 + 설정 */}
+        {/* AI API 키 설정 */}
         <div className="px-3 py-2 border-t border-gray-200">
           <button
             onClick={() => setShowApiKeyModal(true)}
-            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors ${
-              apiKeyReady
-                ? 'text-green-700 bg-green-50 hover:bg-green-100'
-                : 'text-orange-700 bg-orange-50 hover:bg-orange-100'
-            }`}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <span className={`w-2 h-2 rounded-full ${apiKeyReady ? 'bg-green-500' : 'bg-orange-500'}`} />
-            <span className="flex-1 text-left">
-              {apiKeyReady ? 'API 키 설정됨' : 'API 키 필요'}
+            <span>🔑</span>
+            <span className="flex-1 text-left">AI API 키</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              apiKeyReady
+                ? 'bg-green-100 text-green-700'
+                : 'bg-orange-100 text-orange-700'
+            }`}>
+              {apiKeyReady ? '설정됨' : '필요'}
             </span>
-            <span className="text-gray-400">설정</span>
           </button>
         </div>
 
         {/* 하단 정보 */}
         <div className="p-4 border-t border-gray-200 text-xs text-gray-400">
-          EduFlow v0.2.0 Multi-AI
+          EduFlow v0.4.0
         </div>
       </aside>
 
