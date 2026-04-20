@@ -1,0 +1,19 @@
+{
+  "name": "eduflow-starlight-cache",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "런타임에 재사용할 Astro Starlight 공통 node_modules 캐시. 이 파일의 dependencies는 server/services/starlightGenerator.js의 buildPackageJson()과 1:1로 일치해야 한다. 버전을 변경하면 두 곳을 함께 업데이트할 것.",
+  "scripts": {
+    "build": "astro build"
+  },
+  "dependencies": {
+    "astro": "^5.6.0",
+    "@astrojs/starlight": "^0.34.0",
+    "sharp": "^0.33.0",
+    "zod": "^3.25.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

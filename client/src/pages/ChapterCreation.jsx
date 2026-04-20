@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useProjectStore } from '../stores/projectStore';
 import { apiFetch, apiStreamPost, API_BASE } from '../api/client';
+import { getAuthToken } from '../components/EntryForm';
 import ModelSelector from '../components/ModelSelector';
 
 const TABS = ['💬 대화형 모드', '🤖 배치 자동화', '✏️ 챕터 편집'];
@@ -38,7 +39,8 @@ function makeMarkdownComponents(projectName) {
   return {
     img: ({ src, alt, ...props }) => {
       if (src && src.startsWith('images/')) {
-        const apiSrc = `${API_BASE}/api/projects/${projectName}/chapters/images/${src.replace('images/', '')}`;
+        const token = getAuthToken();
+        const apiSrc = `${API_BASE}/api/projects/${projectName}/chapters/images/${src.replace('images/', '')}${token ? '?token=' + token : ''}`;
         return (
           <img
             src={apiSrc} alt={alt}
@@ -59,10 +61,10 @@ export default function ChapterCreation() {
   const [activeTab, setActiveTab] = useState(0);
   const [lightboxImg, setLightboxImg] = useState(null);
 
-  // 전역 라이트박스 열기 함수 등록 (cleanup 시 확실히 해제)
+  // 전역 라이트박스 열기 함수 등록
   useEffect(() => {
     _openLightbox = setLightboxImg;
-    return () => { _openLightbox = undefined; };
+    return () => { _openLightbox = null; };
   }, []);
 
   if (!currentProject) {
@@ -162,25 +164,10 @@ function InteractiveTab({ project }) {
   // 프로젝트 로드 시 서버에서 전체 대화 기록 로드
   useEffect(() => {
     if (!project) return;
-    // 프로젝트 변경 시 이전 타이머 정리 보장
-    clearTimeout(saveTimerRef.current);
     loadAllChatsFromServer(project.name).then((history) => {
       chatHistoryRef.current = history || {};
     });
   }, [project]);
-
-  // 미저장 변경사항이 있을 때 페이지 이탈 경고
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      // 스트리밍 중이거나 미저장 채팅이 있으면 경고
-      if (isStreaming || (selectedChapter && chatMessages.length > 0)) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isStreaming, selectedChapter, chatMessages.length]);
 
   // 대화 변경 시 서버에 디바운스 저장 (1초)
   useEffect(() => {
@@ -243,20 +230,22 @@ function InteractiveTab({ project }) {
         {
           onText: (text) => {
             setChatMessages((prev) => {
-              if (prev.length === 0) return prev;
               const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = { ...last, content: (last.content || '') + text };
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                content: updated[updated.length - 1].content + text,
+              };
               return updated;
             });
           },
           onDone: () => setIsStreaming(false),
           onError: (err) => {
             setChatMessages((prev) => {
-              if (prev.length === 0) return prev;
               const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = { ...last, content: (last.content || '') + `\n\n❌ 오류: ${err.message}` };
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                content: updated[updated.length - 1].content + `\n\n❌ 오류: ${err.message}`,
+              };
               return updated;
             });
             setIsStreaming(false);
@@ -265,10 +254,11 @@ function InteractiveTab({ project }) {
       );
     } catch (err) {
       setChatMessages((prev) => {
-        if (prev.length === 0) return prev;
         const updated = [...prev];
-        const last = updated[updated.length - 1];
-        updated[updated.length - 1] = { ...last, content: `❌ 오류: ${err.message}` };
+        updated[updated.length - 1] = {
+          ...updated[updated.length - 1],
+          content: `❌ 오류: ${err.message}`,
+        };
         return updated;
       });
       setIsStreaming(false);
@@ -287,9 +277,6 @@ function InteractiveTab({ project }) {
     const extracted = extractMarkdown(lastAssistant.content);
     if (extracted) {
       setPreviewContent(extracted);
-    } else {
-      // 마크다운 코드블록이 없으면 사용자에게 안내
-      alert('응답에서 마크다운 블록(```markdown ... ```)을 찾을 수 없습니다.\nAI에게 마크다운 코드블록으로 감싸서 작성해달라고 요청해보세요.');
     }
   };
 
@@ -485,7 +472,7 @@ function ChapterStatusIcon({ hasContent, isGenerating }) {
 // =============================================
 // 파트별 챕터 진행 상태 목록
 // =============================================
-function ChapterProgressList({ chapters, currentGenerating, status, selectedChapters, onToggleSelect, onRegenerate, onGenerateSelected, onSelectAll, onPreview }) {
+function ChapterProgressList({ chapters, currentGenerating, status, selectedChapters, onToggleSelect, onRegenerate, onSelectAll }) {
   const parts = groupChaptersByPart(chapters);
   const [collapsedParts, setCollapsedParts] = useState({});
 
@@ -565,16 +552,7 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
                         <span className={`truncate ${isGenerating ? 'text-emerald-700 font-medium' : 'text-gray-600'}`}>
                           {ch.chapter_id}: {ch.chapter_title}
                         </span>
-                        {ch.has_content && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onPreview?.(ch.chapter_id); }}
-                            className="ml-auto text-xs text-emerald-500 hover:text-emerald-700 whitespace-nowrap flex-shrink-0"
-                            title="미리보기"
-                          >
-                            👁️
-                          </button>
-                        )}
-                        {ch.estimated_time && !ch.has_content && (
+                        {ch.estimated_time && (
                           <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">{ch.estimated_time}</span>
                         )}
                       </div>
@@ -587,20 +565,14 @@ function ChapterProgressList({ chapters, currentGenerating, status, selectedChap
         })}
       </div>
 
-      {/* 선택한 챕터 생성/재생성 버튼 */}
+      {/* 선택된 챕터 재생성 버튼 */}
       {selectedCount > 0 && status !== 'running' && (
-        <div className="pt-3 mt-2 border-t border-gray-100 space-y-1.5">
-          <button
-            onClick={() => onGenerateSelected?.()}
-            className="w-full py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors"
-          >
-            ▶️ 선택한 {selectedCount}개 생성
-          </button>
+        <div className="pt-3 mt-2 border-t border-gray-100">
           <button
             onClick={onRegenerate}
-            className="w-full py-1.5 text-xs border border-amber-400 text-amber-600 rounded-lg hover:bg-amber-50 transition-colors"
+            className="w-full py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
           >
-            🔄 선택한 {selectedCount}개 재생성 (덮어쓰기)
+            🔄 선택한 {selectedCount}개 챕터 재생성
           </button>
         </div>
       )}
@@ -625,31 +597,27 @@ function BatchTab({ project, onComplete }) {
   const [selectedChapters, setSelectedChapters] = useState(new Set());
   const logEndRef = useRef(null);
   const pollRef = useRef(null);
-  const isStreamingRef = useRef(false); // SSE 스트리밍 중 폴링 동시 실행 방지
 
   // 샘플 챕터 관련 상태
   const [samplePhase, setSamplePhase] = useState('select'); // select, generating, review
   const [sampleChapterId, setSampleChapterId] = useState('');
   const [sampleContent, setSampleContent] = useState('');
   const [sampleTokens, setSampleTokens] = useState(null);
+  const [sampleProgress, setSampleProgress] = useState('');
+  const [sampleElapsed, setSampleElapsed] = useState(0);
   const [guidelines, setGuidelines] = useState('');
   const [guidelinesSaved, setGuidelinesSaved] = useState(true);
   const [showSample, setShowSample] = useState(true);
   const [models, setModels] = useState([]);
 
-  // 실시간 미리보기: 완료된 챕터 내용 표시
-  const [previewChapterId, setPreviewChapterId] = useState(null);
-  const [previewContent, setPreviewContent] = useState('');
-  const [previewLoading, setPreviewLoading] = useState(false);
-
   // 기본 모델 + 모델 목록 로드
   useEffect(() => {
     apiFetch('/api/models/default/generation')
       .then((r) => setModel(r.modelId))
-      .catch((err) => console.error('기본 생성 모델 로드 실패', err));
+      .catch(() => {});
     apiFetch('/api/models')
       .then((r) => setModels(r.models || []))
-      .catch((err) => console.error('모델 목록 로드 실패', err));
+      .catch(() => {});
   }, []);
 
   const loadChapters = useCallback(async () => {
@@ -663,53 +631,56 @@ function BatchTab({ project, onComplete }) {
 
   useEffect(() => { loadChapters(); }, [loadChapters]);
 
-  // 완료된 챕터 내용 자동 로드 (실시간 미리보기)
-  const loadChapterPreview = useCallback(async (chapterId) => {
-    if (!project) return;
-    setPreviewChapterId(chapterId);
-    setPreviewLoading(true);
-    try {
-      const data = await apiFetch(`/api/projects/${project.name}/chapters/${chapterId}`);
-      setPreviewContent(data.content || '');
-    } catch {
-      setPreviewContent('⚠️ 챕터 내용을 불러올 수 없습니다.');
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [project]);
-
   // 가이드라인 로드
   useEffect(() => {
     if (!project) return;
     apiFetch(`/api/projects/${project.name}/toc/guidelines`)
       .then((r) => { setGuidelines(r.guidelines || ''); setGuidelinesSaved(true); })
-      .catch((err) => console.error('콘텐츠 가이드라인 로드 실패', err));
+      .catch(() => {});
   }, [project]);
 
-  // 샘플 챕터 생성
+  // 샘플 챕터 생성 (SSE 진행 스트리밍)
   const handleGenerateSample = async () => {
     if (!sampleChapterId) return;
     setSamplePhase('generating');
     setSampleContent('');
     setSampleTokens(null);
+    setSampleProgress('🔬 생성 준비 중...');
+    setSampleElapsed(0);
+    const startTs = Date.now();
+    const elapsedTimer = setInterval(() => {
+      setSampleElapsed(Math.floor((Date.now() - startTs) / 1000));
+    }, 1000);
+
     try {
-      const result = await apiFetch(`/api/projects/${project.name}/chapters/${sampleChapterId}/generate`, {
-        method: 'POST',
-        body: { model, maxTokens },
-      });
-      if (result.success) {
+      let finalResult = null;
+      await apiStreamPost(
+        `/api/projects/${project.name}/chapters/${sampleChapterId}/generate`,
+        { model, maxTokens },
+        {
+          onProgress: (data) => {
+            if (data.message) setSampleProgress(data.message);
+          },
+          onDone: (data) => { finalResult = data?.result || null; },
+          onError: (err) => { throw err; },
+        }
+      );
+
+      if (finalResult?.success) {
         const data = await apiFetch(`/api/projects/${project.name}/chapters/${sampleChapterId}`);
         setSampleContent(data.content || '');
-        setSampleTokens({ input: result.input_tokens || 0, output: result.output_tokens || 0 });
+        setSampleTokens({ input: finalResult.input_tokens || 0, output: finalResult.output_tokens || 0 });
         setSamplePhase('review');
         loadChapters();
       } else {
-        setSampleContent(`❌ 생성 실패: ${result.message}`);
+        setSampleContent(`❌ 생성 실패: ${finalResult?.error || finalResult?.message || '알 수 없는 오류'}`);
         setSamplePhase('review');
       }
     } catch (err) {
       setSampleContent(`❌ 오류: ${err.message}`);
       setSamplePhase('review');
+    } finally {
+      clearInterval(elapsedTimer);
     }
   };
 
@@ -750,7 +721,7 @@ function BatchTab({ project, onComplete }) {
       if (genStatus.status === 'running') {
         setStatus('running');
         setLogs(genStatus.logs || []);
-        setCurrentGenerating(() => new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
+        setCurrentGenerating(new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
         startPolling();
       } else if (genStatus.status === 'completed' || genStatus.status === 'cancelled') {
         if (genStatus.logs?.length > 0) setLogs(genStatus.logs);
@@ -761,21 +732,17 @@ function BatchTab({ project, onComplete }) {
   };
 
   const startPolling = () => {
-    // SSE 스트리밍 중이면 폴링을 시작하지 않음
-    if (isStreamingRef.current) return;
     stopPolling();
     pollRef.current = setInterval(async () => {
-      // 폴링 중 SSE가 시작되었으면 폴링 중단
-      if (isStreamingRef.current) { stopPolling(); return; }
       try {
         const genStatus = await apiFetch(`/api/projects/${project.name}/chapters/generation-status`);
         setLogs(genStatus.logs || []);
-        setCurrentGenerating(() => new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
+        setCurrentGenerating(new Set(genStatus.current_chapters || (genStatus.current_chapter ? [genStatus.current_chapter] : [])));
 
         if (genStatus.status === 'completed' || genStatus.status === 'cancelled' || genStatus.status === 'failed') {
           setStatus(genStatus.status === 'failed' ? 'idle' : genStatus.status);
           if (genStatus.report) setReport(genStatus.report);
-          setCurrentGenerating(() => new Set());
+          setCurrentGenerating(new Set());
           loadChapters();
           onComplete?.();
           stopPolling();
@@ -792,9 +759,7 @@ function BatchTab({ project, onComplete }) {
     setStatus('running');
     setLogs([]);
     setReport(null);
-    setCurrentGenerating(() => new Set());
-    isStreamingRef.current = true;
-    stopPolling(); // SSE 시작 전 기존 폴링 정리
+    setCurrentGenerating(new Set());
 
     try {
       await apiStreamPost(
@@ -803,7 +768,7 @@ function BatchTab({ project, onComplete }) {
         {
           onProgress: (data) => {
             setLogs((prev) => [...prev, data.message]);
-            // SSE progress 메시지에서 현재 챕터 추가/제거 (함수형 업데이트)
+            // SSE progress 메시지에서 현재 챕터 추가/제거
             const startMatch = data.message?.match(/📖\s+(chapter\d+)\s+생성 시작/);
             if (startMatch) {
               setCurrentGenerating((prev) => new Set([...prev, startMatch[1]]));
@@ -814,7 +779,6 @@ function BatchTab({ project, onComplete }) {
               setChapters((prev) => prev.map((ch) =>
                 ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
               ));
-              loadChapterPreview(doneMatch[1]); // 완료된 챕터 실시간 미리보기
             }
             const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
             if (failMatch) {
@@ -822,25 +786,22 @@ function BatchTab({ project, onComplete }) {
             }
           },
           onDone: (data) => {
-            isStreamingRef.current = false;
             if (data?.report) setReport(data.report);
             const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
             setStatus(finalStatus);
-            setCurrentGenerating(() => new Set());
+            setCurrentGenerating(new Set());
             loadChapters();
             onComplete?.();
           },
           onError: (err) => {
-            isStreamingRef.current = false;
             setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
             setStatus('idle');
-            setCurrentGenerating(() => new Set());
+            setCurrentGenerating(new Set());
           },
         }
       );
     } catch (err) {
       // SSE 연결 끊어짐 → 폴링으로 전환
-      isStreamingRef.current = false;
       setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
       startPolling();
     }
@@ -856,9 +817,8 @@ function BatchTab({ project, onComplete }) {
       setTimeout(() => {
         setStatus((prev) => {
           if (prev === 'running') {
-            isStreamingRef.current = false;
             stopPolling();
-            setCurrentGenerating(() => new Set());
+            setCurrentGenerating(new Set());
             loadChapters();
             return 'cancelled';
           }
@@ -868,9 +828,8 @@ function BatchTab({ project, onComplete }) {
     } catch (err) {
       setLogs((prev) => [...prev, `❌ 취소 실패: ${err.message}`]);
       // 취소 API 실패해도 UI는 풀어줌
-      isStreamingRef.current = false;
       setStatus('cancelled');
-      setCurrentGenerating(() => new Set());
+      setCurrentGenerating(new Set());
       stopPolling();
     }
   };
@@ -892,67 +851,6 @@ function BatchTab({ project, onComplete }) {
     }
   };
 
-  // 선택한 챕터만 생성 (미완료만 — 이미 있는 것은 건너뜀)
-  const handleGenerateSelected = async () => {
-    if (selectedChapters.size === 0) return;
-    const ids = [...selectedChapters];
-    setSelectedChapters(new Set());
-    setStatus('running');
-    setLogs([]);
-    setReport(null);
-    setCurrentGenerating(() => new Set());
-    isStreamingRef.current = true;
-    stopPolling();
-
-    try {
-      await apiStreamPost(
-        `/api/projects/${project.name}/chapters/generate-all`,
-        { model, maxTokens, concurrent, skipCompleted: true, tpmLimit, chapterIds: ids },
-        {
-          onProgress: (data) => {
-            setLogs((prev) => [...prev, data.message]);
-            const startMatch = data.message?.match(/📖\s+(chapter\d+)\s+생성 시작/);
-            if (startMatch) {
-              setCurrentGenerating((prev) => new Set([...prev, startMatch[1]]));
-            }
-            const doneMatch = data.message?.match(/✅\s+(chapter\d+)\s+(?:완료|재시도 완료)/);
-            if (doneMatch) {
-              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(doneMatch[1]); return next; });
-              setChapters((prev) => prev.map((ch) =>
-                ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
-              ));
-              loadChapterPreview(doneMatch[1]); // 완료된 챕터 실시간 미리보기
-            }
-            const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
-            if (failMatch) {
-              setCurrentGenerating((prev) => { const next = new Set(prev); next.delete(failMatch[1]); return next; });
-            }
-          },
-          onDone: (data) => {
-            isStreamingRef.current = false;
-            if (data?.report) setReport(data.report);
-            const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
-            setStatus(finalStatus);
-            setCurrentGenerating(() => new Set());
-            loadChapters();
-            onComplete?.();
-          },
-          onError: (err) => {
-            isStreamingRef.current = false;
-            setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
-            setStatus('idle');
-            setCurrentGenerating(() => new Set());
-          },
-        }
-      );
-    } catch (err) {
-      isStreamingRef.current = false;
-      setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
-      startPolling();
-    }
-  };
-
-  // 선택한 챕터 재생성 (기존 내용 덮어쓰기)
   const handleRegenerateSelected = async () => {
     if (selectedChapters.size === 0) return;
     const ids = [...selectedChapters];
@@ -960,9 +858,7 @@ function BatchTab({ project, onComplete }) {
     setStatus('running');
     setLogs([]);
     setReport(null);
-    setCurrentGenerating(() => new Set());
-    isStreamingRef.current = true;
-    stopPolling(); // SSE 시작 전 기존 폴링 정리
+    setCurrentGenerating(new Set());
 
     try {
       await apiStreamPost(
@@ -981,7 +877,6 @@ function BatchTab({ project, onComplete }) {
               setChapters((prev) => prev.map((ch) =>
                 ch.chapter_id === doneMatch[1] ? { ...ch, has_content: true } : ch
               ));
-              loadChapterPreview(doneMatch[1]); // 완료된 챕터 실시간 미리보기
             }
             const failMatch = data.message?.match(/❌\s+(chapter\d+)\s+/);
             if (failMatch) {
@@ -989,24 +884,21 @@ function BatchTab({ project, onComplete }) {
             }
           },
           onDone: (data) => {
-            isStreamingRef.current = false;
             if (data?.report) setReport(data.report);
             const finalStatus = data?.report?.was_cancelled ? 'cancelled' : 'completed';
             setStatus(finalStatus);
-            setCurrentGenerating(() => new Set());
+            setCurrentGenerating(new Set());
             loadChapters();
             onComplete?.();
           },
           onError: (err) => {
-            isStreamingRef.current = false;
             setLogs((prev) => [...prev, `❌ 오류: ${err.message}`]);
             setStatus('idle');
-            setCurrentGenerating(() => new Set());
+            setCurrentGenerating(new Set());
           },
         }
       );
     } catch (err) {
-      isStreamingRef.current = false;
       setLogs((prev) => [...prev, `⚠️ 연결이 끊어졌습니다. 서버 상태를 확인합니다...`]);
       startPolling();
     }
@@ -1098,11 +990,15 @@ function BatchTab({ project, onComplete }) {
 
                   {/* 샘플 결과 미리보기 */}
                   {samplePhase === 'generating' && (
-                    <div className="flex-1 flex items-center justify-center py-12 border border-gray-200 rounded-lg bg-gray-50">
-                      <div className="text-center">
+                    <div className="flex-1 flex items-center justify-center py-8 border border-gray-200 rounded-lg bg-gray-50">
+                      <div className="text-center w-full px-6">
                         <div className="animate-spin text-3xl mb-3">🔬</div>
-                        <p className="text-sm text-gray-500">샘플 챕터를 생성하고 있습니다...</p>
-                        <p className="text-xs text-gray-400 mt-1">모델: {model}</p>
+                        <p className="text-sm font-medium text-gray-700 mb-2 break-words">
+                          {sampleProgress || '샘플 챕터를 생성하고 있습니다...'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          모델: {model} · 경과: {Math.floor(sampleElapsed / 60)}분 {sampleElapsed % 60}초
+                        </p>
                       </div>
                     </div>
                   )}
@@ -1349,9 +1245,7 @@ function BatchTab({ project, onComplete }) {
                   selectedChapters={selectedChapters}
                   onToggleSelect={handleToggleSelect}
                   onRegenerate={handleRegenerateSelected}
-                  onGenerateSelected={handleGenerateSelected}
                   onSelectAll={handleSelectAll}
-                  onPreview={loadChapterPreview}
                 />
               </div>
             </>
@@ -1359,47 +1253,13 @@ function BatchTab({ project, onComplete }) {
         </div>
       </div>
 
-      {/* 로그 + 실시간 미리보기 (좌우 분할) */}
+      {/* 로그 */}
       {logs.length > 0 && (
-        <div className={`flex gap-4 ${previewContent ? 'flex-[3] min-h-[400px]' : 'flex-[2] min-h-[300px]'}`}>
-          {/* 로그 패널 */}
-          <div className={`bg-gray-900 rounded-xl p-4 overflow-y-auto font-mono text-sm leading-relaxed text-gray-300 ${previewContent ? 'w-2/5' : 'w-full'}`}>
-            {logs.map((log, i) => (
-              <div key={i} className="py-0.5">{log}</div>
-            ))}
-            <div ref={logEndRef} />
-          </div>
-
-          {/* 실시간 미리보기 패널 */}
-          {previewContent && (
-            <div className="w-3/5 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900">📄 생성된 챕터 미리보기</span>
-                  {previewChapterId && (
-                    <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">
-                      {previewChapterId}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => { setPreviewContent(''); setPreviewChapterId(null); }}
-                  className="text-xs text-gray-400 hover:text-gray-600"
-                >
-                  ✕ 닫기
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 prose prose-sm max-w-none">
-                {previewLoading ? (
-                  <div className="flex items-center justify-center h-32 text-gray-400">
-                    <span className="animate-spin mr-2">⏳</span> 내용 불러오는 중...
-                  </div>
-                ) : (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{previewContent}</ReactMarkdown>
-                )}
-              </div>
-            </div>
-          )}
+        <div className="flex-[2] min-h-[300px] bg-gray-900 rounded-xl p-4 overflow-y-auto font-mono text-sm leading-relaxed text-gray-300">
+          {logs.map((log, i) => (
+            <div key={i} className="py-0.5">{log}</div>
+          ))}
+          <div ref={logEndRef} />
         </div>
       )}
 
@@ -1582,18 +1442,6 @@ function EditorTab({ project }) {
   };
 
   const hasChanges = content !== savedContent;
-
-  // 미저장 변경사항이 있을 때 페이지 이탈 경고
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
 
   if (chapters.length === 0) {
     return (

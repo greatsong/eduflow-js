@@ -95,7 +95,7 @@ export const TIER_CONFIG = {
 
 // Pro 이상에서만 사용 가능한 프리미엄 모델 tier (model_config.json의 tier 값)
 export const PREMIUM_MODEL_TIERS = [
-  '최고 품질',        // claude-opus-4-7
+  '최고 품질',        // claude-opus-4-7, claude-opus-4-6
   '프리미엄 추론',     // gpt-5.4-pro
   '최신 최고급 추론',  // gemini-3.1-pro-preview
 ];

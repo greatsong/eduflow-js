@@ -52,19 +52,42 @@ export default function TableOfContents() {
   useEffect(() => {
     apiFetch('/api/models/default/chapter_generation')
       .then((r) => setModel(r.modelId))
-      .catch((err) => console.error('기본 챕터 생성 모델 로드 실패', err));
+      .catch(() => {});
   }, []);
 
-  // 프로젝트 변경 시 TOC 로드
+  // 프로젝트 변경 시 TOC 로드 (sessionStorage 캐시 사용)
   useEffect(() => {
     if (!currentProject) return;
+    const sessionKey = `toc_${currentProject.name}`;
     apiFetch(`/api/projects/${currentProject.name}/toc`)
       .then((d) => {
-        setToc(d.toc);
-        if (d.toc) setEditJson(JSON.stringify(d.toc, null, 2));
+        if (d.toc) {
+          setToc(d.toc);
+          setEditJson(JSON.stringify(d.toc, null, 2));
+          sessionStorage.setItem(sessionKey, JSON.stringify(d.toc));
+        } else {
+          // 서버에 없으면 sessionStorage 복원 시도
+          const cached = sessionStorage.getItem(sessionKey);
+          if (cached) {
+            try { const t = JSON.parse(cached); setToc(t); setEditJson(JSON.stringify(t, null, 2)); } catch {}
+          }
+        }
       })
-      .catch(() => setToc(null));
+      .catch(() => {
+        const cached = sessionStorage.getItem(sessionKey);
+        if (cached) {
+          try { const t = JSON.parse(cached); setToc(t); setEditJson(JSON.stringify(t, null, 2)); } catch {}
+        } else {
+          setToc(null);
+        }
+      });
   }, [currentProject]);
+
+  // TOC 변경 시 sessionStorage에 저장
+  useEffect(() => {
+    if (!currentProject || !toc) return;
+    sessionStorage.setItem(`toc_${currentProject.name}`, JSON.stringify(toc));
+  }, [toc, currentProject]);
 
   // 목차 자동 생성
   const handleGenerate = async () => {
@@ -78,14 +101,15 @@ export default function TableOfContents() {
         { model },
         {
           onText: (text) => setStreamText((prev) => prev + text),
+          onToc: (tocData) => {
+            // 스트림에서 직접 TOC 수신 (재요청 불필요)
+            setToc(tocData);
+            setEditJson(JSON.stringify(tocData, null, 2));
+          },
           onDone: () => {
             setGenerating(false);
+            setStreamText(''); // 스트림 로그 숨겨서 TOC가 바로 보이도록
             refreshProgress();
-            apiFetch(`/api/projects/${currentProject.name}/toc`)
-              .then((d) => {
-                setToc(d.toc);
-                if (d.toc) setEditJson(JSON.stringify(d.toc, null, 2));
-              });
           },
           onError: (e) => {
             setStreamText((prev) => prev + `\n\n❌ 오류: ${e.message}`);
@@ -127,8 +151,8 @@ export default function TableOfContents() {
     );
   }
 
-  const totalChapters = toc?.parts
-    ? toc.parts.reduce((sum, p) => sum + (p.chapters?.length || 0), 0)
+  const totalChapters = toc
+    ? (toc.parts || []).reduce((sum, p) => sum + (p.chapters || []).length, 0)
     : 0;
 
   return (
@@ -152,7 +176,7 @@ export default function TableOfContents() {
           onClick={() => setActiveTab('generate')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'generate'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-emerald-600 text-emerald-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -162,7 +186,7 @@ export default function TableOfContents() {
           onClick={() => setActiveTab('visual')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'visual'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-emerald-600 text-emerald-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -172,7 +196,7 @@ export default function TableOfContents() {
           onClick={() => setActiveTab('edit')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'edit'
-              ? 'border-blue-600 text-blue-600'
+              ? 'border-emerald-600 text-emerald-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -229,7 +253,7 @@ function GenerateTab({ toc, totalChapters, generating, streamText, onGenerate })
         <button
           onClick={onGenerate}
           disabled={generating}
-          className="w-full py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="w-full py-3 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
         >
           {generating ? '목차 생성 중...' : toc ? '🔄 목차 재생성' : '🚀 목차 자동 생성'}
         </button>
@@ -251,7 +275,7 @@ function GenerateTab({ toc, totalChapters, generating, streamText, onGenerate })
             <p className="text-sm"><span className="font-medium text-gray-700">제목:</span> {toc.title || '-'}</p>
             <p className="text-sm"><span className="font-medium text-gray-700">대상:</span> {toc.target_audience || '-'}</p>
             <p className="text-sm"><span className="font-medium text-gray-700">설명:</span> {toc.description || '-'}</p>
-            <p className="text-sm text-blue-600 font-medium">
+            <p className="text-sm text-emerald-600 font-medium">
               총 {(toc.parts || []).length}개 Part, {totalChapters}개 Chapter
             </p>
           </div>
@@ -298,7 +322,7 @@ function ChapterItem({ chapter }) {
   const [showDetail, setShowDetail] = useState(false);
 
   return (
-    <div className="border-l-2 border-blue-200 pl-3">
+    <div className="border-l-2 border-emerald-200 pl-3">
       <div
         className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded px-2 py-1"
         onClick={() => setShowDetail(!showDetail)}
@@ -309,7 +333,7 @@ function ChapterItem({ chapter }) {
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs text-gray-500">{chapter.estimated_time || '-'}</span>
           {estimatedVolume(chapter.estimated_time) && (
-            <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+            <span className="text-xs bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">
               ({estimatedVolume(chapter.estimated_time)})
             </span>
           )}
@@ -349,7 +373,6 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
 
   // 깊은 복사 후 상태 업데이트
   const updateToc = (updater) => {
-    if (!toc) return;
     const newToc = JSON.parse(JSON.stringify(toc));
     updater(newToc);
     setToc(newToc);
@@ -374,7 +397,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
 
   // Part 삭제
   const deletePart = (partIdx) => {
-    if (!confirm(`Part ${toc?.parts?.[partIdx]?.part_number ?? partIdx + 1}를 삭제하시겠습니까?`)) return;
+    if (!confirm(`Part ${toc.parts[partIdx].part_number}를 삭제하시겠습니까?`)) return;
     updateToc((t) => {
       t.parts.splice(partIdx, 1);
       // part_number 재정렬
@@ -430,8 +453,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
   // Chapter 순서 변경
   const moveChapter = (partIdx, chIdx, direction) => {
     const newIdx = chIdx + direction;
-    const chapters = toc?.parts?.[partIdx]?.chapters;
-    if (!chapters || newIdx < 0 || newIdx >= chapters.length) return;
+    if (newIdx < 0 || newIdx >= toc.parts[partIdx].chapters.length) return;
     updateToc((t) => {
       const chapters = t.parts[partIdx].chapters;
       [chapters[chIdx], chapters[newIdx]] = [chapters[newIdx], chapters[chIdx]];
@@ -491,7 +513,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
               type="text"
               value={toc.title || ''}
               onChange={(e) => updateToc((t) => { t.title = e.target.value; })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
           <div>
@@ -500,7 +522,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
               type="text"
               value={toc.target_audience || ''}
               onChange={(e) => updateToc((t) => { t.target_audience = e.target.value; })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
         </div>
@@ -510,7 +532,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
             type="text"
             value={toc.description || ''}
             onChange={(e) => updateToc((t) => { t.description = e.target.value; })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
           />
         </div>
       </div>
@@ -539,7 +561,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
       <div className="flex gap-3">
         <button
           onClick={addPart}
-          className="flex-1 py-2.5 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg text-sm font-medium hover:border-blue-400 hover:text-blue-600 transition-colors"
+          className="flex-1 py-2.5 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg text-sm font-medium hover:border-emerald-400 hover:text-emerald-600 transition-colors"
         >
           + 새 Part 추가
         </button>
@@ -548,7 +570,7 @@ function VisualEditTab({ toc, setToc, setEditJson, currentProject }) {
           className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             saveStatus === 'saved'
               ? 'bg-green-600 text-white'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-emerald-600 text-white hover:bg-emerald-700'
           }`}
         >
           {saveStatus === 'saving' ? '저장 중...' : saveStatus === 'saved' ? '저장 완료!' : '💾 저장'}
@@ -576,12 +598,12 @@ function VisualPartCard({
         >
           {expanded ? '▼' : '▶'}
         </button>
-        <span className="text-sm font-bold text-blue-600 shrink-0">Part {part.part_number}</span>
+        <span className="text-sm font-bold text-emerald-600 shrink-0">Part {part.part_number}</span>
         <input
           type="text"
           value={part.part_title}
           onChange={(e) => onUpdateTitle(e.target.value)}
-          className="flex-1 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none text-sm font-medium text-gray-900 px-1 py-0.5"
+          className="flex-1 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-500 focus:outline-none text-sm font-medium text-gray-900 px-1 py-0.5"
         />
         <button
           onClick={onDeletePart}
@@ -600,7 +622,7 @@ function VisualPartCard({
             value={part.part_description || ''}
             onChange={(e) => onUpdateDesc(e.target.value)}
             placeholder="파트 설명..."
-            className="w-full text-xs text-gray-500 italic border border-transparent hover:border-gray-300 focus:border-blue-500 rounded px-2 py-1 focus:outline-none"
+            className="w-full text-xs text-gray-500 italic border border-transparent hover:border-gray-300 focus:border-emerald-500 rounded px-2 py-1 focus:outline-none"
           />
 
           {/* Chapters */}
@@ -622,7 +644,7 @@ function VisualPartCard({
           {/* Chapter 추가 */}
           <button
             onClick={onAddChapter}
-            className="w-full py-2 border border-dashed border-gray-300 text-gray-400 rounded-lg text-xs hover:border-blue-400 hover:text-blue-500 transition-colors"
+            className="w-full py-2 border border-dashed border-gray-300 text-gray-400 rounded-lg text-xs hover:border-emerald-400 hover:text-emerald-500 transition-colors"
           >
             + 챕터 추가
           </button>
@@ -649,7 +671,7 @@ function VisualChapterItem({
           <button
             onClick={() => onMoveChapter(-1)}
             disabled={chIdx === 0}
-            className="text-gray-400 hover:text-blue-600 disabled:opacity-30 text-xs leading-none"
+            className="text-gray-400 hover:text-emerald-600 disabled:opacity-30 text-xs leading-none"
             title="위로 이동"
           >
             ▲
@@ -657,7 +679,7 @@ function VisualChapterItem({
           <button
             onClick={() => onMoveChapter(1)}
             disabled={chIdx === totalChapters - 1}
-            className="text-gray-400 hover:text-blue-600 disabled:opacity-30 text-xs leading-none"
+            className="text-gray-400 hover:text-emerald-600 disabled:opacity-30 text-xs leading-none"
             title="아래로 이동"
           >
             ▼
@@ -670,19 +692,19 @@ function VisualChapterItem({
           type="text"
           value={chapter.chapter_title}
           onChange={(e) => onUpdateChapter('chapter_title', e.target.value)}
-          className="flex-1 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none text-sm text-gray-800 px-1"
+          className="flex-1 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-500 focus:outline-none text-sm text-gray-800 px-1"
         />
 
         <input
           type="text"
           value={chapter.estimated_time || ''}
           onChange={(e) => onUpdateChapter('estimated_time', e.target.value)}
-          className="w-20 text-xs text-center bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          className="w-20 text-xs text-center bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
           placeholder="시간"
         />
 
         {volume && (
-          <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded shrink-0">
+          <span className="text-xs bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded shrink-0">
             ({volume})
           </span>
         )}
@@ -716,7 +738,7 @@ function VisualChapterItem({
                   type="text"
                   value={obj}
                   onChange={(e) => onUpdateObjective(objIdx, e.target.value)}
-                  className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                  className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
                 <button
                   onClick={() => onDeleteObjective(objIdx)}
@@ -728,7 +750,7 @@ function VisualChapterItem({
             ))}
             <button
               onClick={onAddObjective}
-              className="text-xs text-blue-500 hover:text-blue-700 mt-1"
+              className="text-xs text-emerald-500 hover:text-emerald-700 mt-1"
             >
               + 목표 추가
             </button>
@@ -741,7 +763,7 @@ function VisualChapterItem({
               value={chapter.outline || ''}
               onChange={(e) => onUpdateChapter('outline', e.target.value)}
               rows={2}
-              className="w-full text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none resize-none"
+              className="w-full text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-emerald-500 focus:outline-none resize-none"
               placeholder="챕터 개요..."
             />
           </div>
@@ -767,7 +789,7 @@ function EditTab({ editJson, setEditJson, editError, onSave, hasToc }) {
       <textarea
         value={editJson}
         onChange={(e) => setEditJson(e.target.value)}
-        className="w-full h-[500px] font-mono text-xs border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="w-full h-[500px] font-mono text-xs border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
         spellCheck={false}
       />
 
@@ -778,7 +800,7 @@ function EditTab({ editJson, setEditJson, editError, onSave, hasToc }) {
       <div className="flex gap-3">
         <button
           onClick={onSave}
-          className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          className="flex-1 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
         >
           💾 저장
         </button>

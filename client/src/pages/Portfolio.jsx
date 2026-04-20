@@ -185,14 +185,20 @@ export default function Portfolio() {
   const [detailProject, setDetailProject] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
+  const [error, setError] = useState(null);
+
   const fetchData = () => {
     setLoading(true);
+    setError(null);
     apiFetch('/api/portfolio')
       .then((d) => {
         setProjects(d.projects);
         setStats(d.stats);
       })
-      .catch((err) => console.error('포트폴리오 목록 로드 실패', err))
+      .catch((e) => {
+        console.error('[Portfolio] 로딩 실패:', e.message);
+        setError(e.message);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -231,6 +237,21 @@ export default function Portfolio() {
     return (
       <div className="text-center py-16">
         <p className="text-gray-400">포트폴리오 로딩 중...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-red-500 mb-2">포트폴리오를 불러오지 못했습니다</p>
+        <p className="text-sm text-gray-400 mb-4">{error}</p>
+        <button
+          onClick={fetchData}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+        >
+          다시 시도
+        </button>
       </div>
     );
   }

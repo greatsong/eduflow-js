@@ -5,26 +5,26 @@ import { apiFetch, getApiKey } from '../api/client';
 
 const RELEASE_NOTES = [
   {
-    version: 'v0.4.0',
-    date: '2026-03-28',
-    highlights: '2축 템플릿 · AI 이미지 · 평가 단계 · 대화 저장',
+    version: 'v0.5.1',
+    date: '2026-04-20',
+    highlights: 'AI 이미지 생성 제거 · 품질·비용 정리',
     sections: [
+      {
+        title: 'AI 이미지 자동 생성 기능 제거',
+        icon: '🗑️',
+        items: [
+          '어색한 결과물과 누적 API 비용 문제로 전면 제거',
+          '기존 업로드 이미지 렌더링·라이트박스는 그대로 유지',
+          'Mermaid 다이어그램과 회로도는 계속 사용 가능',
+        ],
+      },
       {
         title: '2축 템플릿 시스템',
         icon: '🎯',
         items: [
           '교과 영역(WHAT) 7종 × 교육 모델(HOW) 6종 조합',
-          '기능 옵션 7종 자유 선택 (코드, 수식, Mermaid, 이미지 등)',
+          '기능 옵션 자유 선택 (코드, 수식, Mermaid 등)',
           '교과별 최적화 프롬프트 자동 적용',
-        ],
-      },
-      {
-        title: 'AI 이미지 생성',
-        icon: '🖼️',
-        items: [
-          'Gemini API로 교육용 일러스트 자동 생성',
-          '이미지 갤러리 + 라이트박스 + 재생성',
-          '이미지 컨셉 가이드로 스타일 통일',
         ],
       },
       {
@@ -45,19 +45,10 @@ const RELEASE_NOTES = [
         ],
       },
       {
-        title: 'MkDocs 교재 개선',
-        icon: '📖',
-        items: [
-          '사이드바 접기 토글 (상태 기억)',
-          '이전/다음 챕터 카드형 네비게이션',
-          '발행인·검토자·발행일 메타데이터',
-        ],
-      },
-      {
         title: '분량 제어 · 안정성',
         icon: '🔧',
         items: [
-          'TOC 과다 생성 방지 (6차시→20차시 현상 차단)',
+          'TOC 과다 생성 방지',
           '챕터 잘림 방지 안전 버퍼',
           '권(Volume) → Part+Chapter 구조 통일',
           '프로젝트 설정 저장 안정성 개선',
@@ -172,7 +163,7 @@ export default function Home() {
             { step: 2, icon: '📋', title: '목차 작성', desc: '체계적 구조 자동 생성', color: 'from-green-500 to-green-600' },
             { step: 3, icon: '✅', title: '피드백', desc: '목차 검토 및 확정', color: 'from-teal-500 to-teal-600' },
             { step: 4, icon: '✍️', title: '챕터 제작', desc: '배치/개별 자동 작성', color: 'from-cyan-500 to-cyan-600' },
-            { step: 5, icon: '🚀', title: '배포', desc: 'MkDocs · DOCX · 웹', color: 'from-sky-500 to-sky-600' },
+            { step: 5, icon: '🚀', title: '배포', desc: '웹사이트 · DOCX · GitHub Pages', color: 'from-sky-500 to-sky-600' },
             { step: 6, icon: '📊', title: '포트폴리오', desc: '완성된 교재 모아보기', color: 'from-violet-500 to-violet-600' },
           ].map((item) => (
             <div key={item.step} className="group relative overflow-hidden bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-default">
@@ -222,7 +213,7 @@ export default function Home() {
             <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-5 border border-teal-100">
               <span className="text-2xl mb-2 block">🌐</span>
               <h3 className="font-bold text-gray-900 text-sm mb-1">원클릭 웹 배포</h3>
-              <p className="text-xs text-gray-600 leading-relaxed">MkDocs + GitHub Pages로 교재 사이트를 즉시 배포. 교사 컴퓨터에만 머무르지 않습니다.</p>
+              <p className="text-xs text-gray-600 leading-relaxed">Astro Starlight + GitHub Pages로 교재 사이트를 즉시 배포. 교사 컴퓨터에만 머무르지 않습니다.</p>
             </div>
           </div>
         </div>
@@ -354,7 +345,7 @@ function MultiAIBanner() {
         setServerP(d.serverProviders || {});
         setApiMode(d.apiMode || 'user');
       })
-      .catch((err) => console.error('인증 상태 로드 실패', err));
+      .catch(() => {});
   }, []);
 
   const providerStatus = PROVIDER_INFO.map((p) => {

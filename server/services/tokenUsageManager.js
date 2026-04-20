@@ -102,9 +102,10 @@ export class TokenUsageManager {
       const dateStr = now.toISOString().split('T')[0]; // 2026-03-12
       const monthStr = dateStr.slice(0, 7);             // 2026-03
 
-      // mkdir 완료를 await로 보장한 뒤 appendFile 호출 (BUG-024)
       const monthDir = join(this.baseDir, monthStr);
-      await mkdir(monthDir, { recursive: true });
+      if (!existsSync(monthDir)) {
+        await mkdir(monthDir, { recursive: true });
+      }
 
       const record = {
         ts: now.toISOString(),
@@ -124,8 +125,7 @@ export class TokenUsageManager {
       const filePath = join(monthDir, `${dateStr}.jsonl`);
       await appendFile(filePath, JSON.stringify(record) + '\n', 'utf-8');
     } catch (err) {
-      // 기록 실패 시 경고만 남기고 AI 응답에 영향 없도록 처리
-      console.warn('[TokenUsage] 기록 실패:', err.message);
+      console.error('[TokenUsage] 기록 실패:', err.message);
     }
   }
 

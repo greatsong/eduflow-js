@@ -1,46 +1,60 @@
-// EduFlow - Mermaid 다이어그램 테마 동기화
-// MkDocs Material 테마 색상에 맞춰 Mermaid 다이어그램 색상을 동기화합니다.
+// EduFlow - Mermaid 다이어그램 세련된 테마
+// MkDocs Material 테마와 조화로운 모던 다이어그램 스타일
 document.addEventListener('DOMContentLoaded', function() {
   if (typeof mermaid === 'undefined') return;
 
-  var root = getComputedStyle(document.documentElement);
   var isDark = document.documentElement.getAttribute('data-md-color-scheme') === 'slate';
-
-  function getCSSVar(name) {
-    return root.getPropertyValue(name).trim() || null;
-  }
-
-  var primaryColor = getCSSVar('--ef-primary') || '#4f46e5';
-  var primaryDark = getCSSVar('--ef-primary-dark') || '#4338ca';
-  var primaryText = getCSSVar('--ef-primary-text') || '#312e81';
-  var primaryLight = getCSSVar('--ef-primary-light') || '#eef2ff';
-  var primaryBorder = getCSSVar('--ef-primary-border') || '#c7d2fe';
-  var accent = getCSSVar('--ef-accent') || '#7c3aed';
 
   mermaid.initialize({
     startOnLoad: true,
-    theme: isDark ? 'dark' : 'default',
-    themeVariables: {
-      primaryColor: primaryLight,
-      primaryBorderColor: primaryBorder,
-      primaryTextColor: primaryText,
-      lineColor: primaryBorder,
-      secondaryColor: '#f0fdf4',
-      secondaryBorderColor: '#86efac',
-      secondaryTextColor: '#166534',
-      tertiaryColor: '#fff7ed',
-      tertiaryBorderColor: '#fdba74',
-      tertiaryTextColor: '#9a3412',
-      noteBkgColor: primaryLight,
-      noteTextColor: primaryText,
-      noteBorderColor: primaryBorder,
-      fontFamily: '"Noto Sans KR", sans-serif',
+    theme: 'base',
+    themeVariables: isDark ? {
+      primaryColor: '#1e293b',
+      primaryBorderColor: '#60a5fa',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#475569',
+      secondaryColor: '#1e3a5f',
+      secondaryBorderColor: '#38bdf8',
+      secondaryTextColor: '#bae6fd',
+      tertiaryColor: '#1c1917',
+      tertiaryBorderColor: '#a78bfa',
+      tertiaryTextColor: '#ddd6fe',
+      noteBkgColor: '#1e293b',
+      noteTextColor: '#e2e8f0',
+      noteBorderColor: '#475569',
+      fontFamily: '"Noto Sans KR", system-ui, sans-serif',
       fontSize: '14px',
+      nodeBorder: '2px',
+      mainBkg: '#1e293b',
+      clusterBkg: '#0f172a',
+    } : {
+      primaryColor: '#eff6ff',
+      primaryBorderColor: '#3b82f6',
+      primaryTextColor: '#1e3a5f',
+      lineColor: '#94a3b8',
+      secondaryColor: '#f0fdf4',
+      secondaryBorderColor: '#22c55e',
+      secondaryTextColor: '#166534',
+      tertiaryColor: '#faf5ff',
+      tertiaryBorderColor: '#a78bfa',
+      tertiaryTextColor: '#5b21b6',
+      noteBkgColor: '#f8fafc',
+      noteTextColor: '#334155',
+      noteBorderColor: '#cbd5e1',
+      fontFamily: '"Noto Sans KR", system-ui, sans-serif',
+      fontSize: '14px',
+      nodeBorder: '2px',
+      mainBkg: '#eff6ff',
     },
     flowchart: {
       useMaxWidth: true,
       htmlLabels: true,
       curve: 'basis',
+      padding: 15,
+    },
+    mindmap: {
+      useMaxWidth: true,
+      padding: 20,
     },
     sequence: {
       useMaxWidth: true,
@@ -51,12 +65,8 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // 다크모드 전환 시 Mermaid 재렌더링
-  var observer = new MutationObserver(function(mutations) {
-    mutations.forEach(function(mutation) {
-      if (mutation.attributeName === 'data-md-color-scheme') {
-        location.reload();
-      }
-    });
+  var observer = new MutationObserver(function() {
+    location.reload();
   });
 
   observer.observe(document.documentElement, {

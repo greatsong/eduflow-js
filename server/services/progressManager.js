@@ -1,6 +1,7 @@
-import { readFile, writeFile, rename } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { withLock } from './fileLock.js';
 
 export class ProgressManager {
   constructor(projectPath) {
@@ -13,20 +14,7 @@ export class ProgressManager {
       return this._initProgress();
     }
     const raw = await readFile(this.progressFile, 'utf-8');
-    try {
-      return JSON.parse(raw);
-    } catch (e) {
-      // JSON 파싱 실패 시: 손상된 파일 백업 후 기본값 반환 (BUG-012)
-      console.warn(`[ProgressManager] progress.json 파싱 실패, 백업 후 초기화: ${e.message}`);
-      const backupPath = this.progressFile + `.corrupt.${Date.now()}`;
-      try {
-        await rename(this.progressFile, backupPath);
-        console.warn(`[ProgressManager] 손상된 파일 백업: ${backupPath}`);
-      } catch (renameErr) {
-        console.warn(`[ProgressManager] 백업 파일 생성 실패: ${renameErr.message}`);
-      }
-      return this._initProgress();
-    }
+    return JSON.parse(raw);
   }
 
   _initProgress() {
@@ -45,27 +33,37 @@ export class ProgressManager {
     await writeFile(this.progressFile, JSON.stringify(progress, null, 2), 'utf-8');
   }
 
+  /** 읽기→수정→쓰기 전체를 뮤텍스로 감싸는 헬퍼 */
+  async _updateProgress(mutator) {
+    return withLock(this.progressFile, async () => {
+      const progress = await this._loadProgress();
+      mutator(progress);
+      await this._saveProgress(progress);
+      return progress;
+    });
+  }
+
   // 단계별 상태 관리
 
   async markStep1Completed() {
-    const progress = await this._loadProgress();
-    progress.step1_completed = true;
-    progress.step1_completed_at = new Date().toISOString();
-    await this._saveProgress(progress);
+    await this._updateProgress(p => {
+      p.step1_completed = true;
+      p.step1_completed_at = new Date().toISOString();
+    });
   }
 
   async markStep2Completed() {
-    const progress = await this._loadProgress();
-    progress.step2_completed = true;
-    progress.step2_completed_at = new Date().toISOString();
-    await this._saveProgress(progress);
+    await this._updateProgress(p => {
+      p.step2_completed = true;
+      p.step2_completed_at = new Date().toISOString();
+    });
   }
 
   async markStep3Confirmed() {
-    const progress = await this._loadProgress();
-    progress.step3_confirmed = true;
-    progress.step3_confirmed_at = new Date().toISOString();
-    await this._saveProgress(progress);
+    await this._updateProgress(p => {
+      p.step3_confirmed = true;
+      p.step3_confirmed_at = new Date().toISOString();
+    });
   }
 
   async isStep1Completed() {
@@ -86,24 +84,24 @@ export class ProgressManager {
   // 챕터 상태 관리
 
   async markChapterCompleted(chapterId) {
-    const progress = await this._loadProgress();
-    if (!progress.chapters) progress.chapters = {};
-    progress.chapters[chapterId] = {
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-    };
-    await this._saveProgress(progress);
+    await this._updateProgress(p => {
+      if (!p.chapters) p.chapters = {};
+      p.chapters[chapterId] = {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      };
+    });
   }
 
   async markChapterInProgress(chapterId) {
-    const progress = await this._loadProgress();
-    if (!progress.chapters) progress.chapters = {};
-    if (progress.chapters[chapterId]?.status === 'completed') return;
-    progress.chapters[chapterId] = {
-      status: 'in_progress',
-      started_at: new Date().toISOString(),
-    };
-    await this._saveProgress(progress);
+    await this._updateProgress(p => {
+      if (!p.chapters) p.chapters = {};
+      if (p.chapters[chapterId]?.status === 'completed') return;
+      p.chapters[chapterId] = {
+        status: 'in_progress',
+        started_at: new Date().toISOString(),
+      };
+    });
   }
 
   async getChapterStatus(chapterId) {

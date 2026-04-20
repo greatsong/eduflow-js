@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { requireApiKey } from '../middleware/apiKey.js';
+import { requireApiKey, requireModelAccess } from '../middleware/apiKey.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { streamChat, chat, detectProvider, resolveApiKey } from '../services/aiProvider.js';
 import { TokenUsageManager } from '../services/tokenUsageManager.js';
+import { registerSSE } from '../services/sseManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
@@ -17,7 +18,7 @@ const router = Router();
  * 여러 모델에 동일한 프롬프트를 보내고 결과를 SSE로 스트리밍
  * body: { models: ["claude-sonnet-4-6", "gpt-5.1"], prompt: "...", systemPrompt?: "..." }
  */
-router.post('/', requireApiKey,  asyncHandler(async (req, res) => {
+router.post('/', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { models, prompt, systemPrompt } = req.body;
 
   if (!models || !Array.isArray(models) || models.length < 2) {
@@ -29,6 +30,9 @@ router.post('/', requireApiKey,  asyncHandler(async (req, res) => {
   if (!prompt?.trim()) {
     return res.status(400).json({ message: '프롬프트를 입력해주세요.' });
   }
+
+  const sse = registerSSE(req, res);
+  if (!sse.ok) return res.status(429).json({ message: '동시 SSE 연결이 너무 많습니다.' });
 
   // SSE 설정
   res.writeHead(200, {
@@ -105,7 +109,7 @@ router.post('/', requireApiKey,  asyncHandler(async (req, res) => {
  * body: { models: [...], prompt: "...", judgeModel: "claude-sonnet-4-6" }
  * SSE: generate → evaluate → rank
  */
-router.post('/auto-evaluate', requireApiKey,  asyncHandler(async (req, res) => {
+router.post('/auto-evaluate', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { models, prompt, judgeModel = 'claude-sonnet-4-6' } = req.body;
 
   if (!models || !Array.isArray(models) || models.length < 2) {
@@ -114,6 +118,9 @@ router.post('/auto-evaluate', requireApiKey,  asyncHandler(async (req, res) => {
   if (!prompt?.trim()) {
     return res.status(400).json({ message: '프롬프트를 입력해주세요.' });
   }
+
+  const sse2 = registerSSE(req, res);
+  if (!sse2.ok) return res.status(429).json({ message: '동시 SSE 연결이 너무 많습니다.' });
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -263,21 +270,10 @@ ${responsesText}
       keySource: req.headers[`x-${judgeProvider}-key`] ? 'user' : 'server',
     });
 
-    // BUG-005: JSON 파싱 시도 — jsonMatch null 및 파싱 실패 방어
+    // JSON 파싱 시도
     const jsonMatch = evaluateText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      let evaluation;
-      try {
-        evaluation = JSON.parse(jsonMatch[0]);
-      } catch (parseErr) {
-        // JSON 파싱 실패 시 안전하게 에러 전달
-        console.error('[compare/auto-evaluate] JSON 파싱 실패:', parseErr.message);
-        send({ type: 'evaluate-error', message: 'AI 평가 결과 JSON을 파싱할 수 없습니다.' });
-        send({ type: 'done' });
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
+      const evaluation = JSON.parse(jsonMatch[0]);
 
       // 라벨을 실제 모델 ID로 변환
       const result = {

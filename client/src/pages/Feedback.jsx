@@ -5,6 +5,47 @@ import { useChatStore } from '../stores/chatStore';
 import { apiFetch, apiStreamPost } from '../api/client';
 import ChatInterface from '../components/ChatInterface';
 
+// 가이드라인 프리셋 목록
+const GUIDELINE_PRESETS = [
+  { id: 'formal', label: '격식체(~입니다) 사용' },
+  { id: 'casual', label: '구어체(~해요) 사용' },
+  { id: 'code_include', label: '코드 블록 포함' },
+  { id: 'code_exclude', label: '코드 블록 금지' },
+  { id: 'mermaid', label: 'Mermaid 다이어그램 사용' },
+  { id: 'real_life', label: '실생활 사례 포함' },
+  { id: 'humor', label: '유머/위트 포함' },
+  { id: 'academic', label: '학술적 톤 유지' },
+];
+
+// 저장된 가이드라인 문자열에서 프리셋 체크 상태와 자유 텍스트를 분리
+function parseGuidelines(guidelinesStr) {
+  if (!guidelinesStr) return { checked: new Set(), freeText: '' };
+  const lines = guidelinesStr.split('\n');
+  const checked = new Set();
+  const freeLines = [];
+  for (const line of lines) {
+    const trimmed = line.replace(/^-\s*/, '').trim();
+    const preset = GUIDELINE_PRESETS.find((p) => p.label === trimmed);
+    if (preset) {
+      checked.add(preset.id);
+    } else if (trimmed) {
+      freeLines.push(line);
+    }
+  }
+  return { checked, freeText: freeLines.join('\n') };
+}
+
+// 프리셋 체크 상태 + 자유 텍스트 → 가이드라인 문자열
+function buildGuidelines(checkedIds, freeText) {
+  const presetLines = GUIDELINE_PRESETS
+    .filter((p) => checkedIds.has(p.id))
+    .map((p) => `- ${p.label}`);
+  const parts = [];
+  if (presetLines.length > 0) parts.push(presetLines.join('\n'));
+  if (freeText.trim()) parts.push(freeText.trim());
+  return parts.join('\n');
+}
+
 // AI 응답에서 json:toc-update 코드블록 감지
 function extractTocUpdate(text) {
   const match = text.match(/```json:toc-update\s*([\s\S]*?)```/);
@@ -39,13 +80,15 @@ export default function Feedback() {
   const [guidelines, setGuidelines] = useState('');
   const [guidelinesSaved, setGuidelinesSaved] = useState(true);
   const [showGuidelines, setShowGuidelines] = useState(false);
+  const [checkedPresets, setCheckedPresets] = useState(new Set());
+  const [freeText, setFreeText] = useState('');
 
   // 모델 목록 로드
   useEffect(() => {
     apiFetch('/api/models').then((d) => {
       setModels(d.models);
       apiFetch('/api/models/default/conversation').then((r) => setModel(r.modelId));
-    }).catch((err) => console.error('모델 목록 로드 실패', err));
+    }).catch(() => {});
   }, []);
 
   // TOC는 페이지 방문할 때마다 최신으로 로드 (Step 2에서 재생성 반영)
@@ -53,21 +96,20 @@ export default function Feedback() {
     if (!currentProject) return;
     apiFetch(`/api/projects/${currentProject.name}/toc`)
       .then((d) => setToc(d.toc))
-      .catch(() => {
-        setToc(null);
-        console.error('목차 로드 실패');
-      });
+      .catch(() => setToc(null));
     apiFetch(`/api/projects/${currentProject.name}/progress`)
       .then((d) => setConfirmed(d.step3_confirmed || false))
-      .catch(() => {
-        setConfirmed(false);
-        console.error('확인 상태 로드 실패');
-      });
+      .catch(() => setConfirmed(false));
     apiFetch(`/api/projects/${currentProject.name}/toc/guidelines`)
-      .then((d) => { setGuidelines(d.guidelines || ''); setGuidelinesSaved(true); })
-      .catch(() => {
-        console.error('가이드라인 로드 실패');
-      });
+      .then((d) => {
+        const g = d.guidelines || '';
+        setGuidelines(g);
+        const parsed = parseGuidelines(g);
+        setCheckedPresets(parsed.checked);
+        setFreeText(parsed.freeText);
+        setGuidelinesSaved(true);
+      })
+      .catch(() => {});
   }, [currentProject]);
 
   // 대화는 프로젝트 변경 시에만 로드 (채팅 상태 유지)
@@ -115,6 +157,30 @@ export default function Feedback() {
     clearMessages();
   };
 
+  // 챕터 필드(제목·시간 등) 인라인 수정
+  const handleUpdateChapterField = async (partIdx, chIdx, field, newValue) => {
+    if (!currentProject || !toc) return;
+    const newToc = {
+      ...toc,
+      parts: toc.parts.map((p, pi) => pi !== partIdx ? p : {
+        ...p,
+        chapters: p.chapters.map((c, ci) => ci !== chIdx ? c : { ...c, [field]: newValue }),
+      }),
+    };
+    setToc(newToc); // 낙관적 갱신
+    try {
+      await apiFetch(`/api/projects/${currentProject.name}/toc`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toc: newToc }),
+      });
+    } catch (e) {
+      alert(`저장 실패: ${e.message}`);
+      // 실패 시 서버 값으로 복원
+      apiFetch(`/api/projects/${currentProject.name}/toc`).then((d) => setToc(d.toc)).catch(() => {});
+    }
+  };
+
   // AI 응답에서 목차 수정 적용
   const handleApplyTocUpdate = async (tocData, msgIdx) => {
     if (!currentProject || applyingToc) return;
@@ -135,15 +201,38 @@ export default function Feedback() {
     }
   };
 
+  // 프리셋 체크 토글
+  const togglePreset = (presetId) => {
+    setCheckedPresets((prev) => {
+      const next = new Set(prev);
+      if (next.has(presetId)) next.delete(presetId);
+      else next.add(presetId);
+      const combined = buildGuidelines(next, freeText);
+      setGuidelines(combined);
+      setGuidelinesSaved(false);
+      return next;
+    });
+  };
+
+  // 자유 텍스트 변경
+  const handleFreeTextChange = (value) => {
+    setFreeText(value);
+    const combined = buildGuidelines(checkedPresets, value);
+    setGuidelines(combined);
+    setGuidelinesSaved(false);
+  };
+
   // 가이드라인 저장
   const handleSaveGuidelines = async () => {
     if (!currentProject) return;
+    const combined = buildGuidelines(checkedPresets, freeText);
     try {
       await apiFetch(`/api/projects/${currentProject.name}/toc/guidelines`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guidelines }),
+        body: JSON.stringify({ guidelines: combined }),
       });
+      setGuidelines(combined);
       setGuidelinesSaved(true);
     } catch (e) {
       alert(`저장 실패: ${e.message}`);
@@ -200,9 +289,9 @@ export default function Feedback() {
       </div>
 
       {/* 메인: 채팅 + 목차 */}
-      <div className="flex-1 flex gap-6 min-h-0">
+      <div className="flex-1 flex gap-6 min-h-0 min-w-0">
         {/* 채팅 영역 (1/2) */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex-1 min-w-0 flex flex-col min-h-0 bg-white rounded-xl border border-gray-200 p-4">
           <ChatInterface
             messages={messages}
             isStreaming={isStreaming}
@@ -216,19 +305,19 @@ export default function Feedback() {
               if (!tocUpdate) return null;
               const applied = tocAppliedMsgIdx.has(idx);
               return (
-                <div className={`mt-2 p-3 rounded-lg border ${applied ? 'bg-green-50 border-green-200' : 'bg-indigo-50 border-indigo-200'}`}>
+                <div className={`mt-2 p-3 rounded-lg border ${applied ? 'bg-green-50 border-green-200' : 'bg-emerald-50 border-emerald-200'}`}>
                   {applied ? (
                     <p className="text-sm text-green-700 font-medium">✅ 수정된 목차가 적용되었습니다!</p>
                   ) : (
                     <div className="flex items-center gap-3">
-                      <p className="text-sm text-indigo-700 flex-1">
+                      <p className="text-sm text-emerald-700 flex-1">
                         📋 AI가 수정된 목차를 제안했습니다 ({tocUpdate.parts?.length || 0}개 Part,{' '}
                         {(tocUpdate.parts || []).reduce((s, p) => s + (p.chapters || []).length, 0)}개 Chapter)
                       </p>
                       <button
                         onClick={() => handleApplyTocUpdate(tocUpdate, idx)}
                         disabled={applyingToc}
-                        className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                        className="px-4 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors whitespace-nowrap"
                       >
                         {applyingToc ? '적용 중...' : '✏️ 목차에 적용'}
                       </button>
@@ -241,7 +330,7 @@ export default function Feedback() {
         </div>
 
         {/* 목차 + 확정 영역 (1/2) */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex-1 min-w-0 flex flex-col min-h-0 bg-white rounded-xl border border-gray-200 p-4">
           <h3 className="font-semibold text-gray-900 mb-3">📋 현재 목차</h3>
 
           {/* 목차 표시 */}
@@ -256,16 +345,43 @@ export default function Feedback() {
 
             <hr className="border-gray-200" />
 
-            {(toc.parts || []).map((part) => (
+            {(toc.parts || []).map((part, pi) => (
               <div key={part.part_number} className="space-y-1">
                 <p className="font-medium text-gray-900 text-sm">
                   📚 Part {part.part_number}: {part.part_title}
                 </p>
                 <p className="text-xs text-gray-500 italic">{part.part_description}</p>
-                {(part.chapters || []).map((ch) => (
-                  <div key={ch.chapter_id} className="ml-4 text-sm text-gray-700 flex justify-between">
-                    <span>{ch.chapter_id}: {ch.chapter_title}</span>
-                    <span className="text-xs text-gray-400">{ch.estimated_time}</span>
+                {(part.chapters || []).map((ch, ci) => (
+                  <div key={ch.chapter_id} className="ml-4 text-sm text-gray-700 flex items-center gap-2">
+                    <span className="text-gray-400 shrink-0">{ch.chapter_id}:</span>
+                    <input
+                      type="text"
+                      defaultValue={ch.chapter_title || ''}
+                      placeholder="챕터 제목"
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v && v !== (ch.chapter_title || '')) handleUpdateChapterField(pi, ci, 'chapter_title', v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                      }}
+                      className="flex-1 min-w-0 text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+                      title="제목을 수정하고 Enter 또는 포커스 이동 시 저장됩니다"
+                    />
+                    <input
+                      type="text"
+                      defaultValue={ch.estimated_time || ''}
+                      placeholder="예: 50분"
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v !== (ch.estimated_time || '')) handleUpdateChapterField(pi, ci, 'estimated_time', v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                      }}
+                      className="w-20 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 text-right focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+                      title="시간을 수정하고 Enter 또는 포커스 이동 시 저장됩니다"
+                    />
                   </div>
                 ))}
               </div>
@@ -276,33 +392,61 @@ export default function Feedback() {
           <div className="border-t border-gray-200 pt-3 mb-3">
             <button
               onClick={() => setShowGuidelines(!showGuidelines)}
-              className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+              className="flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-800 transition-colors"
             >
               <span>{showGuidelines ? '▼' : '▶'}</span>
               <span>📝 콘텐츠 생성 가이드라인</span>
-              {guidelines.trim() && <span className="text-xs text-indigo-400">(작성됨)</span>}
+              {guidelines.trim() && <span className="text-xs text-emerald-400">(작성됨)</span>}
             </button>
             {showGuidelines && (
-              <div className="mt-2 space-y-2">
+              <div className="mt-2 space-y-3">
                 <p className="text-xs text-gray-500">
-                  챕터 생성 시 AI가 참고할 지침을 작성하세요. (예: 톤, 에피소드, 금지 사항 등)
+                  챕터 생성 시 AI가 참고할 지침을 설정하세요.
                 </p>
-                <textarea
-                  value={guidelines}
-                  onChange={(e) => { setGuidelines(e.target.value); setGuidelinesSaved(false); }}
-                  placeholder="예시:&#10;- 교양과학 베스트셀러 톤으로 작성&#10;- 각 챕터마다 재미있는 에피소드 포함&#10;- 코드 블록 사용 금지&#10;- 힌튼-불 가문 연결고리 언급"
-                  className="w-full h-28 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
+
+                {/* 프리셋 체크박스 */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  {GUIDELINE_PRESETS.map((preset) => (
+                    <label
+                      key={preset.id}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors text-xs ${
+                        checkedPresets.has(preset.id)
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                          : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checkedPresets.has(preset.id)}
+                        onChange={() => togglePreset(preset.id)}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>{preset.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {/* 자유 텍스트 */}
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">추가 지침 (자유 입력)</p>
+                  <textarea
+                    value={freeText}
+                    onChange={(e) => handleFreeTextChange(e.target.value)}
+                    placeholder="예시:&#10;- 교양과학 베스트셀러 톤으로 작성&#10;- 각 챕터마다 재미있는 에피소드 포함&#10;- 힌튼-불 가문 연결고리 언급"
+                    className="w-full h-20 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+
                 <button
                   onClick={handleSaveGuidelines}
                   disabled={guidelinesSaved}
                   className={`w-full py-2 text-sm font-medium rounded-lg transition-colors ${
                     guidelinesSaved
                       ? 'bg-gray-100 text-gray-400 cursor-default'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
                   }`}
                 >
-                  {guidelinesSaved ? '✅ 저장됨' : '💾 가이드라인 저장'}
+                  {guidelinesSaved ? '저장됨' : '가이드라인 저장'}
                 </button>
               </div>
             )}

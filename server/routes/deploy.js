@@ -7,6 +7,13 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { Deployment } from '../services/deployment.js';
 import { COLOR_THEMES, DEFAULT_THEME_KEY } from '../services/starlightGenerator.js';
 import { sanitizeId, sanitizeFilename } from '../middleware/sanitize.js';
+import { withLock } from '../services/fileLock.js';
+
+// 빌드 중복·동시성 제어 (shared-cpu 보호)
+// - activeBuilds: 같은 프로젝트 중복 빌드 즉시 거절
+// - withLock('__build__'): 전역 직렬화로 동시에 한 건만 실행
+const activeBuilds = new Set();
+const BUILD_LOCK_KEY = '__global_build_lock__';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = process.env.PROJECTS_DIR || join(__dirname, '..', '..', 'projects');
@@ -40,6 +47,8 @@ router.get('/status', asyncHandler(async (req, res) => {
   const tools = await dep.checkTools();
   const chapters = await dep.getChapterFiles();
   const hasMkdocsYml = existsSync(join(projectPath(req.params.id), 'mkdocs.yml'));
+  const siteReady = existsSync(join(projectPath(req.params.id), 'site', 'index.html'));
+  const isBuilding = activeBuilds.has(req.params.id);
 
   let ghUser = null;
   if (tools.gh) {
@@ -56,31 +65,44 @@ router.get('/status', asyncHandler(async (req, res) => {
     } catch { /* ignore */ }
   }
 
+  // 저장된 빌드 테마 복원 (기본 starlight)
+  let buildTheme = 'starlight';
+  const cfgPath = join(projectPath(req.params.id), 'config.json');
+  if (existsSync(cfgPath)) {
+    try {
+      const cfg = JSON.parse(await readFile(cfgPath, 'utf-8'));
+      if (cfg.deployment?.theme === 'mkdocs' || cfg.deployment?.theme === 'starlight') {
+        buildTheme = cfg.deployment.theme;
+      }
+    } catch { /* ignore */ }
+  }
+
   res.json({
     tools,
     chapterCount: chapters.length,
     hasMkdocsYml,
+    siteReady,
+    isBuilding,
     ghUser,
     deploymentInfo,
+    buildTheme,
   });
 }));
 
-// POST /api/projects/:id/deploy/mkdocs/config - MkDocs 설정 생성
+// POST /api/projects/:id/deploy/mkdocs/config - 사이트 설정 생성 + 빌드 테마 저장
 router.post('/mkdocs/config', asyncHandler(async (req, res) => {
-  const { siteName, theme, colorTheme, creator, publishing, repoUrl } = req.body;
+  const { siteName, theme, colorTheme, creator, publishing, repoUrl, buildTheme } = req.body;
   const dep = new Deployment(projectPath(req.params.id));
   await dep.init();
 
   // config.json에서 publishing 정보 로드 (요청에 없으면)
+  const configFile = join(projectPath(req.params.id), 'config.json');
   let pubInfo = publishing || null;
-  if (!pubInfo) {
-    const configFile = join(projectPath(req.params.id), 'config.json');
-    if (existsSync(configFile)) {
-      try {
-        const config = JSON.parse(await readFile(configFile, 'utf-8'));
-        pubInfo = config.publishing || null;
-      } catch { /* skip */ }
-    }
+  if (!pubInfo && existsSync(configFile)) {
+    try {
+      const config = JSON.parse(await readFile(configFile, 'utf-8'));
+      pubInfo = config.publishing || null;
+    } catch { /* skip */ }
   }
 
   const result = await dep.generateMkdocsConfig(
@@ -91,6 +113,23 @@ router.post('/mkdocs/config', asyncHandler(async (req, res) => {
     pubInfo,
     repoUrl || null
   );
+
+  // 사용자가 선택한 빌드 테마(starlight/mkdocs)와 색상 테마를 config.json에 저장
+  // → /mkdocs/build, 미리보기 자동빌드가 이 값을 참조
+  if (result.success && existsSync(configFile)) {
+    try {
+      const cfg = JSON.parse(await readFile(configFile, 'utf-8'));
+      cfg.deployment = { ...(cfg.deployment || {}) };
+      if (buildTheme === 'starlight' || buildTheme === 'mkdocs') {
+        cfg.deployment.theme = buildTheme;
+      }
+      if (colorTheme) cfg.deployment.color_theme = colorTheme;
+      cfg.updated_at = new Date().toISOString();
+      const { writeFile } = await import('fs/promises');
+      await writeFile(configFile, JSON.stringify(cfg, null, 2), 'utf-8');
+    } catch { /* 저장 실패는 빌드에 영향 없음 */ }
+  }
+
   res.json(result);
 }));
 
@@ -113,14 +152,23 @@ router.post('/mkdocs/build', asyncHandler(async (req, res) => {
     basePath,
   } = req.body || {};
 
-  const dep = new Deployment(projectPath(req.params.id));
+  const projectId = req.params.id;
+
+  // 같은 프로젝트 중복 빌드 거절 (연타·다중 탭 방어)
+  if (activeBuilds.has(projectId)) {
+    return res.status(409).json({
+      message: '이 프로젝트는 이미 배포 빌드 중입니다. 완료 후 다시 시도해주세요.',
+    });
+  }
+
+  const dep = new Deployment(projectPath(projectId));
   await dep.init();
 
   // theme/colorTheme 기본값: 프로젝트 config.json의 deployment.* → 기본값
   let effectiveTheme = theme;
   let effectiveColorTheme = colorTheme;
   try {
-    const cfgPath = join(projectPath(req.params.id), 'config.json');
+    const cfgPath = join(projectPath(projectId), 'config.json');
     if (existsSync(cfgPath)) {
       const cfg = JSON.parse(await readFile(cfgPath, 'utf-8'));
       effectiveTheme = effectiveTheme || cfg.deployment?.theme || 'starlight';
@@ -130,16 +178,22 @@ router.post('/mkdocs/build', asyncHandler(async (req, res) => {
   effectiveTheme = effectiveTheme || 'starlight';
   effectiveColorTheme = effectiveColorTheme || 'sky';
 
-  const result = await dep.buildWebsite({
-    theme: effectiveTheme,
-    siteName,
-    creator,
-    colorTheme: effectiveColorTheme,
-    accentColor,
-    siteUrl,
-    basePath,
-  });
-  res.json(result);
+  activeBuilds.add(projectId);
+  try {
+    // 전역 직렬화: shared-cpu 환경에서 동시 npm install·astro build 폭발 방지
+    const result = await withLock(BUILD_LOCK_KEY, () => dep.buildWebsite({
+      theme: effectiveTheme,
+      siteName,
+      creator,
+      colorTheme: effectiveColorTheme,
+      accentColor,
+      siteUrl,
+      basePath,
+    }));
+    res.json(result);
+  } finally {
+    activeBuilds.delete(projectId);
+  }
 }));
 
 // POST /api/projects/:id/deploy/mkdocs/serve - 로컬 프리뷰

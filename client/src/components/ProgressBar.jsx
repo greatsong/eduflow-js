@@ -28,7 +28,7 @@ export default function ProgressBar() {
                     completed
                       ? 'bg-green-500 text-white'
                       : i === currentIdx
-                      ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                      ? 'bg-emerald-600 text-white ring-4 ring-emerald-100'
                       : 'bg-gray-200 text-gray-500'
                   }`}
                 >
@@ -37,7 +37,7 @@ export default function ProgressBar() {
                 <span
                   className={`text-xs mt-1 ${
                     i === currentIdx
-                      ? 'text-blue-600 font-medium'
+                      ? 'text-emerald-600 font-medium'
                       : completed
                       ? 'text-green-600'
                       : 'text-gray-400'
