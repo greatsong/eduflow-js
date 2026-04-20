@@ -13,18 +13,25 @@ AI 교육자료 생성 플랫폼 **에듀플로** 로컬(교사용) 버전.
 > **중요**: 주 개발은 `eduflow-deploy`에서 진행. 이 프로젝트는 동기화 대상.
 
 ### 이 프로젝트에 없는 기능 (Deploy 전용)
-- Google 로그인 / EntryForm (개인정보 동의)
-- 관리자 대시보드 (Admin.jsx)
-- requireAuth 미들웨어 / JWT 인증
-- 서버 API 키 제공 (apiMode: 'server')
-- UserStore / 사용자 관리
+- Google 로그인 / EntryForm 실제 UI (로컬은 `components/EntryForm.jsx`에 스텁만 둠 → `getUserInfo`/`getAuthToken`/`clearUserInfo`가 null 반환)
+- 관리자 대시보드 (Admin.jsx는 로컬 전용 버전 유지, deploy의 Admin과 별개)
+- requireAuth / requireApproved 미들웨어 / JWT 인증
+- 서버 API 키 제공 모드(`apiMode: 'server'`)의 승인·등급 로직
+- `useAdminCheck` 훅은 로컬용 스텁(항상 `false`)
 
 ### 동기화가 필요한 변경사항
-- 템플릿 (`templates/*.json`)
+- 템플릿 (`templates/**/*.json`)
 - AI 프롬프트 (discussions.js, toc.js, chapters.js의 system prompt)
-- 서비스 로직 (conversationManager, tocGenerator, chapterGenerator 등)
+- 서비스 로직 (conversationManager, tocGenerator, chapterGenerator, deployment, starlightGenerator 등)
 - 모델 설정 (model_config.json, 기본 모델명)
 - UI 개선 (Layout, ChatInterface, 각 페이지 컴포넌트)
+
+### 최근 대형 동기화 (2026-04-21)
+`eduflow-deploy` → 로컬 대규모 동기화. Starlight 빌드 스택 이식 + 다수 서비스·페이지 최신화.
+- 신규 서비스: `starlightGenerator.js`, `starlight-cache/`, `fileLock.js`, `apiKeyPool.js`, `rateLimiter.js`, `sseManager.js`, `userStore.js`
+- `middleware/apiKey.js`에 `requireModelAccess` 스텁 추가 (로컬은 등급 제한 없음)
+- 47 파일 변경. 상세: `git log --oneline` 참조
+- `/deploy/github`는 `userStore`/GitHub OAuth 의존이라 로컬에서는 동작 안 함(의도된 제한)
 
 ## 기술 스택
 
@@ -70,13 +77,20 @@ eduflow/
 ├── server/
 │   ├── index.js                     # Express (인증 없음)
 │   ├── routes/                      # models, projects, discussions, toc, chapters, deploy, portfolio, compare
-│   ├── services/                    # aiProvider, conversationManager, tocGenerator 등
-│   └── middleware/                  # apiKey.js, errorHandler.js
+│   ├── services/
+│   │   ├── aiProvider.js, conversationManager.js, tocGenerator.js, chapterGenerator.js
+│   │   ├── deployment.js            # MkDocs + Starlight 빌드 디스패처
+│   │   ├── starlightGenerator.js    # Astro Starlight 프로젝트 생성
+│   │   ├── starlight-cache/         # Astro/@astrojs/starlight 공용 node_modules 캐시
+│   │   ├── fileLock.js              # 빌드 전역 직렬화 락
+│   │   ├── apiKeyPool.js, rateLimiter.js, sseManager.js, userStore.js
+│   │   └── docxGenerator.js, settings.js, referenceManager.js, tokenUsageManager.js, progressManager.js, templateManager.js
+│   └── middleware/                  # apiKey.js (requireApiKey + requireModelAccess 스텁), errorHandler.js, sanitize.js
 │
-├── shared/constants.js
-├── templates/                       # 교육 템플릿 6종
+├── shared/constants.js              # STEPS, CHAPTER_STATUS, TIER_CONFIG 등
+├── templates/what/, templates/how/  # 2축 교육 템플릿
 ├── model_config.json
-├── .env                             # ANTHROPIC_API_KEY
+├── .env                             # ANTHROPIC_API_KEY 등
 └── package.json
 ```
 
@@ -106,3 +120,16 @@ cd /Users/greatsong/greatsong-project/eduflow
 npm run build  # 빌드 확인
 npm run dev    # 개발 서버
 ```
+
+## Starlight 빌드
+
+Step 5 "웹사이트 설정"에서 **Starlight / MkDocs 토글** 가능.
+- 기본값: `starlight`
+- 선택값은 `projects/<project>/config.json`의 `deployment.theme`에 저장
+- 빌드·미리보기·GitHub Pages 재배포가 모두 이 값을 참조
+
+Starlight 첫 빌드가 오래 걸리면 공용 캐시를 워밍업:
+```bash
+cd server/services/starlight-cache && npm install
+```
+`starlight-cache/package.json`의 의존성은 `starlightGenerator.js`의 `buildPackageJson()`과 **반드시 동일 버전**으로 유지해야 함.

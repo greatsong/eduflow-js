@@ -199,6 +199,28 @@ npm run dev
 - **📊 포트폴리오**: 완성된 교재 모아보기 및 통계
 - **⚖️ AI 모델 비교**: 블라인드 테스트, 공개 비교, AI 자동 평가
 
+### 웹사이트 빌드 방식 (Step 5)
+
+Step 5 "배포 관리"의 "웹사이트 설정"에서 **두 가지 빌드 방식** 중 선택할 수 있습니다.
+
+| 방식 | 소요 시간 | 디자인 | 추천 상황 |
+|------|-----------|--------|----------|
+| **Astro Starlight** (기본) | 첫 빌드 3~6분<br/>이후 30초~2분 | 최신·반응형·다크모드 | 완성도 높은 교재 배포 |
+| **MkDocs Material** | 10~30초 | 클래식·문서 느낌 | 빠른 반복 작업, 프리뷰 확인용 |
+
+> 선택값은 프로젝트 `config.json`에 저장되어 빌드·미리보기·GitHub Pages 배포 모두 자동으로 따라갑니다.
+
+**Starlight 첫 빌드가 오래 걸린다면** — 공용 캐시를 미리 워밍업할 수 있습니다(선택 사항):
+
+```bash
+cd server/services/starlight-cache
+npm install
+```
+
+이렇게 하면 이후 모든 Starlight 빌드에서 `npm install` 단계가 생략됩니다.
+
+> MkDocs를 쓰려면 Python `mkdocs` + `mkdocs-material`이 설치되어 있어야 합니다. 대부분의 Mac/Linux 환경은 `pip install mkdocs mkdocs-material`로 충분합니다.
+
 ---
 
 ## 문제 해결
