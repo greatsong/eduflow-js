@@ -263,6 +263,7 @@ export class ChapterGenerator {
   async _loadModelPricing() {
     const configPath = join(__dirname, '..', '..', 'model_config.json');
     const fallback = {
+      'claude-opus-4-8': { input: 5.0, output: 25.0 },
       'claude-opus-4-7': { input: 5.0, output: 25.0 },
       'claude-opus-4-6': { input: 5.0, output: 25.0 },
       'claude-opus-4-5-20251101': { input: 5.0, output: 25.0 },
@@ -305,6 +306,7 @@ export class ChapterGenerator {
     }
     // 모델 ID 패턴으로 추론 (config에 없는 신규 모델)
     const id = (modelId || '').toLowerCase();
+    if (id.includes('opus-4-8')) return 39900; // 42000 * 0.95
     if (id.includes('opus-4-7')) return 39900; // 42000 * 0.95
     if (id.includes('opus')) return 30400;      // 32000 * 0.95
     if (id.includes('sonnet') || id.includes('haiku')) return 60800; // 64000 * 0.95
@@ -317,7 +319,7 @@ export class ChapterGenerator {
   /** 모델 ID에서 가격 추론 (config에 pricing이 없을 때) */
   _inferPricing(modelId, fallback) {
     const id = modelId.toLowerCase();
-    if (id.includes('opus')) return fallback['claude-opus-4-7'] || { input: 5.0, output: 25.0 };
+    if (id.includes('opus')) return fallback['claude-opus-4-8'] || { input: 5.0, output: 25.0 };
     if (id.includes('haiku')) return fallback['claude-haiku-4-5-20251001'] || { input: 0.8, output: 4.0 };
     if (id.includes('sonnet')) return { input: 3.0, output: 15.0 };
     if (id.startsWith('gpt-4o')) return { input: 2.5, output: 10.0 };
@@ -1405,7 +1407,7 @@ ${courseInfo}
   /**
    * 단일 챕터 생성 (rate limit 자동 재시도 포함)
    */
-  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-7', maxTokens = 0, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0, tokenBudget = null) {
+  async generateChapter(chapterId, chapterTitle, partContext = '', model = 'claude-opus-4-8', maxTokens = 0, progressCallback = null, estimatedTime = '', totalChapters = 0, currentNum = 0, tokenBudget = null) {
     const timeMinutes = this._parseTimeMinutes(estimatedTime);
     const effectiveMaxTokens = this._calcMaxTokensForTime(timeMinutes, maxTokens, model);
 
@@ -1574,7 +1576,7 @@ ${courseInfo}
    * @param {boolean} skipCompleted - 완료된 챕터 건너뛰기
    * @param {number} tpmLimit - 분당 토큰 제한 (0이면 비활성화)
    */
-  async generateAllChapters(tocData, model = 'claude-opus-4-7', maxTokens = 0, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0, chapterIds = null) {
+  async generateAllChapters(tocData, model = 'claude-opus-4-8', maxTokens = 0, concurrent = 1, progressCallback = null, skipCompleted = true, tpmLimit = 0, chapterIds = null) {
     const startTime = Date.now();
 
     // 출력 TPM 예산 관리자 생성 (tpmLimit > 0인 경우에만)

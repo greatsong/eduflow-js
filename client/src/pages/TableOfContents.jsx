@@ -37,7 +37,7 @@ export default function TableOfContents() {
   const { currentProject, refreshProgress } = useProjectStore();
 
   const [toc, setToc] = useState(null);
-  const [model, setModel] = useState('claude-opus-4-7');
+  const [model, setModel] = useState('claude-opus-4-8');
   const [activeTab, setActiveTab] = useState('generate');
 
   // 생성 상태

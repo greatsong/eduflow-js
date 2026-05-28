@@ -196,7 +196,7 @@ router.post('/generate-all', requireApiKey, requireModelAccess, asyncHandler(asy
 
     const report = await gen.generateAllChapters(
       tocData,
-      model || 'claude-opus-4-7',
+      model || 'claude-opus-4-8',
       maxTokens || 12000,
       concurrent || 1,
       progressCallback,
@@ -207,7 +207,7 @@ router.post('/generate-all', requireApiKey, requireModelAccess, asyncHandler(asy
 
     // 성공한 챕터 진행 상태 업데이트 + 토큰 사용량 기록
     const pm = new ProgressManager(projPath);
-    const useModel = model || 'claude-opus-4-7';
+    const useModel = model || 'claude-opus-4-8';
     const provider = detectProvider(useModel);
     for (const ch of report.chapters || []) {
       if (ch.success) {
@@ -256,7 +256,7 @@ router.post('/:chapterId/generate', requireApiKey, requireModelAccess, asyncHand
 
     const info = await gen.findChapterInToc(chapterId);
 
-    const useModel = model || 'claude-opus-4-7';
+    const useModel = model || 'claude-opus-4-8';
     const result = await gen.generateChapter(
       chapterId,
       info.chapter_title || chapterId,

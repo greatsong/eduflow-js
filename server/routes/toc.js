@@ -222,7 +222,7 @@ router.post('/generate', requireApiKey, requireModelAccess, asyncHandler(async (
     const tocData = await tg.generate(
       referencesContent,
       directionSummary,
-      model || 'claude-opus-4-7',
+      model || 'claude-opus-4-8',
       maxTokens || 16384,
       res
     );
