@@ -73,17 +73,6 @@
       "guidance": "장문 챕터에서 일관성 유지가 강점. 한국어 학습자료에서 안정적. OpenAI 최신 플래그십."
     },
     {
-      "id": "gpt-5.5-pro",
-      "provider": "openai",
-      "display_name": "GPT-5.5 Pro",
-      "tier": "프리미엄 추론",
-      "pricing": { "input": 30.0, "output": 180.0 },
-      "max_output_tokens": 128000,
-      "recommended_for": ["복잡한 추론", "고품질 콘텐츠", "코딩"],
-      "strengths": ["복잡 추론", "수식·논리", "심화 검증"],
-      "guidance": "⚠️ 추론 모델로 첫 토큰까지 수십 초~수 분이 걸릴 수 있어 스트리밍(대화)에는 부적합. 물리·수학·고난도 검증 챕터에만 선별 사용. 비용도 매우 높음."
-    },
-    {
       "id": "gemini-3.5-flash",
       "provider": "google",
       "display_name": "Gemini 3.5 Flash",

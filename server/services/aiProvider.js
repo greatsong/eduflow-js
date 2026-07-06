@@ -245,11 +245,19 @@ function _buildGeminiMessages(messages) {
 
 async function _googleChat({ apiKey, model, messages, system, maxTokens }) {
   const ai = new GoogleGenAI({ apiKey });
-  const config = { maxOutputTokens: maxTokens };
+  const config = {};
   if (system) config.systemInstruction = system;
-  // Gemini Flash는 thinking이 기본 활성 → thinking 토큰이 maxOutputTokens 예산을 잠식해
-  // 출력이 잘리거나 비정상 생성된다. Flash는 thinking을 꺼 전체 예산을 본문에 사용.
-  if ((model || '').includes('flash')) config.thinkingConfig = { thinkingBudget: 0 };
+  // Gemini는 thinking(추론) 토큰이 maxOutputTokens 예산을 공유·잠식해 본문이 잘린다.
+  if ((model || '').includes('flash')) {
+    // Flash: thinking을 꺼(=0) 전체 예산을 본문 출력에 사용
+    config.thinkingConfig = { thinkingBudget: 0 };
+    config.maxOutputTokens = maxTokens;
+  } else {
+    // 추론 모델(Gemini Pro 등)은 thinking을 끌 수 없다. 상한이 작으면(대화 2048~4096)
+    // 사고에 예산을 다 써 본문이 잘리므로, 상한을 넉넉히(≥32768) 올려 사고+본문이 모두
+    // 들어가게 함. 실사용 토큰 기준 과금이라 상한만 높을 뿐 낭비는 없음.
+    config.maxOutputTokens = Math.max(maxTokens, 32768);
+  }
 
   const response = await ai.models.generateContent({
     model,
@@ -261,18 +269,26 @@ async function _googleChat({ apiKey, model, messages, system, maxTokens }) {
   return {
     content: text,
     inputTokens: response.usageMetadata?.promptTokenCount || 0,
-    outputTokens: response.usageMetadata?.candidatesTokenCount || 0,
+    outputTokens: (response.usageMetadata?.candidatesTokenCount || 0) + (response.usageMetadata?.thoughtsTokenCount || 0),
     stopReason: response.candidates?.[0]?.finishReason === 'MAX_TOKENS' ? 'max_tokens' : 'end_turn',
   };
 }
 
 async function _googleStream({ apiKey, model, messages, system, maxTokens, res, onText }) {
   const ai = new GoogleGenAI({ apiKey });
-  const config = { maxOutputTokens: maxTokens };
+  const config = {};
   if (system) config.systemInstruction = system;
-  // Gemini Flash는 thinking이 기본 활성 → thinking 토큰이 maxOutputTokens 예산을 잠식해
-  // 출력이 잘리거나 비정상 생성된다. Flash는 thinking을 꺼 전체 예산을 본문에 사용.
-  if ((model || '').includes('flash')) config.thinkingConfig = { thinkingBudget: 0 };
+  // Gemini는 thinking(추론) 토큰이 maxOutputTokens 예산을 공유·잠식해 본문이 잘린다.
+  if ((model || '').includes('flash')) {
+    // Flash: thinking을 꺼(=0) 전체 예산을 본문 출력에 사용
+    config.thinkingConfig = { thinkingBudget: 0 };
+    config.maxOutputTokens = maxTokens;
+  } else {
+    // 추론 모델(Gemini Pro 등)은 thinking을 끌 수 없다. 상한이 작으면(대화 2048~4096)
+    // 사고에 예산을 다 써 본문이 잘리므로, 상한을 넉넉히(≥32768) 올려 사고+본문이 모두
+    // 들어가게 함. 실사용 토큰 기준 과금이라 상한만 높을 뿐 낭비는 없음.
+    config.maxOutputTokens = Math.max(maxTokens, 32768);
+  }
 
   const response = await ai.models.generateContentStream({
     model,
@@ -294,7 +310,7 @@ async function _googleStream({ apiKey, model, messages, system, maxTokens, res, 
     }
     if (chunk.usageMetadata) {
       inputTokens = chunk.usageMetadata.promptTokenCount || 0;
-      outputTokens = chunk.usageMetadata.candidatesTokenCount || 0;
+      outputTokens = (chunk.usageMetadata.candidatesTokenCount || 0) + (chunk.usageMetadata.thoughtsTokenCount || 0);
     }
     if (chunk.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
       stopReason = 'max_tokens';
