@@ -108,6 +108,9 @@ export function createAnthropicStream({ apiKey, model, messages, system, maxToke
   const client = new Anthropic({ apiKey, timeout });
   const opts = { model, max_tokens: maxTokens, messages };
   if (system) opts.system = system;
+  // Sonnet 5는 adaptive thinking이 기본 ON → thinking 토큰이 max_tokens 예산을 잠식해
+  // 본문이 중간에 잘린다. thinking을 꺼 전체 예산을 본문 출력에 사용 (ref: ai-chat-for-students).
+  if ((model || '').startsWith('claude-sonnet-5')) opts.thinking = { type: 'disabled' };
   return client.messages.stream(opts);
 }
 
@@ -119,6 +122,9 @@ async function _anthropicChat({ apiKey, model, messages, system, maxTokens }) {
   const client = new Anthropic({ apiKey });
   const opts = { model, max_tokens: maxTokens, messages };
   if (system) opts.system = system;
+  // Sonnet 5는 adaptive thinking이 기본 ON → thinking 토큰이 max_tokens 예산을 잠식해
+  // 본문이 중간에 잘린다. thinking을 꺼 전체 예산을 본문 출력에 사용 (ref: ai-chat-for-students).
+  if ((model || '').startsWith('claude-sonnet-5')) opts.thinking = { type: 'disabled' };
 
   const response = await client.messages.create(opts);
   return {
@@ -133,6 +139,9 @@ async function _anthropicStream({ apiKey, model, messages, system, maxTokens, re
   const client = new Anthropic({ apiKey });
   const opts = { model, max_tokens: maxTokens, messages };
   if (system) opts.system = system;
+  // Sonnet 5는 adaptive thinking이 기본 ON → thinking 토큰이 max_tokens 예산을 잠식해
+  // 본문이 중간에 잘린다. thinking을 꺼 전체 예산을 본문 출력에 사용 (ref: ai-chat-for-students).
+  if ((model || '').startsWith('claude-sonnet-5')) opts.thinking = { type: 'disabled' };
 
   const stream = client.messages.stream(opts);
   let content = '';
@@ -238,6 +247,9 @@ async function _googleChat({ apiKey, model, messages, system, maxTokens }) {
   const ai = new GoogleGenAI({ apiKey });
   const config = { maxOutputTokens: maxTokens };
   if (system) config.systemInstruction = system;
+  // Gemini Flash는 thinking이 기본 활성 → thinking 토큰이 maxOutputTokens 예산을 잠식해
+  // 출력이 잘리거나 비정상 생성된다. Flash는 thinking을 꺼 전체 예산을 본문에 사용.
+  if ((model || '').includes('flash')) config.thinkingConfig = { thinkingBudget: 0 };
 
   const response = await ai.models.generateContent({
     model,
@@ -258,6 +270,9 @@ async function _googleStream({ apiKey, model, messages, system, maxTokens, res, 
   const ai = new GoogleGenAI({ apiKey });
   const config = { maxOutputTokens: maxTokens };
   if (system) config.systemInstruction = system;
+  // Gemini Flash는 thinking이 기본 활성 → thinking 토큰이 maxOutputTokens 예산을 잠식해
+  // 출력이 잘리거나 비정상 생성된다. Flash는 thinking을 꺼 전체 예산을 본문에 사용.
+  if ((model || '').includes('flash')) config.thinkingConfig = { thinkingBudget: 0 };
 
   const response = await ai.models.generateContentStream({
     model,
