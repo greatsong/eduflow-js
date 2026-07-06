@@ -16,7 +16,7 @@ export default function Discussion() {
   const [summary, setSummary] = useState(null);
   const [summaryStreaming, setSummaryStreaming] = useState(false);
   const [summaryText, setSummaryText] = useState('');
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('claude-sonnet-5');
   const [loadedProject, setLoadedProject] = useState(null);
 
   // 프로젝트 변경 시 대화 로드

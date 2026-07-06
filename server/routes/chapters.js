@@ -340,7 +340,7 @@ ${currentContent.slice(0, 8000) || '(아직 작성되지 않음)'}
     }));
     apiMessages.push({ role: 'user', content: message });
 
-    const useModel = model || 'claude-sonnet-4-6';
+    const useModel = model || 'claude-sonnet-5';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
 

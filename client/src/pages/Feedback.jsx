@@ -72,7 +72,7 @@ export default function Feedback() {
 
   const [toc, setToc] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('claude-sonnet-5');
   const [models, setModels] = useState([]);
   const [loadedProject, setLoadedProject] = useState(null);
   const [applyingToc, setApplyingToc] = useState(false);

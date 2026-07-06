@@ -79,7 +79,7 @@ router.post('/:step/summarize', requireApiKey, requireModelAccess, asyncHandler(
 
   try {
     const cm = new ConversationManager(projPath, req.apiKeys);
-    const useModel = model || 'claude-sonnet-4-6';
+    const useModel = model || 'claude-sonnet-5';
     const result = await cm.summarizeConversation(step, useModel, res);
 
     // 토큰 사용량 기록
@@ -264,7 +264,7 @@ ${referencesText}
     const allMessages = clientMessages || await cm.loadConversation(step);
 
     // AI 스트리밍 호출 (멀티 프로바이더)
-    const useModel = model || 'claude-sonnet-4-6';
+    const useModel = model || 'claude-sonnet-5';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
 

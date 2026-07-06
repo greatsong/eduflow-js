@@ -380,7 +380,7 @@ router.post('/parse-md', requireApiKey, requireModelAccess, asyncHandler(async (
     }
 
     // AI API로 → JSON TOC 변환 (멀티 프로바이더)
-    const useModel = model || 'claude-sonnet-4-6';
+    const useModel = model || 'claude-sonnet-5';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
     const tocMaxTokens = calcTocMaxTokens(inputText.length);
@@ -504,7 +504,7 @@ router.post('/parse-file', fileUpload.single('file'), requireApiKey, requireMode
       });
     }
 
-    const useModel = model || 'claude-sonnet-4-6';
+    const useModel = model || 'claude-sonnet-5';
     const provider = detectProvider(useModel);
     const apiKey = resolveApiKey(provider, req.apiKeys);
     const tocMaxTokens = calcTocMaxTokens(inputText.length);

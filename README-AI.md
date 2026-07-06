@@ -200,10 +200,11 @@ projects/<name>/
 {
   "models": {
     "claude-opus-4-6": { "name": "Claude Opus 4.6", "input_price": 15, "output_price": 75, "context": 200000, "output_tpm": 80000 },
+    "claude-sonnet-5": { "name": "Claude Sonnet 5", "input_price": 3, "output_price": 15, "context": 1000000, "output_tpm": 160000 },
     "claude-sonnet-4-6": { "name": "Claude Sonnet 4.6", "input_price": 3, "output_price": 15, "context": 200000, "output_tpm": 160000 },
     "claude-haiku-4-5-20251001": { "name": "Claude Haiku 4.5", "input_price": 0.8, "output_price": 4, "context": 200000, "output_tpm": 400000 }
   },
-  "default_model": "claude-sonnet-4-6",
+  "default_model": "claude-sonnet-5",
   "default_settings": { "max_tokens": 16000, "concurrent": 3 }
 }
 ```

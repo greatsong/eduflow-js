@@ -128,7 +128,7 @@ router.post('/', asyncHandler(async (req, res) => {
     title,
     author: author || '',
     description: description || '',
-    claude_model: claude_model || 'claude-sonnet-4-6',
+    claude_model: claude_model || 'claude-sonnet-5',
     owner: req.user ? {
       googleId: req.user.googleId,
       email: req.user.email,

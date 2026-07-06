@@ -97,7 +97,7 @@ eduflow/
 
 ## API 키 관리
 
-- **기본 모델**: `claude-sonnet-4-6`
+- **기본 모델**: `claude-sonnet-5` (대화·목차), `claude-opus-4-8` (챕터 생성)
 - 사용자가 ApiKeyModal에서 직접 입력 (브라우저 localStorage 저장)
 - 서버 .env에 키가 있으면 사용자 입력 없이도 동작
 - 멀티 프로바이더: Anthropic, OpenAI, Google, Upstage

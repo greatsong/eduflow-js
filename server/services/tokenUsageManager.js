@@ -34,6 +34,12 @@ export class TokenUsageManager {
 
     const configPath = join(dirname(this.baseDir), '..', 'model_config.json');
     const fallback = {
+      // 🆕 최신 모델 (2026-07)
+      'claude-sonnet-5':              { input: 3.0,  output: 15.0 },
+      'gpt-5.5-pro':                  { input: 30.0, output: 180.0 },
+      'gpt-5.5':                      { input: 2.5,  output: 15.0 },
+      'gemini-3.5-flash':             { input: 0.50, output: 3.0  },
+      // 현행/legacy (과거 로그·생성물 조회 호환을 위해 유지)
       'claude-opus-4-8':              { input: 5.0,  output: 25.0 },
       'claude-opus-4-7':              { input: 5.0,  output: 25.0 },
       'claude-opus-4-6':              { input: 5.0,  output: 25.0 },

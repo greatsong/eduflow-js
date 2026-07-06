@@ -1253,7 +1253,7 @@ function QuickStartTab({ projectId }) {
   const [fileObj, setFileObj] = useState(null); // PDF/DOCX 등 바이너리 파일용
   const [fileIsBinary, setFileIsBinary] = useState(false);
   const [saveAsRef, setSaveAsRef] = useState(true);
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('claude-sonnet-5');
   const [models, setModels] = useState([]);
   const [processing, setProcessing] = useState(false);
   const [logs, setLogs] = useState([]);

@@ -16,7 +16,7 @@ const router = Router();
 /**
  * POST /api/compare
  * 여러 모델에 동일한 프롬프트를 보내고 결과를 SSE로 스트리밍
- * body: { models: ["claude-sonnet-4-6", "gpt-5.1"], prompt: "...", systemPrompt?: "..." }
+ * body: { models: ["claude-sonnet-5", "gpt-5.5"], prompt: "...", systemPrompt?: "..." }
  */
 router.post('/', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
   const { models, prompt, systemPrompt } = req.body;
@@ -106,11 +106,11 @@ router.post('/', requireApiKey, requireModelAccess, asyncHandler(async (req, res
 /**
  * POST /api/compare/auto-evaluate
  * AI 심사위원(judge)이 각 모델의 응답을 평가하고 순위를 매김
- * body: { models: [...], prompt: "...", judgeModel: "claude-sonnet-4-6" }
+ * body: { models: [...], prompt: "...", judgeModel: "claude-sonnet-5" }
  * SSE: generate → evaluate → rank
  */
 router.post('/auto-evaluate', requireApiKey, requireModelAccess, asyncHandler(async (req, res) => {
-  const { models, prompt, judgeModel = 'claude-sonnet-4-6' } = req.body;
+  const { models, prompt, judgeModel = 'claude-sonnet-5' } = req.body;
 
   if (!models || !Array.isArray(models) || models.length < 2) {
     return res.status(400).json({ message: '2개 이상의 모델을 선택해주세요.' });

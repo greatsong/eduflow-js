@@ -263,6 +263,7 @@ export class ChapterGenerator {
   async _loadModelPricing() {
     const configPath = join(__dirname, '..', '..', 'model_config.json');
     const fallback = {
+      'claude-sonnet-5': { input: 3.0, output: 15.0 },
       'claude-opus-4-8': { input: 5.0, output: 25.0 },
       'claude-opus-4-7': { input: 5.0, output: 25.0 },
       'claude-opus-4-6': { input: 5.0, output: 25.0 },

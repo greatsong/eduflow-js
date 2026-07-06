@@ -143,7 +143,7 @@ function InteractiveTab({ project }) {
   const [chatMessages, setChatMessages] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [previewContent, setPreviewContent] = useState('');
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState('claude-sonnet-5');
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
