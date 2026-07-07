@@ -168,6 +168,49 @@ function shuffle(arr) {
   return a;
 }
 
+// 라운드 상세(예선·결선)의 프롬프트·순위·각 모델 응답을 접이식으로 보여주는 컴포넌트
+function RoundDetail({ title, badge, prompt, order, results, ranking, advanced, getModelInfo }) {
+  const [open, setOpen] = useState(false);
+  const items = order || [];
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50">
+        <span className="text-sm font-medium text-gray-700">{title}{badge && <span className="ml-2 text-xs text-emerald-600">{badge}</span>}</span>
+        <span className="text-xs text-gray-400">{open ? '접기 ▲' : '내용·응답 보기 ▼'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-3 space-y-3 border-t border-gray-100">
+          {prompt && <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">📝 {prompt}</div>}
+          {ranking && ranking.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {ranking.map((mid, i) => (
+                <span key={mid} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{i + 1}. {getModelInfo(mid).display_name}</span>
+              ))}
+            </div>
+          )}
+          <div className="grid gap-3 md:grid-cols-2">
+            {items.map((mid) => {
+              const r = (results || {})[mid] || {};
+              const adv = advanced?.includes(mid);
+              return (
+                <div key={mid} className={`rounded-lg border p-3 ${adv ? 'border-emerald-300 bg-emerald-50/40' : 'border-gray-200'}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium text-gray-700">{getModelInfo(mid).display_name}{adv && <span className="ml-1 text-emerald-600 font-bold">▲ 진출</span>}</span>
+                    {r.charCount != null && <span className="text-[10px] text-gray-400">{Number(r.charCount).toLocaleString()}자</span>}
+                  </div>
+                  <div className="text-xs text-gray-600 max-h-52 overflow-y-auto prose prose-sm max-w-none">
+                    {r.status === 'error' ? <span className="text-red-500">{r.error || '오류'}</span> : <ReactMarkdown>{r.text || '(내용 없음)'}</ReactMarkdown>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ModelCompare() {
   const [allModels, setAllModels] = useState([]);
   const [prompt, setPrompt] = useState('');
@@ -186,6 +229,7 @@ export default function ModelCompare() {
   const [roundScores, setRoundScores] = useState({});
   const [roundHistory, setRoundHistory] = useState([]);
   const [roundPrompts, setRoundPrompts] = useState([]);
+  const [prelimData, setPrelimData] = useState(null); // 예선 스냅샷(프롬프트·응답·진출 모델)
   const abortRef = useRef(null);
 
   // AI 자동 평가 상태
@@ -323,6 +367,8 @@ export default function ModelCompare() {
 
   const confirmTop5 = () => {
     const selected = rankings.slice(0, TOP_N);
+    // 예선 내용(프롬프트·각 모델 응답·진출 모델)을 스냅샷으로 저장 → 최종 결과에서 열람
+    setPrelimData({ prompt, order: shuffledOrder, results, advanced: selected });
     setTop5(selected);
     const init = {};
     for (const id of selected) init[id] = [];
@@ -338,7 +384,7 @@ export default function ModelCompare() {
     runModels(top5, prompt);
   };
 
-  const confirmFinalsRanking = () => {
+  const confirmFinalsRanking = (finishNow = false) => {
     const n = validModels.length;
     setRoundScores((prev) => {
       const copy = { ...prev };
@@ -346,14 +392,15 @@ export default function ModelCompare() {
       top5.forEach((id) => { if (!rankings.includes(id)) { if (!copy[id]) copy[id] = []; copy[id].push(0); } });
       return copy;
     });
-    setRoundHistory((prev) => [...prev, { round, prompt: roundPrompts[round - 1] || prompt, rankings: rankings.map((id, i) => ({ modelId: id, rank: i + 1 })) }]);
-    if (round < TOTAL_ROUNDS) { setRound((r) => r + 1); setPhase('finals-prompt'); setPrompt(''); }
+    setRoundHistory((prev) => [...prev, { round, prompt: roundPrompts[round - 1] || prompt, rankings: rankings.map((id, i) => ({ modelId: id, rank: i + 1 })), order: shuffledOrder, results }]);
+    if (!finishNow && round < TOTAL_ROUNDS) { setRound((r) => r + 1); setPhase('finals-prompt'); setPrompt(''); }
     else setPhase('done');
   };
 
   const resetAll = () => {
     setPhase('idle'); setRound(0); setResults({}); setShuffledOrder([]);
     setRankings([]); setTop5([]); setRoundScores({}); setRoundHistory([]); setRoundPrompts([]); setPrompt('');
+    setPrelimData(null);
     setAutoEvalResult(null); setAutoEvalText('');
     setBatchQueue([]); setBatchIndex(-1); batchAbortRef.current = false;
   };
@@ -709,10 +756,18 @@ export default function ModelCompare() {
             </div>
           )}
           {phase === 'finals-prompt' && (
-            <button onClick={startFinalsRound} disabled={!prompt.trim()}
-              className="px-5 py-2.5 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-green-700 hover:to-teal-700 disabled:opacity-50 transition-all">
-              {round}회차 시작
-            </button>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button onClick={startFinalsRound} disabled={!prompt.trim()}
+                className="px-5 py-2.5 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-green-700 hover:to-teal-700 disabled:opacity-50 transition-all">
+                {round}회차 시작
+              </button>
+              {roundHistory.length >= 1 && (
+                <button onClick={() => setPhase('done')}
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-medium hover:from-amber-600 hover:to-orange-600 transition-all">
+                  지금까지 {roundHistory.length}회 결과로 최종 보기
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -754,10 +809,13 @@ export default function ModelCompare() {
           <p className="text-teal-800 font-medium">{round}회차 완료! 순위를 매겨주세요</p>
           <p className="text-teal-600 text-sm mt-1">클릭 순서 = 1등 → 2등 → ... ({rankings.length}/{validModels.length})</p>
           {rankings.length > 0 && <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">{rankings.map((mid, i) => { const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' }; const idx = shuffledOrder.indexOf(mid); return (<div key={mid} className="flex items-center gap-1"><span className={`w-6 h-6 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-xs font-bold`}>{i + 1}</span><span className={`text-sm font-medium px-2 py-0.5 rounded border ${getLabelColor(idx)}`}>{blind ? LABELS[idx] : getModelInfo(mid).display_name}</span>{i < rankings.length - 1 && <span className="text-gray-300 mx-1">{'>'}</span>}</div>); })}</div>}
-          <div className="mt-3 flex justify-center gap-2">
-            <button onClick={confirmFinalsRanking} disabled={rankings.length < validModels.length} className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
+          <div className="mt-3 flex justify-center gap-2 flex-wrap">
+            <button onClick={() => confirmFinalsRanking(false)} disabled={rankings.length < validModels.length} className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg text-sm font-bold disabled:opacity-40 transition-all">
               {rankings.length < validModels.length ? `${validModels.length - rankings.length}개 남음` : round < TOTAL_ROUNDS ? `확정 → ${round + 1}회차` : '확정 → 최종 결과!'}
             </button>
+            {round < TOTAL_ROUNDS && rankings.length >= validModels.length && (
+              <button onClick={() => confirmFinalsRanking(true)} className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg text-sm font-bold transition-all">이번 회차 반영하고 최종 결과 보기</button>
+            )}
             {rankings.length > 0 && <button onClick={() => setRankings([])} className="text-sm text-gray-500 hover:text-gray-700">초기화</button>}
           </div>
         </div>
@@ -766,7 +824,7 @@ export default function ModelCompare() {
       {/* 블라인드/공개 최종 결과 */}
       {phase === 'done' && (
         <div className="bg-white rounded-xl border-2 border-amber-300 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">최종 결과 (3회 합산)</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-4 text-center">최종 결과 (결선 {roundHistory.length}회 합산)</h3>
           <div className="space-y-3 mb-6">
             {finalResults.map((item, i) => { const info = getModelInfo(item.modelId); const style = RANK_STYLES[i] || { bg: 'bg-gray-300', text: 'text-white' }; return (
               <div key={item.modelId} className={`flex items-center gap-4 p-3 rounded-xl ${i === 0 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-gray-50'}`}>
@@ -775,10 +833,25 @@ export default function ModelCompare() {
                   <div className="flex items-center gap-2 flex-wrap"><span className={`text-sm font-medium px-2 py-0.5 rounded-full ${PROVIDER_BADGES[info.provider] || 'bg-gray-100'}`}>{info.display_name}</span><span className="text-xs text-gray-400">{info.tier}</span>{i === 0 && <span className="text-amber-500 font-bold">CHAMPION</span>}</div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">{item.scores.map((s, ri) => <span key={ri}>{ri + 1}회: {s}점</span>)}</div>
                 </div>
-                <div className="text-right shrink-0"><p className="text-xl font-bold text-gray-900">{item.total}점</p><p className="text-xs text-gray-400">/ {TOTAL_ROUNDS * top5.length}점</p></div>
+                <div className="text-right shrink-0"><p className="text-xl font-bold text-gray-900">{item.total}점</p><p className="text-xs text-gray-400">/ {(roundHistory.length || 1) * top5.length}점</p></div>
               </div>
             ); })}
           </div>
+          {(prelimData || roundHistory.length > 0) && (
+            <div className="mt-2 mb-4 space-y-2">
+              <h4 className="text-sm font-bold text-gray-700">라운드별 상세 (예선 · 결선 내용)</h4>
+              {prelimData && (
+                <RoundDetail title="예선" badge={`Top ${prelimData.advanced?.length || 0} 선발`}
+                  prompt={prelimData.prompt} order={prelimData.order} results={prelimData.results}
+                  ranking={prelimData.advanced} advanced={prelimData.advanced} getModelInfo={getModelInfo} />
+              )}
+              {roundHistory.map((rd) => (
+                <RoundDetail key={rd.round} title={`결선 ${rd.round}회`}
+                  prompt={rd.prompt} order={rd.order} results={rd.results}
+                  ranking={rd.rankings?.map((x) => x.modelId)} getModelInfo={getModelInfo} />
+              ))}
+            </div>
+          )}
           <div className="text-center mt-4"><button onClick={resetAll} className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">새 비교</button></div>
         </div>
       )}
