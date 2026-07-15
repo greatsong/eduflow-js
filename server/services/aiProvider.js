@@ -31,6 +31,15 @@ export function detectProvider(modelId) {
   return 'anthropic'; // 기본값
 }
 
+// 추론 모델(solar-open2 등)은 reasoning이 출력 토큰 예산을 소비하므로,
+// 예산이 너무 작으면 reasoning만 하고 답변(content)이 빈값으로 나온다.
+// 이런 모델에는 최소 예산을 보장한다.
+const REASONING_MODELS = { 'solar-open2': 8000 };
+function reasoningMinTokens(model, maxTokens) {
+  const min = REASONING_MODELS[model];
+  return min ? Math.max(maxTokens || 0, min) : maxTokens;
+}
+
 /**
  * 프로바이더에 맞는 API 키를 결정
  * 1. 명시적으로 전달된 키 (프로바이더별)
@@ -178,6 +187,7 @@ function _buildOpenAIMessages(messages, system) {
 
 async function _openaiChat({ apiKey, model, messages, system, maxTokens, baseURL }) {
   const client = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
+  maxTokens = reasoningMinTokens(model, maxTokens);
   const response = await client.chat.completions.create({
     model,
     messages: _buildOpenAIMessages(messages, system),
@@ -195,6 +205,7 @@ async function _openaiChat({ apiKey, model, messages, system, maxTokens, baseURL
 
 async function _openaiStream({ apiKey, model, messages, system, maxTokens, res, onText, baseURL }) {
   const client = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
+  maxTokens = reasoningMinTokens(model, maxTokens);
   const stream = await client.chat.completions.create({
     model,
     messages: _buildOpenAIMessages(messages, system),
